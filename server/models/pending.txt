@@ -1,0 +1,6 @@
+Pending points :
+#) Need ability to change the “Answer line” line color in Froala editor. Increase line weight just a bit. Too thin. 
+#) Video - Montage Case ---------------Also, set following for Youtube videos: iv load policy:3, showinfo:1, modestbranding:1, loop:0, 
+#) Any post with a recording or note should automatically be Private (Private should be checked and grayed out so it cannot be clicked on. Blurb should say "Posts with a recording or note are automatically Private and not added to the platform".)
+#) I have to run mass-api - will update this by tomorrow.
+

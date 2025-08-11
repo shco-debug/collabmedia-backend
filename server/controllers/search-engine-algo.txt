@@ -1,0 +1,52 @@
+Population:
+--------------
+{
+	Gender:"Male,Female",
+	Country:"India,Pakistan,China",
+	Company:"50-100,100-500,500+"
+}
+{
+	Gender:"Male",
+	Country:"India",
+	Company:"100-500,500+"
+}
+{
+	Gender:"Male"
+}
+{
+	Country:"India"
+}
+
+Input (or say Sample) :
+-------------------------
+{
+	Gender:"Male,Female",
+	Country:"India,China",
+	Company:"10-50,50-100",
+	"Age":"20-30"
+}
+
+Parameters or Statistics:
+--------------------------
+ - PostsBestFSGCount						------>     PostsBestFSGWeight = {(MatchedPostsCount/TotalNoOfPosts)*100}
+ - PostsCount								
+ - StampsBestFSGCount
+ - StampsCount
+ - ViewsCount
+ - MaxFSGSort
+ - AvgFSGSort
+ - MediaScore  = ((PostsCount + StampsCount)/finalObj.ViewsCount)*admin-contribution); 
+ 
+ - *******BestFSGWeight
+ 
+ - UserMaxFSGSort
+ - UserScore
+
+ - UploadedOn
+
+Sorting :
+---------- 
+ var sortObj = sortObj = {'value.MaxFSGSort':-1,'value.AvgFSGSort':-1,'value.MediaScore':-1,'value.UploadedOn':-1};
+
+
+weight : 

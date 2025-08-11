@@ -1,0 +1,114 @@
+
+-----------------Capsule instances -----> published vs purchased vs gifted---------------------------
+
+published :
+var conditions = {
+	
+	Origin : "published"
+}
+
+purchased :
+var conditions = {
+	Origin : "published"
+}
+
+gifted :
+var conditions = {
+	Origin : "published"
+}
+
+Show Community Posts :
+
+Few points : 
+	- There will be only Public/Retail capsule's pages which will have "Show Community Posts". - may be show some instruction that this setting is useful for Public/Retail capsules/pages.
+	
+	Algo to fetch Posts from other users :
+		- Check the requester pageId - whether It is retail capsule's page and allowed for show community posts or not?
+		
+		- If It is then take it's OriginatedFrom - (Because this will be the parent page from where all buyer's instances will be created) then find all the pages which are having the same OriginatedFrom other than the requester pageId.
+		
+		- Now, you may get millians of community pages and posts array per page.
+		
+		- $unwind the pages.Medias array (this is where all the user posts gets stored)
+		
+		- Privacy filter on post object as per capsule ShareMode / Poster's privacy settings
+		
+		- Use $lookup on mediaActionLogs collection using PostId to get poster's FSGs data - So you can generate post ranks for sorting.
+		
+	
+	- We need to create CommunityPosts collection - on daily basis
+	
+	db.getCollection('Pages').aggregate([
+		{$match: {PageType:{$in : ["gallery"]} , _id:ObjectId("59a1f7225664a52694941172")}},
+		{$unwind : "$Medias"},
+	],function(err , docs){
+		
+	})
+	
+	Few cases on PublishForYou Case!--------URGENT PRIORITY-----
+	#) Fix the purchased For You instances - they are coming under library .. privacy copyright infrignment... - DONE
+		- Pages instances was coming under page library because CreaterId case was wrong - Fixed now.
+		
+	#) put check on launchSettingsController - line no 243 var capsule__createNewInstance = function( CapsuleData , owner, req ){  - DONE
+	
+	
+	
+	db.getCollection('Orders').aggregate([
+		{$match : {TransactionState : "Completed" , "CartItems.Owners.UniqueIdPerOwner" : "e2dyR&H5C%C%"}},
+		{$unwind : "$CartItems"},
+		{$unwind : "$CartItems.Owners"},
+		{
+			$project : {
+				_id : "$_id", 
+				CreatedById : "$CreatedById",
+				CreatedByEmail : "$CreatedByEmail",
+				CapsuleId : "$CartItems.CapsuleId",
+				UniqueIdPerOwner : "$CartItems.Owners.UniqueIdPerOwner",
+				OwnerEmail : "$CartItems.Owners.OwnerEmail", 
+				OwnerName : "$CartItems.Owners.OwnerName",
+				CreatedOn : "$CreatedOn",
+				UpdatedOn : "$UpdatedOn",
+			}
+		},
+		{
+			$lookup: {
+				from: "Capsules",
+				localField: "UniqueIdPerOwner",
+				foreignField: "UniqueIdPerOwner",
+				as: "UniqueIdPerOwner_CapsuleData"
+			}
+		},
+		{$match : {"UniqueIdPerOwner" : "e2dyR&H5C%C%"}},
+	])
+	
+		
+	Few points : 
+	#) A board page of retail capsule instance will have showCommunityPosts feature in cafe.
+	
+	PRIVACY OPTIONS :
+	#) Owner can select "Who do I want to respond to this Chapter?" :
+		- My Friends as a Group : 
+			- Multiple friends will be asked to answer and they WILL be able to see each other's answers.
+		- My Friends as Individuals : 
+			- Multiple friends will be asked to answer but they WON'T be able to see each other's answers.
+		
+		Are these settings may restrict the post for showCommunityPosts or not, please confirm ?
+		
+	#) posts privacy :
+		- Poster's privacy option - 
+			- Only For Owner - call it private post.
+			- For all		 - call it public post.
+			
+	
+	#) We will fetch only public posts. - this setting can be changed anytime.
+	
+	facts : 
+		- suppose a post has been initially posted as public post and later It has been updated to private (only for owner). Suppose before updating it to private it has been reposted by other users in other boards. 
+		
+		
+		
+		
+		
+	
+	
+	

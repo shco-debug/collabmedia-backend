@@ -1,0 +1,193 @@
+var getKeywords_Tags = function(req, res){
+	var inputStr = req.body.startsWith ? req.body.startsWith : '';
+	//var inputStr = inputStr.replace(/[^\w\s]/gi, '');
+	var inputStr = inputStr.replace(/[`~!@#$%^&*()|+\=?;'",.<>\{\}\[\]\\\/]/gi, '');
+	//below are the 4 rounds of regular expression which will be applied if we will not get any result.
+	var regex__WORD_Exact = new RegExp('(^'+inputStr+'$)(^\\w'+inputStr+'\\w$)' , 'i');
+	var regex__WORD_startsWith = new RegExp('(?!^'+inputStr+'$)(\\b^'+inputStr+'\\b)' , 'i');
+	//var regex__WORD_anywhere = new RegExp('(?!\\b'+inputStr+'\\b$)(?!\\b^'+inputStr+'\\b)(\\b'+inputStr+'\\b)' , 'i');
+	//var regex__WORD_anywhere_BT_NOT_START_WITH = new RegExp('(?!\\b^'+inputStr+'\\b)(\\b'+inputStr+'\\b)', 'i');
+	var regex__WORD_anywhere_BT_NOT_START_WITH = new RegExp('(?!^'+inputStr+'$)(?!\\b^'+inputStr+'\\b)(\\b'+inputStr+'\\b)' , 'i');
+	
+	var regex__WORD_startsWith_EMBEDDED = new RegExp('(\\w^'+inputStr+')|(^'+inputStr+')','i');
+	var regex__WORD_anywhere_EMBEDDED = new RegExp('(?!\\w^'+inputStr+')|(?!^'+inputStr+')('+inputStr+')','i');
+	
+	console.log("----ROUND:1-----",regex__WORD_Exact);
+	console.log("----ROUND:2-----",regex__WORD_startsWith);
+	console.log("----ROUND:3-----",regex__WORD_anywhere_BT_NOT_START_WITH);
+	console.log("----ROUND:4-----",regex__WORD_startsWith_EMBEDDED);
+	console.log("----ROUND:5-----",regex__WORD_anywhere_EMBEDDED);
+	
+    var fields = {};
+	
+	var limit = 100;
+	var conditions_STEP1 = {
+		"Tags.TagTitle":regex__WORD_Exact,
+		//$or : [{"Tags.TagTitle":regex__WORD_startsWith},{"GroupTagTitle":regex__WORD_startsWith}],
+		"Tags.status" : 1,
+		$or:[{status : 1},{status : 3}]
+	}
+	var conditions_STEP2 = {
+		"Tags.TagTitle":regex__WORD_startsWith,
+		//$or : [{"Tags.TagTitle":regex__WORD_anywhere},{"GroupTagTitle":regex__WORD_anywhere}],
+		"Tags.status" : 1,
+		$or:[{status : 1},{status : 3}]
+	}
+	var conditions_STEP3 = {
+		"Tags.TagTitle":regex__WORD_anywhere_BT_NOT_START_WITH,
+		//$or : [{"Tags.TagTitle":regex__WORD_startsWith_EMBEDDED},{"GroupTagTitle":regex__WORD_startsWith_EMBEDDED}],
+		"Tags.status" : 1,
+		$or:[{status : 1},{status : 3}]
+	}
+	var conditions_STEP4 = {
+		"Tags.TagTitle":regex__WORD_startsWith_EMBEDDED,
+		//$or : [{"Tags.TagTitle":regex__WORD_anywhere_EMBEDDED},{"GroupTagTitle":regex__WORD_anywhere_EMBEDDED}],
+		"Tags.status" : 1,
+		$or:[{status : 1},{status : 3}]
+	}
+	var conditions_STEP5 = {
+		"Tags.TagTitle":regex__WORD_anywhere_EMBEDDED,
+		//$or : [{"Tags.TagTitle":regex__WORD_anywhere_EMBEDDED},{"GroupTagTitle":regex__WORD_anywhere_EMBEDDED}],
+		"Tags.status" : 1,
+		$or:[{status : 1},{status : 3}]
+	}
+	
+	var sort_OnTags = {
+		"GroupTagTitle" : 1
+	}
+	groupTags.aggregate(
+		[
+			//{$match: {$or : [{"Tags.TagTitle":regex__WORD_Exact},{"GroupTagTitle":regex__WORD_Exact}],$or:[{status : 1},{status : 3}]}},
+			//{$match: conditions_STEP1},
+			{$unwind: { path: "$Tags", preserveNullAndEmptyArrays: true }},
+			{$match: conditions_STEP1},
+			{$project: {"_id": '$_id', status : "$status",GTTitle : "$GroupTagTitle", GroupTagTitle: "$Tags.TagTitle"}},
+			//{$project: {"_id": '$_id', GroupTagTitle:{$cond: { if: { $or:[{"$GroupTagTitle":null},{"$GroupTagTitle":[]},{"$Tags":{$exists:false}}] }, then: "$GroupTagTitle", else: "$Tags.TagTitle" }}}},
+			//{$sort : sort_OnTags},
+			{$limit : limit}
+		]
+	).exec(function(err,result){			
+		if(err){ 		
+			res.json(err);
+		}
+		else{
+			var resultLength = result.length;
+			if(resultLength < limit){
+				//res.json({"code":"404","msg":"Not Found"})
+				
+				//step-2
+				groupTags.aggregate(
+					[
+						//{$unwind: "$Tags"},
+						{$unwind: { path: "$Tags", preserveNullAndEmptyArrays: true }},
+						{$match: conditions_STEP2},
+						{$project: {"_id": '$_id', status : "$status",GTTitle : "$GroupTagTitle", GroupTagTitle: "$Tags.TagTitle"}},
+						//{$project: {"_id": '$_id', GroupTagTitle:{$cond: { if: { $or:[{"$GroupTagTitle":null},{"$GroupTagTitle":[]},{"$Tags":{$exists:false}}] }, then: "$GroupTagTitle", else: "$Tags.TagTitle" }}}},
+						//{$sort : sort_OnTags},
+						{$limit : parseInt(limit - resultLength)}
+					]
+				).exec(function(err,result2){			
+					if(err){ 		
+						res.json(err);
+					}
+					else{
+						var finalResult = result.concat(result2);
+						var finalresultLength = finalResult.length;
+						if(finalresultLength < limit){
+							//res.json({"code":"404","msg":"Not Found"})
+							
+							//step-3
+							groupTags.aggregate(
+								[
+									//{$unwind: "$Tags"},
+									{$unwind: { path: "$Tags", preserveNullAndEmptyArrays: true }},
+									{$match: conditions_STEP3},
+									{$project: {"_id": '$_id', status : "$status",GTTitle : "$GroupTagTitle", GroupTagTitle: "$Tags.TagTitle"}},
+									//{$project: {"_id": '$_id', GroupTagTitle:{$cond: { if: { $or:[{"$GroupTagTitle":null},{"$GroupTagTitle":[]},{"$Tags":{$exists:false}}] }, then: "$GroupTagTitle", else: "$Tags.TagTitle" }}}},
+									//{$sort : sort_OnTags},
+									{$limit : parseInt(limit - finalresultLength)}
+								]
+							).exec(function(err,result3){			
+								if(err){ 		
+									res.json(err);
+								}
+								else{
+									finalResult = result.concat(result3);
+									finalresultLength = finalResult.length;
+									if(finalresultLength == 0){
+										//res.json({"code":"404","msg":"Not Found"})
+										//step-4
+										groupTags.aggregate(
+											[
+												//{$unwind: "$Tags"},
+												{$unwind: { path: "$Tags", preserveNullAndEmptyArrays: true }},
+												{$match: conditions_STEP4},
+												{$project: {"_id": '$_id', status : "$status",GTTitle : "$GroupTagTitle", GroupTagTitle: "$Tags.TagTitle"}},
+												//{$project: {"_id": '$_id', GroupTagTitle:{$cond: { if: { $or:[{"$GroupTagTitle":null},{"$GroupTagTitle":[]},{"$Tags":{$exists:false}}] }, then: "$GroupTagTitle", else: "$Tags.TagTitle" }}}},
+												{$sort : sort_OnTags},
+												{$limit : limit}
+											]
+										).exec(function(err,result4){			
+											if(err){ 		
+												res.json(err);
+											}
+											else{
+												finalResult = result.concat(result4);
+												finalresultLength = finalResult.length;
+												
+												if(finalresultLength==0){
+													//res.json({"code":"404","msg":"Not Found"})
+													
+													groupTags.aggregate(
+														[
+															//{$unwind: "$Tags"},
+															{$unwind: { path: "$Tags", preserveNullAndEmptyArrays: true }},
+															{$match: conditions_STEP5},
+															{$project: {"_id": '$_id', status : "$status",GTTitle : "$GroupTagTitle", GroupTagTitle: "$Tags.TagTitle"}},
+															//{$project: {"_id": '$_id', GroupTagTitle:{$cond: { if: { $or:[{"$GroupTagTitle":null},{"$GroupTagTitle":[]},{"$Tags":{$exists:false}}] }, then: "$GroupTagTitle", else: "$Tags.TagTitle" }}}},
+															{$sort : sort_OnTags},
+															{$limit : limit}
+														]
+													).exec(function(err,result5){			
+														if(err){ 		
+															res.json(err);
+														}
+														else{
+															finalResult = result.concat(result5);
+															finalresultLength = finalResult.length;
+															if(finalresultLength==0){
+																res.json({"code":"404","msg":"Not Found"})
+															}
+															else{	
+																res.json({"code":"200","msg":"Success","response":finalResult})
+															}
+														}
+													});
+												}
+												else{	
+													res.json({"code":"200","msg":"Success","response":finalResult})
+												}
+											}
+										});
+									}
+									else{				
+										res.json({"code":"200","msg":"Success","response":finalResult})
+									}
+								}
+							});
+						}
+						else{
+							res.json({"code":"200","msg":"Success","response":finalResult})
+						}
+					}
+				});
+				
+				
+			}
+			else{				
+				res.json({"code":"200","msg":"Success","response":result})
+			}
+		}
+    });
+	
+};

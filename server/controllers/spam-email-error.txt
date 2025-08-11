@@ -1,0 +1,17 @@
+Resuklts -------------> []
+Capsule : Total Number Of Affected Records =  { ok: 1, nModified: 0, n: 0 }
+Chapter : Total Number Of Affected Records =  { ok: 1, nModified: 0, n: 0 }
+**** New Html - - >***** <h3>Thank you for registering with CollabMedia.</h3> <p                                                                                        >Your account has been activated and Please Go and Login into our website and en                                                                                        joy the sevices we provide.</p><p>Your Password is : jyotit@2017</p><h3>Thanks</                                                                                        h3><p>CollabMedia Team</p>
+Page : Total Number Of Affected Records =  { ok: 1, nModified: 0, n: 0 }
+{ [Error: Sending failed]
+  errors:
+   [ { [Error: Can't send mail - all recipients were rejected: 550-5.5.1 Server                                                                                         IP 104.130.166.177 listed as abusive. See
+     550-http://spamauditor.org/best-practices/ip-reputation/ for more informati                                                                                        on.
+     550 Protection provided by MagicSpam 2.1-5.3 http://www.magicspam.com]
+       code: 'EENVELOPE',
+       response: '550-5.5.1 Server IP 104.130.166.177 listed as abusive. See\n55                                                                                        0-http://spamauditor.org/best-practices/ip-reputation/ for more information.\n55                                                                                        0 Protection provided by MagicSpam 2.1-5.3 http://www.magicspam.com',
+       responseCode: 550,
+       domain: 'smartdatainc.net',
+       exchange: 'mail.smartdatainc.net',
+       recipients: [Object] } ] }
+

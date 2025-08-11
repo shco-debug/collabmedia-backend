@@ -1,0 +1,44 @@
+$ git pull
+Auto-merging public/controllers/front/creation/contentPageBuilder__direct.js
+Merge made by the 'recursive' strategy.
+ .gitignore                                         |   2 +
+ nbproject/project.properties                       |   4 +
+ nbproject/project.xml                              |   9 ++
+ .../56cc07f18a34eedc0f3c821a_1494333400689.jpg     | Bin 0 -> 488623 bytes
+ .../56cc07f18a34eedc0f3c821a_1494333400689.jpg     | Bin 0 -> 62205 bytes
+ .../56cc07f18a34eedc0f3c821a_1494333400689.jpg     | Bin 0 -> 1012539 bytes
+ .../sg/56cc07f18a34eedc0f3c821a_1494333400689.jpg  | Bin 0 -> 137404 bytes
+ .../56cc07f18a34eedc0f3c821a_1494333400689.jpg     | Bin 0 -> 27731 bytes
+ public/config/front/bootstrap.js                   |  52 +++++--
+ public/controllers/capsulesRoutes.js               |  34 ++++-
+ .../controllers/front/creation/chaptersMgmtCtrl.js |  36 ++++-
+ .../front/creation/contentPageBuilder.js           |   1 +
+ .../front/creation/contentPageBuilder__direct.js   |  23 +++-
+ .../controllers/front/creation/cpPageMgmtCtrl.js   |   1 +
+ public/controllers/front/creation/pagesMgmtCtrl.js |  50 +++++--
+ .../front/creation/services/chaptersService.js     |  37 +++++
+ .../front/creation/services/pagesService.js        |  55 ++++++++
+ .../front/creation/services/sgPageService.js       |  32 +++++
+ .../controllers/front/creation/sgPageMgmtCtrl.js   |  67 ++++++++-
+ public/controllers/front/loginCtrl.js              |  29 +++-
+ public/views/front/creation/manage-chapters.html   |  10 +-
+ public/views/front/creation/manage-cp.html         |  15 ++
+ public/views/front/creation/manage-pages.html      |  19 +++
+ public/views/front/creation/manage-sg.html         |  40 +++++-
+ server/controllers/capsulesController.js           |  55 ++++++++
+ server/controllers/chaptersController.js           | 153 +++++++++++++++++++--
+ server/controllers/launchSettingsController.js     |  34 +++++
+ server/controllers/pagesController.js              | 129 ++++++++++++++++-
+ server/models/pageModel.js                         |  11 +-
+ server/routes/frontend/api/capsuleRoutes.js        |   6 +
+ server/routes/frontend/api/chapterRoutes.js        |  36 +++++
+ server/routes/frontend/api/pageRoutes.js           |  11 ++
+ 32 files changed, 896 insertions(+), 55 deletions(-)
+ create mode 100644 .gitignore
+ create mode 100644 nbproject/project.properties
+ create mode 100644 nbproject/project.xml
+ create mode 100644 public/assets/Media/headers/aspectfit/56cc07f18a34eedc0f3c82                                                                                                                1a_1494333400689.jpg
+ create mode 100644 public/assets/Media/headers/medium/56cc07f18a34eedc0f3c821a_                                                                                                                1494333400689.jpg
+ create mode 100644 public/assets/Media/headers/orignal/56cc07f18a34eedc0f3c821a                                                                                                                _1494333400689.jpg
+ create mode 100644 public/assets/Media/headers/sg/56cc07f18a34eedc0f3c821a_1494                                                                                                                333400689.jpg
+ create mode 100644 public/assets/Media/headers/small/56cc07f18a34eedc0f3c821a_1                                                                                                                494333400689.jpg

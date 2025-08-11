@@ -1,0 +1,75 @@
+Misc
+•	Organization and Innovation MTs have been removed from Ideas page. All I did was go to the MT and ‘Save changes’ and they disappeared. I want the vertical order in Ideas to be :
+	Self, 
+	People, 
+	Results, 
+	Customer, 
+	Innovation and 
+	Organization. 
+		- Check the id of enablers
+		- update the flag for both order and display
+		- update editMeta api code for order case.
+		
+		- DONE
+Privacy
+o	After switching from Private to Shared, need a platform message confirmation
+o	When post is marked “Private” need confirmation.
+	- Add confirmation click directive and update the model value from directive - Check and plan!!!
+	- DONE
+	
+o	When you create a Montage, click Private and Post, it does not register as Private. You need to edit the Montage and click Private again, Repost and then it registers		 - DONE
+o	Shared posts can’t be seen in Content pages by invited friends	- DONE
+
+o	Remove from Filter AND Scoring	- DONE
+	Stand point, Format, Company Size, Additional role, Relation 
+o	Keep in Filter and Scoring		- DONE
+	Gender, Level, Industry, Country  
+-----------------------------------------------
+
+Themes and tagging
+o	Themes added in the posting section that are not in the Themes library, should get added to User Group Tags in Admin
+	User Group Tags approve should have option to add as a Tag to an existing GT or create a new GT
+	Auto-prompt section should prompt Tags. Same for search gallery
+
+•	When I delete a post in the Café, it shouldn’t scroll to the bottom of the page.
+•	Allow me to remove Embeds / Links from Ideas
+•	Reload post 0616201645155_11020 in Media uploader as Gallery image isn’t there
+
+•	When you search using the search bar, sometimes, duplicate versions of media show up in the gallery
+•	There should be no GTs in Descriptors which have no media attached to them
+•	Move Friends icon to right and Ideas to left (or somewhere else)
+
+•	Café Comments
+o	Doesn’t accept para breaks
+o	Take out limits on length of message – make it 2000 characters limit. Froala maybe?
+o	Allow comment poster to edit their comments. Allow post owner to delete comment from any user. 
+
+•	We still have double GTs!!
+o	Luxuriant and luxuriant, gold, gold, shiny, shiny, sparkler, sparkler. Please be careful with this as one of the two has most of the media and the other has very few media. I think the answer would be to merge them into 1?
+•	Same image shows up twice on page for search terms
+o	E.g. Surprise – girl in Platform locator 9219 shows twice. 9216 (man with sweater coming off sleeve), 13007 (man creating magic between hands)
+•	Tags typed in notepad do not show up in search bar (e.g. Tag dreaming in GT dreamlike)
+•	Why is luxury not showing up in the drop down? Why are all of these GT issues still not resolved?
+•	Ruffle and Think in notepad bring up Ruff and Thin as search terms
+•	When user scrolls down on the search drop down scroll bar and the bar touches the bottom, it jumps to the top again rather than staying at the bottom.
+•	GTs and Tags
+o	List other GTs with the same Tag as typed GT 
+	Typed: Smoothness (GT with Tag “Smooth”)
+	Show: Other GTs with same Tag e.g. Smooth, Smooth Wax, Smoother (which also have Smooth as a Tag)
+o	If a Tag belongs to 2 GTs, then it points to both
+	Tokyo – If Japan is only a Tag, not a GT and where “Tokyo” is the GT for Japan
+•	Goggles does not bring up a media that is there in WIP/Enablers/Unsorted
+o	What are the rules for which GTs are included and which are not?
+
+New detected points, which have been resolved :
+#) Emporium Cart (Gift Capsule case) - delete owner - it was deleting just after populating delete confirmation - DONE
+#) Emporium Cart (Gift Capsule case) - relations select choice fix - DONE
+#) Add Owner in Gift capsule that user has purchased is not working (Add Friends interface) - DONE
+
+#) Email Templates :
+	- Share Page
+	- Share Chapter
+
+#) 
+
+

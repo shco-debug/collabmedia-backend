@@ -1,0 +1,154 @@
+# Backend-only .gitignore for CollabMedia Platform
+
+# Dependencies
+node_modules/
+
+# Environment variables
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Logs
+logs/
+*.log
+newrelic_agent.log
+
+# Runtime data
+pids/
+*.pid
+*.seed
+*.pid.lock
+
+# Coverage directory used by tools like istanbul
+coverage/
+*.lcov
+
+# nyc test coverage
+.nyc_output
+
+# Optional npm cache directory
+.npm
+
+# Optional eslint cache
+.eslintcache
+
+# Optional REPL history
+.node_repl_history
+
+# Output of 'npm pack'
+*.tgz
+
+# Yarn Integrity file
+.yarn-integrity
+
+# Temporary folders
+tmp/
+temp/
+server/temp/
+server/.tmp/
+
+# Database files
+*.sqlite
+*.db
+dbbck.script
+
+# SSL certificates and keys
+config/https/
+*.key
+*.crt
+*.pem
+
+# Media files (large files that shouldn't be in git)
+*.mp4
+*.mov
+*.webm
+*.mp3
+*.zip
+*.gz
+*.tar
+*.rar
+*.7z
+
+# Excel files
+*.xlsx
+*.xls
+
+# Backup files
+*.bck
+*_bck*
+*_backup*
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# PM2 files
+.pm2/
+
+# New Relic
+newrelic_agent.log
+
+# Uploads directory
+uploads/
+
+# File analytics
+server/file-analytics/
+
+# Data directory
+server/data/
+
+# Cron job logs
+cron-jobs/logs/
+
+# Socket logs
+sockets/logs/
+
+# Temporary project files
+project_cluster_scrpt*.js
+project_cluster*.js
+project_cluster_ssl.js
+separate-backend*.js
+fix-google-creds.js
+combine-swagger-parts.js
+serve-swagger.js
+start-local.js
+
+# Swagger temporary files
+openapi-tmp.json
+swagger-api-documentation-*.json
+
+# Frontend directories (exclude completely)
+public/
+bower_components/
+dest/
+screen-guides/
+_gsdata_/
+
+# Frontend assets
+*.css
+*.js
+*.html
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.svg
+*.ico
+*.woff
+*.woff2
+*.ttf
+*.eot

@@ -1,0 +1,32 @@
+curl "http://www.hulu.com/api/oembed.json?url=http://www.hulu.com/watch/754259" -H "Host: www.hulu.com" -H "User-Agent: Mozilla/5.0 (Windows NT 6.3; WOW64; rv:37.0) Gecko/20100101 Firefox/37.0" -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" -H "Accept-Language: en-US,en;q=0.5" --compressed -H "Cookie: guid=CC5FA38F849386F97EBD550A1C5B69E6; mmcore.tst=0.406; mmid=1421240030"%"7CCAAAAAoDOO4N0wsAAA"%"3D"%"3D; mmcore.pd=1092656110"%"7CCAAAAAoBQgM47g3TC9s/DVADAKJ9X205RtJID3d3dy5lYml6bWJhLmNvbQ4AAADdQR7CIUbSSAAAAAD/////AP//////////AAZEaXJlY3QB0wsDAAAAAAADAAAAAAD///////////////8AAAAAAAFF; mmcore.srv=cg5.usw; __utma=155684772.542048291.1429164085.1429164085.1429164085.1; __utmb=155684772.55.9.1429177725104; __utmc=155684772; __utmz=155684772.1429164085.1.1.utmcsr=ebizmba.com|utmccn=(referral)|utmcmd=referral|utmcct=/articles/video-websites; __utmv=155684772.|1=login"%"20status=anonymous=1^3=h2o-treatment=control=1^6=DonutTreatment=control=1; sid=A3C23E5E1F668557FD31757E57D1080B; beacon_seq=5; site_beacon_seq=211; _ue=1429164087; locale=en; _rcsources=error"%"7C"%"7Cblank"%"7Creferral"%"7C"%"7C; hic=1; _hulu_auth2=; _ftd=1; _session_referrer=www.ebizmba.com"%"2Farticles"%"2Fvideo-websites" -H "Connection: keep-alive" -H "Cache-Control: max-age=0"
+
+
+curl "http://www.hulu.com/api/oembed.json?url=http://www.hulu.com/watch/754259" -H "Host: www.hulu.com" -H "User-Agent: Mozilla/5.0 (Windows NT 6.3; WOW64; rv:37.0) Gecko/20100101 Firefox/37.0" -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" -H "Accept-Language: en-US,en;q=0.5" --compressed -H "Cookie: guid=CC5FA38F849386F97EBD550A1C5B69E6; mmcore.tst=0.406; mmid=1421240030"%"7CCAAAAAoDOO4N0wsAAA"%"3D"%"3D; mmcore.pd=1092656110"%"7CCAAAAAoBQgM47g3TC9s/DVADAKJ9X205RtJID3d3dy5lYml6bWJhLmNvbQ4AAADdQR7CIUbSSAAAAAD/////AP//////////AAZEaXJlY3QB0wsDAAAAAAADAAAAAAD///////////////8AAAAAAAFF; mmcore.srv=cg5.usw; __utma=155684772.542048291.1429164085.1429164085.1429164085.1; __utmb=155684772.55.9.1429177725104; __utmc=155684772; __utmz=155684772.1429164085.1.1.utmcsr=ebizmba.com|utmccn=(referral)|utmcmd=referral|utmcct=/articles/video-websites; __utmv=155684772.|1=login"%"20status=anonymous=1^3=h2o-treatment=control=1^6=DonutTreatment=control=1; sid=A3C23E5E1F668557FD31757E57D1080B; beacon_seq=5; site_beacon_seq=211; _ue=1429164087; locale=en; _rcsources=error"%"7C"%"7Cblank"%"7Creferral"%"7C"%"7C; hic=1; _hulu_auth2=; _ftd=1; _session_referrer=www.ebizmba.com"%"2Farticles"%"2Fvideo-websites" -H "Connection: keep-alive" -H "Cache-Control: max-age=0"
+
+
+ curl "http://www.hulu.com/api/oembed.json?url=http://www.hulu.com/watch/755821" -H "Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8" -H "Connection: keep-alive" -H "Cache-Control: max-age=0"
+Something is happening.
+
+
+
+(9:38:33 AM) Requested Range Not Satisfiable
+(9:38:52 AM) Error: Requested Range Not Satisfiable
+    at SendStream.error (/var/www/html/collabmedia-rackspace-live31/node_modules/express/node_modules/send/lib/send.js:170:16)
+    at SendStream.send (/var/www/html/collabmedia-rackspace-live31/node_modules/express/node_modules/send/lib/send.js:441:19)
+    at /var/www/html/collabmedia-rackspace-live31/node_modules/express/node_modules/send/lib/send.js:381:10
+    at Object.oncomplete (fs.js:107:15)
+
+	
+	Question: Is it possible to create a script where a designer improves the original image (color brightness etc) which was uploaded via the media uploader and the system regenerates the different size images (600, thumbnail etc.) based on the improved image?
+	
+	
+	
+	
+	
+	 1.  view montage- and posting remaining item while creating montage
+	 2. and bug fixes
+	
+	<div class="jquery-notify-bar " id="__notifyBar" style="display: block;"><div class="live-alert"><div class="live-alert-in"><a href="http://techgig.com/expert-speak/Crunch-data-in-a-jiffy-with-Apache-Spark-725?utm_source=webinar_alert"><img src="http://www.techgig.com/Themes/Release/images/lv-wb-icn.gif" class="lv-wb-icn" alt="Webinar" title="Webinar"></a><div class="lv-wb-txt"><a class="lv-wb-ttl" href="http://techgig.com/expert-speak/Crunch-data-in-a-jiffy-with-Apache-Spark-725?utm_source=webinar_alert">Crunch data in a jiffy with Apache Spark</a><div class="lv-wb-des">There are several use cases in the universe of big data applications that still makes Apache Hadoop the default choice for iterative data processing and ad hoc queries on big data sets. However, the fact is that Hadoop’s MapReduce framework is most.. <a href="http://techgig.com/expert-speak/Crunch-data-in-a-jiffy-with-Apache-Spark-725?utm_source=webinar_alert">more..</a></div></div><div class="lv-spkr"><a href="http://techgig.com/expert-speak/Crunch-data-in-a-jiffy-with-Apache-Spark-725?utm_source=webinar_alert"><img width="50" height="50" border="0" src="http://www.techgig.com/files/rsz/crop_50x50/files/photo_1427445570_temp.jpg" class="lv-spkr-pic" alt="User Picture"></a><div class="lv-spkr-txt"><a href="http://techgig.com/expert-speak/Crunch-data-in-a-jiffy-with-Apache-Spark-725?utm_source=webinar_alert" class="lv-spkr-ttl">Kapil Sharma</a><div class="lv-spkr-des">Senior Manager -  Software Development, PayPal</div></div></div><div class="lv-join"><div class="lv-tm"><span style="color:#ff0000">Happening Currently!</span></div><a href="http://techgig.com/expert-speak/Crunch-data-in-a-jiffy-with-Apache-Spark-725?utm_source=webinar_alert" class="lv-join-btn"><span>Join Now</span></a></div></div><div class="lv-clr"></div></div><a class="notify-bar-close" href="#">Close [X]</a></div>
+	
+pinterest oembed stackoverflow link:	
+	http://stackoverflow.com/questions/19295665/setting-up-oembed-provider-to-enable-embedding-site-content-on-pinterest

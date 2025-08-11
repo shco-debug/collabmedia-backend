@@ -1,0 +1,84 @@
+db.getCollection('groupTags').aggregate([
+    { $match : { status : {$in : [1,3]}} },
+    { $group: { 
+        "_id": { $toLower: "$GroupTagTitle" }, 
+        "count": { $sum: 1 },
+        ids: { $push:  {_id : "$_id" , status : "$status" , MediaCount : "$MediaCount"} }
+      } 
+    },
+    { $match : { count : {$gt : 1} } },
+    { $out : 'duplicate_gtags' }
+])
+
+db.getCollection('duplicate_gtags').find({count : {$gt:1}} , {ids:true})
+	
+db.media.update({'GroupTags.GroupTagID':'564be308276f28b90faef914'},{$set:{'GroupTags.$.GroupTagID':'55b265c4e8837a284fdf4b21'}},false,true);
+
+db.getCollection('media').find({IsDeleted:0 , "GroupTags.GroupTagID" : {$in:[
+	"564be2f4276f28b90faef85a",
+	"564be2f4276f28b90faef868",
+	"564be4d9276f28b90faefbe7",
+	"564be2f4276f28b90faef876"
+]}})
+
+var bulk = db.media.initializeUnorderedBulkOp();
+bulk.find( {'GroupTags.GroupTagID':'564be2f4276f28b90faef85a'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b26830e8837a284fe201d2'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be2f4276f28b90faef868'} ).update( {$set:{'GroupTags.$.GroupTagID':'5512d85884e75040473093a1'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be4d9276f28b90faefbe7'} ).update( {$set:{'GroupTags.$.GroupTagID':'55118e961cc8615862ab704e'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be2f4276f28b90faef876'} ).update( {$set:{'GroupTags.$.GroupTagID':'55114e7c1cc8615862ab6c1f'}} );
+
+bulk.execute();
+
+db.getCollection('groupTags').remove({ '_id' : {'$in' : [
+            ObjectId("56742e4bef2f944f6d32d5fa"),
+ObjectId("564be38b276f28b90faefa8a"),
+ObjectId("564be511276f28b90faefcca"),
+ObjectId("564be308276f28b90faef8ed"),
+ObjectId("564be38b276f28b90faefa8c"),
+ObjectId("58d4f424caa188327f5386b8"),
+ObjectId("55b26659e8837a284fe02292"),
+ObjectId("564be327276f28b90faef938"),
+ObjectId("564be2f4276f28b90faef884"),
+ObjectId("564be354276f28b90faef96f"),
+ObjectId("564be502276f28b90faefc72"),
+ObjectId("564be511276f28b90faefcbe"),
+ObjectId("564be49c276f28b90faefb95"),
+ObjectId("564be2f4276f28b90faef8a8"),
+ObjectId("58d4fc06caa188327f544aec"),
+ObjectId("564be38b276f28b90faefa77"),
+ObjectId("564be502276f28b90faefc6a"),
+ObjectId("58d506e6caa188327f55c089"),
+ObjectId("564be2f4276f28b90faef894"),
+ObjectId("564be526276f28b90faefd73"),
+ObjectId("564bca97276f28b90faef7be"),
+ObjectId("564be2f4276f28b90faef85c"),
+ObjectId("564be52d276f28b90faefd8f"),
+ObjectId("564be51e276f28b90faefd3f"),
+ObjectId("564be45d276f28b90faefb3f"),
+ObjectId("564be308276f28b90faef911"),
+ObjectId("54f440c46f95404053dd46cd"),
+ObjectId("564be354276f28b90faef96d"),
+ObjectId("564be4d9276f28b90faefbef"),
+ObjectId("564be526276f28b90faefd71"),
+ObjectId("564be308276f28b90faef8f3"),
+ObjectId("58d4cdbaa241810397cbb423"),
+ObjectId("564be511276f28b90faefcc0"),
+ObjectId("5999f7fe5664a526949380e6"),
+ObjectId("5999f86f5664a5269493acc0"),
+ObjectId("564be426276f28b90faefb24"),
+ObjectId("564be354276f28b90faef983"),
+ObjectId("564be4fa276f28b90faefc39"),
+ObjectId("564be4cb276f28b90faefbc0"),
+ObjectId("564be4d9276f28b90faefbe9"),
+ObjectId("564be38b276f28b90faefa79"),
+ObjectId("58d4f306caa188327f53383c"),
+ObjectId("564be38b276f28b90faefa81"),
+ObjectId("564be38b276f28b90faefa75"),
+ObjectId("58d51476caa188327f57451d"),
+ObjectId("564be327276f28b90faef936"),
+ObjectId("564be511276f28b90faefc9c"),
+ObjectId("564be502276f28b90faefc70"),
+ObjectId("564be308276f28b90faef8e1")
+
+    ] }});
+	

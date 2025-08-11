@@ -1,0 +1,24 @@
+Theme Based Posts Search (Platform Leaning)
+
+#) Need to use same design and data structure, so that we can reuse all the features implemented for general media listing.
+	- Posts schema is different than the general media data structure
+	- We need to transform DS for all required cases in both ways 
+		- Client to server and 
+		- Server to client data passing.
+
+#) There may be same media multiple time posted (reposts - With different text by different users) 
+	- Which post to populate? 
+		- all post copies or 
+		- only media owner's post?
+		
+
+#) We are still not clear that how we have to map keywords with posts, please confirm?
+
+#) What if user click on a post?
+	- The new posting page will open media from clicked post on left and comment on right.
+	- Now suppose he doesn't change the comment from post and repost it to his current board?
+
+
+
+		
+

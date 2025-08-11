@@ -1,0 +1,73 @@
+
+
+var bulk = db.groupTags.initializeUnorderedBulkOp();
+bulk.find( {'GroupTags.GroupTagID':'564cdc0a276f28b90faf037a'} ).update( {$set:{'GroupTags.$.GroupTagID':'55114fd61cc8615862ab6c51'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be308276f28b90faef8dd'} ).update( {$set:{'GroupTags.$.GroupTagID':'55118a191cc8615862ab6fc0'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be4d9276f28b90faefc0d'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b265d4e8837a284fdf67e7'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be354276f28b90faef98b'} ).update( {$set:{'GroupTags.$.GroupTagID':'55207bdacdc7250425b07298'}} );
+
+bulk.find( {'GroupTags.GroupTagID':'56742e4bef2f944f6d32d5f0'} ).update( {$set:{'GroupTags.$.GroupTagID':'551188891cc8615862ab6f78'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be4d9276f28b90faefbed'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25dc3e8837a284fde8ec3'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be426276f28b90faefb15'} ).update( {$set:{'GroupTags.$.GroupTagID':'55231989c60f68882604d942'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be308276f28b90faef90c'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b265e2e8837a284fdf7e9a'}} );
+
+bulk.find( {'GroupTags.GroupTagID':'564be49c276f28b90faefb8b'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b265e2e8837a284fdf7e94'}} );
+bulk.find( {'GroupTags.GroupTagID':'564bca97276f28b90faef7c4'} ).update( {$set:{'GroupTags.$.GroupTagID':'54f440c46f95404053dd4649'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be511276f28b90faefc98'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b2654fe8837a284fdecb62'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be426276f28b90faefb1d'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b266cde8837a284fe0a199'}} );
+
+bulk.find( {'GroupTags.GroupTagID':'564be3f9276f28b90faefaf2'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25db8e8837a284fde777f'}} );
+bulk.find( {'GroupTags.GroupTagID':'58d506b2caa188327f55a928'} ).update( {$set:{'GroupTags.$.GroupTagID':'58d506b1caa188327f55a8ef'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be53d276f28b90faefdcf'} ).update( {$set:{'GroupTags.$.GroupTagID':'551159c41cc8615862ab6d6a'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be3f9276f28b90faefafd'} ).update( {$set:{'GroupTags.$.GroupTagID':'55114f8d1cc8615862ab6c4d'}} );
+
+bulk.find( {'GroupTags.GroupTagID':'58d506e2caa188327f55be3b'} ).update( {$set:{'GroupTags.$.GroupTagID':'58d506e2caa188327f55bdf8'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be511276f28b90faefcdb'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b266ffe8837a284fe0ebda'}} );
+bulk.find( {'GroupTags.GroupTagID':'58d506b2caa188327f55a926'} ).update( {$set:{'GroupTags.$.GroupTagID':'58d506b1caa188327f55a8f1'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be45d276f28b90faefb47'} ).update( {$set:{'GroupTags.$.GroupTagID':'5512985784e7504047308f39'}} );
+
+bulk.find( {'GroupTags.GroupTagID':'564be53d276f28b90faefdca'} ).update( {$set:{'GroupTags.$.GroupTagID':'55114f441cc8615862ab6c3f'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be3b9276f28b90faefac7'} ).update( {$set:{'GroupTags.$.GroupTagID':'55114de51cc8615862ab6c09'}} );
+bulk.find( {'GroupTags.GroupTagID':'564bca97276f28b90faef7b4'} ).update( {$set:{'GroupTags.$.GroupTagID':'54f440c46f95404053dd4722'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be511276f28b90faefc96'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25dc3e8837a284fde8e0d'}} );
+
+bulk.find( {'GroupTags.GroupTagID':'564be4cb276f28b90faefbc2'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25dbee8837a284fde84c6'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be511276f28b90faefcd4'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b2654ee8837a284fdecb26'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be511276f28b90faefcc4'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25db8e8837a284fde775f'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be45d276f28b90faefb35'} ).update( {$set:{'GroupTags.$.GroupTagID':'5514350684e750404730a42e'}} );
+
+bulk.find( {'GroupTags.GroupTagID':'564be327276f28b90faef93a'} ).update( {$set:{'GroupTags.$.GroupTagID':'551188891cc8615862ab6f7d'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be2f4276f28b90faef886'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25db7e8837a284fde770d'}} );
+bulk.find( {'GroupTags.GroupTagID':'55b266f8e8837a284fe0e2d2'} ).update( {$set:{'GroupTags.$.GroupTagID':'55142a7f84e750404730a3b9'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be511276f28b90faefcaa'} ).update( {$set:{'GroupTags.$.GroupTagID':'551182511cc8615862ab6eb8'}} );
+
+
+bulk.find( {'GroupTags.GroupTagID':'564be511276f28b90faefce1'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25db8e8837a284fde7741'}} );
+bulk.find( {'GroupTags.GroupTagID':'58d4cdafa241810397cbae25'} ).update( {$set:{'GroupTags.$.GroupTagID':'58d4cdafa241810397cbae0e'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be4d9276f28b90faefc10'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25d0fe8837a284fde5d05'}} );
+bulk.find( {'GroupTags.GroupTagID':'58d4f1b1caa188327f53238d'} ).update( {$set:{'GroupTags.$.GroupTagID':'58d4f1b1caa188327f53237a'}} );
+
+bulk.find( {'GroupTags.GroupTagID':'564be354276f28b90faef975'} ).update( {$set:{'GroupTags.$.GroupTagID':'55114de51cc8615862ab6c0a'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be49c276f28b90faefb7f'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25dbde8837a284fde8343'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be502276f28b90faefc78'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b266ffe8837a284fe0eba8'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be2f4276f28b90faef860'} ).update( {$set:{'GroupTags.$.GroupTagID':'54f440c46f95404053dd46ae'}} );
+
+bulk.find( {'GroupTags.GroupTagID':'564be2f4276f28b90faef88a'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b26542e8837a284fdebdfd'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be354276f28b90faef969'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25dc3e8837a284fde8e59'}} );
+
+
+bulk.find( {'GroupTags.GroupTagID':'564be2f4276f28b90faef856'} ).update( {$set:{'GroupTags.$.GroupTagID':'55115a301cc8615862ab6d7f'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be354276f28b90faef95f'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b265dce8837a284fdf7458'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be45d276f28b90faefb41'} ).update( {$set:{'GroupTags.$.GroupTagID':'55118dc51cc8615862ab7034'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be45d276f28b90faefb6a'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25dc3e8837a284fde8eb7'}} );
+
+bulk.find( {'GroupTags.GroupTagID':'564be2f4276f28b90faef874'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25dc3e8837a284fde8dc3'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be2f4276f28b90faef88c'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25dc4e8837a284fde8f09'}} );
+bulk.find( {'GroupTags.GroupTagID':'564bca97276f28b90faef7cd'} ).update( {$set:{'GroupTags.$.GroupTagID':'54f440c46f95404053dd46ab'}} );
+bulk.find( {'GroupTags.GroupTagID':'564be4fa276f28b90faefc45'} ).update( {$set:{'GroupTags.$.GroupTagID':'55b25dd3e8837a284fde99f2'}} );
+
+bulk.execute();
+
+
+
+

@@ -1,0 +1,226 @@
+/*________________________________________________________________________
+   * @Date:      		10 October 2015
+   * @Method :   		publish
+   * Created By: 		smartData Enterprises Ltd
+   * Modified On:		-
+   * @Purpose:   	
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR + CR"
+_________________________________________________________________________
+*/
+var publish = function(req,res){
+	console.log('getting here');
+	var condition = {};
+	condition._id = req.headers.capsule_id ? req.headers.capsule_id : '0';
+	var makingFor = req.body.makingFor ? req.body.makingFor : 'ME';
+	var participation = req.body.participation ? req.body.participation : 'private';
+	if(req.body.title){
+		var title = req.body.title;
+		Capsule.update(condition,{$set:{'LaunchSettings.Audience' : makingFor,'LaunchSettings.ShareMode' : participation , Title : title}},{multi:false},function(err,numAffected){
+		if (!err) {
+			var conditions = {
+				CapsuleId: req.headers.capsule_id ? req.headers.capsule_id : 0,
+				//CreaterId : req.session.user._id,
+				OwnerId : req.session.user._id,		//for all cases It will work.
+				IsLaunched : 0,						//IsLaunched = true means the batch invitation has been sent.
+				Status : 1,
+				IsDeleted : 0
+			};
+			
+			var fields = {};
+			console.log('===========================================');
+			console.log(conditions);
+			console.log('===========================================');
+			
+			Chapter.find(conditions, fields , function( err , results ){
+				if( !err ){
+					for(var loop = 0; loop < results.length; loop++){
+						if( results.length ){
+							var ChapterData = results[loop];
+							var MakingFor = ChapterData.LaunchSettings.MakingFor;
+							var ShareMode = ChapterData.LaunchSettings.ShareMode;
+							
+							if(ChapterData.LaunchSettings.OthersData.length)
+								MakingFor = "OTHERS";
+							
+							switch( MakingFor ){
+								case "ME":
+									if( ShareMode == "public" || ShareMode == "friend-solo" || ShareMode == "friend-group" ){
+										ShareMode = "invite";
+									}
+									switch( ShareMode ){
+										case  "invite": 
+											console.log("public / friend-solo / friend-group Case........");
+											var invitees = ChapterData.LaunchSettings.Invitees ? ChapterData.LaunchSettings.Invitees : [];
+											chapter__sendInvitations(ChapterData , invitees , req);
+											Chapter.update({_id:req.headers.chapter_id},{$set:{IsLaunched:true , "LaunchSettings.MakingFor":"ME"}} , {multi:false}, function(err,numAffected){
+												if(err){
+													var response = {
+														status: 501,
+														message: "Something went wrong."
+													}
+													console.log(response)
+												}else{
+													var response = {
+														status: 200,
+														message: "Chapter has been launched successfully.",
+														result : results
+													}
+													console.log(response);
+												}
+											});
+											break;
+											
+										case "private" : 
+											console.log("No need to do anything.. It's private area.");
+											Chapter.update({_id:req.headers.chapter_id},{$set:{IsLaunched:true , "LaunchSettings.MakingFor":"ME"}} , {multi:false}, function(err,numAffected){
+												if(err){
+													var response = {
+														status: 501,
+														message: "Something went wrong."
+													}
+													console.log(response)
+												}else{
+													var response = {
+														status: 200,
+														message: "Chapter has been launched successfully.",
+														result : results
+													}
+													console.log(response);
+												}
+											});
+											break;
+											
+										default : 
+											console.log("Error on ShareMode = ",ShareMode);
+											var response = {
+												status: 501,
+												message: "Something went wrong."
+											}
+											console.log(response);
+											//return;
+									}
+									break;
+
+								case "OTHERS":
+									console.log("--------------------------OTHERS CASE----------------------------");
+									//create a new instance of the chapter for each other user
+									var OtherUsers = ChapterData.LaunchSettings.OthersData ? ChapterData.LaunchSettings.OthersData : [];
+									if(OtherUsers.length){
+										for( var loop = 0; loop < OtherUsers.length; loop++ ){
+											var owner = OtherUsers[loop];
+											chapter__createNewInstance(ChapterData , owner , req);
+											//update the chapter's IsLaunched Key value.
+										}
+										Chapter.update({_id:req.headers.chapter_id},{$set:{IsLaunched:true , "LaunchSettings.MakingFor":"OTHERS"}} , {multi:false}, function(err,numAffected){
+											if(err){
+												var response = {
+													status: 501,
+													message: "Something went wrong." 
+												}
+												console.log(response)
+											}else{
+												var response = {
+													status: 200,
+													message: "Chapter has been launched successfully.",
+													result : results
+												}
+												console.log(response);
+											}
+										});
+									}
+									else{
+										var response = {
+											status: 501,
+											message: "Something went wrong." 
+										}
+										console.log(response)
+									}
+									break;
+									
+								default : 
+									console.log("ERROR on MakingFor = ",MakingFor);
+									var response = {
+										status: 501,
+										message: "Something went wrong."
+									}
+									console.log(response);
+									//return;
+							}
+							
+							if( loop == results.length - 1 ){
+								Capsule.update({_id:req.headers.capsule_id},{$set:{IsPublished:true , IsLaunched:true}} , {multi:false}, function(err,numAffected){
+									if( !err ){
+										var response = {
+											status: 200,
+											message: "Capsule has been published successfully.",
+											result : results
+										}
+										res.json(response);
+									}
+									else{
+										var response = {
+											status: 501,
+											message: "Something went wrong."
+										}
+										console.log(response);
+									}
+								});
+							}
+						}
+						else{
+							var response = {
+								status: 501,
+								message: "Something went wrong." 
+							}
+							res.json(response);
+						}
+					}
+				}
+				else{
+					console.log(err);
+					var response = {
+						status: 501,
+						message: "Something went wrong." 
+					}
+					res.json(response);
+				}
+			});
+			
+		}else{
+			var response = {
+				status: 501,
+				message: "Something went wrong." ,
+				error : err
+			}
+			res.json(response);
+		}
+	})
+	}else{
+	
+		Capsule.update(condition,{$set:{'LaunchSettings.Audience' : makingFor,'LaunchSettings.ShareMode' : participation}},{multi:false},function(err,numAffected){
+			if (!err) {
+				var response = {
+					status: 200,
+					message: "Capsule settings updated successfully.",
+					result : numAffected
+				}
+				res.json(response);
+			}else{
+				var response = {
+					status: 501,
+					message: "Something went wrong." ,
+					error : err
+				}
+				res.json(response);
+			}
+		})
+	}
+}
+
+//Capsules In the making Apis
+exports.getChapters = getChapters;
+exports.find = find;
+exports.saveAndLaunch = saveAndLaunch;
+exports.publish = publish;
