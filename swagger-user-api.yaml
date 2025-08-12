@@ -1,0 +1,1463 @@
+openapi: 3.0.3
+info:
+  title: User Management API
+  description: Comprehensive API for user management including authentication, profile management, file uploads, and user settings
+  version: 1.0.0
+  contact:
+    name: API Support
+    email: support@collabmedia.com
+
+servers:
+  - url: http://localhost:3003
+    description: Development server
+  - url: https://api.collabmedia.com
+    description: Production server
+
+paths:
+  /user/login:
+    post:
+      tags:
+        - Authentication
+      summary: User Login
+      description: Authenticate user with email and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Email
+                - Password
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: User's email address
+                  example: "user@example.com"
+                password:
+                  type: string
+                  description: User's password
+                  example: "password123"
+      responses:
+        '200':
+          description: Login successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "200"
+                  msg:
+                    type: string
+                    example: "Login successful"
+                  user:
+                    $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Invalid credentials
+        '401':
+          description: Authentication failed
+
+  /user/register:
+    post:
+      tags:
+        - Authentication
+      summary: User Registration
+      description: Register a new user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Email
+                - Password
+                - Name
+              properties:
+                Email:
+                  type: string
+                  format: email
+                  description: User's email address
+                  example: "newuser@example.com"
+                Password:
+                  type: string
+                  minLength: 6
+                  description: User's password
+                  example: "password123"
+                Name:
+                  type: string
+                  description: User's full name
+                  example: "John Doe"
+                UserName:
+                  type: string
+                  description: Unique username (optional)
+                  example: "johndoe"
+                Gender:
+                  type: string
+                  enum: [Male, Female, Other]
+                  description: User's gender
+                ReferralCode:
+                  type: string
+                  description: Referral code from another user
+      responses:
+        '200':
+          description: Registration successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "200"
+                  msg:
+                    type: string
+                    example: "Registration successful"
+                  user:
+                    $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Validation error or duplicate email/username
+
+  /user/chklogin:
+    get:
+      tags:
+        - Authentication
+      summary: Check Login Status
+      description: Check if user is currently logged in
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: User is logged in
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "200"
+                  user:
+                    $ref: '#/components/schemas/UserProfile'
+        '401':
+          description: User not logged in
+
+  /user/logout:
+    get:
+      tags:
+        - Authentication
+      summary: User Logout
+      description: Logout current user and clear session
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logout:
+                    type: string
+                    example: "200"
+                  msg:
+                    type: string
+                    example: "Success"
+
+  /fileUpload:
+    post:
+      tags:
+        - File Management
+      summary: Upload Profile Picture
+      description: Upload and process user profile picture
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                profilePic:
+                  type: string
+                  format: binary
+                  description: Profile picture file (JPG, PNG, GIF)
+      responses:
+        '200':
+          description: File upload successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: "200"
+                  filePath:
+                    type: string
+                    description: Path to uploaded file
+                  msg:
+                    type: string
+                    example: "File uploaded successfully"
+
+  /saveFile:
+    post:
+      tags:
+        - File Management
+      summary: Save File Reference
+      description: Save file reference to user profile
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - filePath
+              properties:
+                filePath:
+                  type: string
+                  description: Path to the uploaded file
+      responses:
+        '200':
+          description: File reference saved successfully
+
+  /user/addFsg:
+    post:
+      tags:
+        - Profile Management
+      summary: Add Functional Skill Groups
+      description: Add or update user's functional skill groups (FSGs) in the format "Key~Value" separated by tilde
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - fsg
+              properties:
+                fsg:
+                  type: array
+                  description: Array of FSG groups, where each group is an array of "Key~Value" strings
+                  items:
+                    type: array
+                    description: A group of related FSG entries
+                    items:
+                      type: string
+                      pattern: "^[^~]+~[^~]+$"
+                      description: FSG entry in "Key~Value" format separated by tilde
+                      examples:
+                        - "Role~Executive Coach"
+                        - "Industry~Technology"
+                        - "Expertise~Leadership Development"
+                  example: [["Role~Executive Coach", "Industry~Technology", "Expertise~Leadership Development"]]
+                NickName:
+                  type: string
+                  description: User's nickname (optional)
+                  example: "jadu"
+                ProfilePic:
+                  type: string
+                  format: uri
+                  description: Profile picture URL or path (optional)
+                  example: "https://example.com/profile.jpg"
+      responses:
+        '200':
+          description: FSG data updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "200"
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "FSG data updated successfully"
+                  data:
+                    type: object
+                    properties:
+                      userId:
+                        type: string
+                        description: User ID
+                      FSGsArr2:
+                        type: object
+                        description: Updated FSG data
+                      NickName:
+                        type: string
+                        description: Updated nickname
+                      ProfilePic:
+                        type: string
+                        description: Updated profile picture
+        '400':
+          description: Bad request - Invalid FSG data format
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "400"
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "FSG data is required and must be an array"
+        '401':
+          description: Unauthorized - User not authenticated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "401"
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "User not authenticated"
+        '500':
+          description: Internal server error
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "500"
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Error updating FSG data"
+
+  /user/fsgArrUpdate:
+    post:
+      tags:
+        - Profile Management
+      summary: Update Single FSG Entry
+      description: Update a specific functional skill group entry
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - title
+                - value
+              properties:
+                title:
+                  type: string
+                  description: FSG category title
+                  example: "Role"
+                value:
+                  type: string
+                  description: New value for the category
+                  example: "Senior Consultant"
+      responses:
+        '200':
+          description: FSG entry updated successfully
+
+  /user/requestInvitation:
+    post:
+      tags:
+        - Invitations
+      summary: Request Invitation
+      description: Request an invitation to join the platform
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - email
+                - name
+              properties:
+                email:
+                  type: string
+                  format: email
+                  description: Email address for invitation
+                  example: "invite@example.com"
+                name:
+                  type: string
+                  description: Full name
+                  example: "Jane Smith"
+                gender:
+                  type: string
+                  enum: [Male, Female, Other]
+                  description: Gender (optional, case-sensitive)
+                  example: "Female"
+      responses:
+        '200':
+          description: Invitation request submitted successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "200"
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Invitation request submitted successfully"
+                  data:
+                    type: object
+                    properties:
+                      invitationId:
+                        type: string
+                        description: Unique invitation request ID
+                      email:
+                        type: string
+                        description: Email address
+                      name:
+                        type: string
+                        description: Full name
+                      status:
+                        type: string
+                        example: "pending"
+        '400':
+          description: Missing required fields
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "400"
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Email is required"
+        '409':
+          description: User or invitation already exists
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "409"
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "User with this email already exists"
+        '500':
+          description: Server error
+
+  /user/saveSettings:
+    post:
+      tags:
+        - User Settings
+      summary: Save User Settings
+      description: Save user preferences and settings
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Settings:
+                  type: object
+                  description: User settings object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Settings saved successfully
+
+  /user/saveUserMilestone:
+    post:
+      tags:
+        - Profile Management
+      summary: Save User Milestone
+      description: Save user's personal milestone
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Milestone
+              properties:
+                Milestone:
+                  type: string
+                  description: User milestone text
+                  example: "Completed 100 projects"
+      responses:
+        '200':
+          description: Milestone saved successfully
+
+  /user/saveGoal:
+    post:
+      tags:
+        - Profile Management
+      summary: Save User Goal
+      description: Save user's personal goal
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Goal
+              properties:
+                Goal:
+                  type: string
+                  description: User goal text
+                  example: "Become a certified coach"
+      responses:
+        '200':
+          description: Goal saved successfully
+
+  /user/saveUserMetrics:
+    post:
+      tags:
+        - Profile Management
+      summary: Save User Metrics
+      description: Save user's performance metrics
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Metrics
+              properties:
+                Metrics:
+                  type: object
+                  description: User metrics object
+                  additionalProperties: true
+      responses:
+        '200':
+          description: Metrics saved successfully
+
+  /user/saveUserKeyshifts:
+    post:
+      tags:
+        - Profile Management
+      summary: Save User Keyshifts
+      description: Save user's key shifts or transformations
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Keyshifts
+              properties:
+                Keyshifts:
+                  type: string
+                  description: User keyshifts text
+                  example: "Transformed from manager to leader"
+      responses:
+        '200':
+          description: Keyshifts saved successfully
+
+  /user/saveUserBirthdate:
+    post:
+      tags:
+        - Profile Management
+      summary: Save User Birthdate
+      description: Save user's birthdate
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Birthdate
+              properties:
+                Birthdate:
+                  type: string
+                  format: date
+                  description: User's birthdate
+                  example: "1990-05-15"
+      responses:
+        '200':
+          description: Birthdate saved successfully
+
+  /user/saveOwnerBirthdate:
+    post:
+      tags:
+        - Profile Management
+      summary: Save Owner Birthdate
+      description: Save birthdate for a specific user (admin function)
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+                - Birthdate
+              properties:
+                userId:
+                  type: string
+                  description: User ID to update
+                Birthdate:
+                  type: string
+                  format: date
+                  description: User's birthdate
+      responses:
+        '200':
+          description: Birthdate saved successfully
+
+  /user/confirmOwnerBirthday:
+    post:
+      tags:
+        - Profile Management
+      summary: Confirm Owner Birthday
+      description: Get user details for birthday confirmation
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - userId
+              properties:
+                userId:
+                  type: string
+                  description: User ID to confirm
+      responses:
+        '200':
+          description: User details retrieved successfully
+
+  /user/reset_password:
+    post:
+      tags:
+        - Password Management
+      summary: Reset Password
+      description: Request password reset via email
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Email
+              properties:
+                Email:
+                  type: string
+                  format: email
+                  description: User's email address
+                  example: "user@example.com"
+      responses:
+        '200':
+          description: Password reset email sent
+
+  /user/new_password:
+    post:
+      tags:
+        - Password Management
+      summary: Set New Password
+      description: Set new password using reset token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+                - newPassword
+              properties:
+                token:
+                  type: string
+                  description: Password reset token
+                newPassword:
+                  type: string
+                  minLength: 6
+                  description: New password
+      responses:
+        '200':
+          description: Password updated successfully
+
+  /user/getAccountDetails:
+    get:
+      tags:
+        - Account Management
+      summary: Get Account Details
+      description: Retrieve user's account details
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Account details retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfile'
+
+  /user/saveAccountDetails:
+    post:
+      tags:
+        - Account Management
+      summary: Save Account Details
+      description: Update user's account details
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Name:
+                  type: string
+                  description: User's full name
+                Email:
+                  type: string
+                  format: email
+                  description: User's email address
+                Gender:
+                  type: string
+                  enum: [Male, Female, Other]
+                  description: User's gender
+                FSGsArr2:
+                  type: object
+                  description: Functional skill groups object
+      responses:
+        '200':
+          description: Account details saved successfully
+
+  /user/saveUserPassword:
+    post:
+      tags:
+        - Password Management
+      summary: Change User Password
+      description: Change user's password (requires current password)
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - Password
+                - NewPassword
+              properties:
+                Password:
+                  type: string
+                  description: Current password
+                  example: "oldpassword123"
+                NewPassword:
+                  type: string
+                  minLength: 6
+                  description: New password (minimum 6 characters)
+                  example: "newpassword456"
+      responses:
+        '200':
+          description: Password changed successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "200"
+                  success:
+                    type: boolean
+                    example: true
+                  message:
+                    type: string
+                    example: "Password has been updated successfully."
+                  response:
+                    $ref: '#/components/schemas/UserProfile'
+        '201':
+          description: Wrong current password
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "201"
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "You have entered wrong current password."
+        '401':
+          description: User not authenticated
+        '501':
+          description: Server error
+
+  /user/saveUserAvatar:
+    post:
+      tags:
+        - Profile Management
+      summary: Save User Avatar
+      description: Save cropped user avatar image
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - imageData
+              properties:
+                imageData:
+                  type: string
+                  description: Base64 encoded image data
+                cropData:
+                  type: object
+                  description: Cropping coordinates
+      responses:
+        '200':
+          description: Avatar saved successfully
+
+  /user/saveUserAvatar_Subdomain:
+    post:
+      tags:
+        - Profile Management
+      summary: Save Subdomain Avatar
+      description: Save avatar for user's subdomain profile
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - imageData
+              properties:
+                imageData:
+                  type: string
+                  description: Base64 encoded image data
+                cropData:
+                  type: object
+                  description: Cropping coordinates
+      responses:
+        '200':
+          description: Subdomain avatar saved successfully
+
+  /user/saveUsername:
+    post:
+      tags:
+        - Account Management
+      summary: Change Username
+      description: Change user's username
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - newUsername
+              properties:
+                newUsername:
+                  type: string
+                  description: New username
+                  example: "newusername"
+      responses:
+        '200':
+          description: Username changed successfully
+
+  /user/saveUserEmail:
+    post:
+      tags:
+        - Account Management
+      summary: Change User Email
+      description: Change user's email address
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - newEmail
+              properties:
+                newEmail:
+                  type: string
+                  format: email
+                  description: New email address
+                  example: "newemail@example.com"
+      responses:
+        '200':
+          description: Email changed successfully
+
+  /user/confirm_token:
+    post:
+      tags:
+        - Account Management
+      summary: Confirm Email Token
+      description: Confirm user's email using confirmation token
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: Email confirmation token
+      responses:
+        '200':
+          description: Email confirmed successfully
+
+  /user/updateTour:
+    post:
+      tags:
+        - User Experience
+      summary: Update Tour Status
+      description: Update user's tour view status for different pages. Marks the specified page tour as viewed.
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - pageName
+              properties:
+                pageName:
+                  type: string
+                  enum: [CapsuleDashboard, DashboardChapters, QAView, SearchList, SearchView, DiscussList, DiscussView]
+                  description: Name of the page to mark tour as viewed
+                  example: "CapsuleDashboard"
+      responses:
+        '200':
+          description: Tour status updated successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: number
+                    example: 200
+                  message:
+                    type: string
+                    example: "UpdateResponse"
+                  userId:
+                    type: object
+                    description: Update data that was applied
+                  update:
+                    $ref: '#/components/schemas/UserProfile'
+                  user:
+                    $ref: '#/components/schemas/UserProfile'
+        '400':
+          description: Invalid page name
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                    example: "400"
+                  success:
+                    type: boolean
+                    example: false
+                  message:
+                    type: string
+                    example: "Invalid page name"
+        '401':
+          description: User not authenticated
+        '500':
+          description: Server error
+
+  /user/getUserData:
+    get:
+      tags:
+        - User Experience
+      summary: Get User Data
+      description: Get user's tour view data
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: User data retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  TourView:
+                    type: object
+                    description: Tour view status for different pages
+
+  /user/stripeConnect:
+    get:
+      tags:
+        - Payment Integration
+      summary: Stripe Connect
+      description: Connect user's account to Stripe for payments
+      security:
+        - sessionAuth: []
+      parameters:
+        - name: code
+          in: query
+          required: true
+          schema:
+            type: string
+          description: Stripe authorization code
+      responses:
+        '200':
+          description: Stripe connection successful
+
+  /user/AcceptBrowserPolicy:
+    get:
+      tags:
+        - Legal & Compliance
+      summary: Accept Browser Policy
+      description: User accepts browser policy
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Browser policy accepted
+
+  /user/acceptAppPolicy:
+    get:
+      tags:
+        - Legal & Compliance
+      summary: Accept App Policy
+      description: User accepts application policy
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: App policy accepted
+
+  /user/tagging_users_list:
+    post:
+      tags:
+        - User Search
+      summary: Search Users for Tagging
+      description: Search and list users for tagging purposes
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                searchTerm:
+                  type: string
+                  description: Search term for users
+                  example: "john"
+                limit:
+                  type: integer
+                  description: Maximum number of results
+                  default: 20
+      responses:
+        '200':
+          description: Users retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UserBasic'
+
+  /user/getDataBySubdomain:
+    get:
+      tags:
+        - Public Profile
+      summary: Get Public Profile Data
+      description: Get user's public profile data by subdomain
+      parameters:
+        - name: subdomain
+          in: query
+          required: true
+          schema:
+            type: string
+          description: User's subdomain
+      responses:
+        '200':
+          description: Public profile data retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PublicProfile'
+
+  /user/saveSubdomainSettings:
+    post:
+      tags:
+        - Public Profile
+      summary: Save Subdomain Settings
+      description: Save user's subdomain profile settings
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                Subdomain_name:
+                  type: string
+                  description: Subdomain display name
+                Subdomain_title:
+                  type: string
+                  description: Subdomain title
+                Subdomain_description:
+                  type: string
+                  description: Subdomain description
+      responses:
+        '200':
+          description: Subdomain settings saved successfully
+
+  /user/logUserAction:
+    post:
+      tags:
+        - Analytics
+      summary: Log User Action
+      description: Log user action for analytics
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - action
+              properties:
+                action:
+                  type: string
+                  description: Action performed
+                  example: "page_view"
+                details:
+                  type: object
+                  description: Additional action details
+      responses:
+        '200':
+          description: Action logged successfully
+
+  /user/logUserFeedback:
+    post:
+      tags:
+        - Feedback
+      summary: Log User Feedback
+      description: Log user feedback
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - feedback
+              properties:
+                feedback:
+                  type: string
+                  description: User feedback text
+                rating:
+                  type: integer
+                  minimum: 1
+                  maximum: 5
+                  description: User rating
+                category:
+                  type: string
+                  description: Feedback category
+      responses:
+        '200':
+          description: Feedback logged successfully
+
+  /user/updateNotificationSeenStatus:
+    post:
+      tags:
+        - Notifications
+      summary: Update Notification Seen Status
+      description: Mark notifications as seen
+      security:
+        - sessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - notificationIds
+              properties:
+                notificationIds:
+                  type: array
+                  items:
+                    type: string
+                  description: Array of notification IDs to mark as seen
+      responses:
+        '200':
+          description: Notification status updated successfully
+
+  /user/getUserNotificationsCount:
+    post:
+      tags:
+        - Notifications
+      summary: Get User Notifications Count
+      description: Get count of unread notifications
+      security:
+        - sessionAuth: []
+      responses:
+        '200':
+          description: Notification count retrieved successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  teamNotifications:
+                    type: integer
+                    description: Count of unread team notifications
+                  streamNotifications:
+                    type: integer
+                    description: Count of unread stream notifications
+
+components:
+  schemas:
+    UserProfile:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: Unique user ID
+        Email:
+          type: string
+          format: email
+          description: User's email address
+        Name:
+          type: string
+          description: User's full name
+        UserName:
+          type: string
+          description: Unique username
+        ProfilePic:
+          type: string
+          description: Profile picture path
+        Status:
+          type: string
+          enum: [Active, Inactive, Suspended]
+          description: User account status
+        EmailConfirmationStatus:
+          type: boolean
+          description: Whether email is confirmed
+        FSGsArr2:
+          type: object
+          description: Functional skill groups object
+        LastActiveTime:
+          type: string
+          format: date-time
+          description: Last active timestamp
+        Settings:
+          type: object
+          description: User settings object
+        Milestone:
+          type: string
+          description: User milestone
+        Metrics:
+          type: object
+          description: User metrics
+        Keyshifts:
+          type: string
+          description: User keyshifts
+        Goal:
+          type: string
+          description: User goal
+        Birthdate:
+          type: string
+          format: date
+          description: User birthdate
+        StripeStatus:
+          type: string
+          description: Stripe integration status
+        StripeObject:
+          type: object
+          description: Stripe account object
+        JournalId:
+          type: string
+          description: User's journal ID
+        AllFoldersId:
+          type: string
+          description: User's folders ID
+        AllPagesId:
+          type: string
+          description: User's pages ID
+        BrowserPolicyAccepted:
+          type: boolean
+          description: Browser policy acceptance status
+        ApplicationPolicyAccepted:
+          type: boolean
+          description: Application policy acceptance status
+        Subdomain:
+          type: string
+          description: User's subdomain
+        Subdomain_name:
+          type: string
+          description: Subdomain display name
+        Subdomain_title:
+          type: string
+          description: Subdomain title
+        Subdomain_description:
+          type: string
+          description: Subdomain description
+        Subdomain_profilePic:
+          type: string
+          description: Subdomain profile picture
+        AllowCreate:
+          type: boolean
+          description: Whether user can create content
+
+    UserBasic:
+      type: object
+      properties:
+        _id:
+          type: string
+          description: Unique user ID
+        Name:
+          type: string
+          description: User's full name
+        UserName:
+          type: string
+          description: Username
+        ProfilePic:
+          type: string
+          description: Profile picture path
+        FSGsArr2:
+          type: object
+          description: Functional skill groups
+
+    PublicProfile:
+      type: object
+      properties:
+        user:
+          $ref: '#/components/schemas/UserBasic'
+        streams:
+          type: array
+          description: User's public streams
+          items:
+            type: object
+            properties:
+              _id:
+                type: string
+              title:
+                type: string
+              description:
+                type: string
+
+  securitySchemes:
+    sessionAuth:
+      type: apiKey
+      in: cookie
+      name: collabmedia.sid
+      description: Session cookie for authentication (set after login)
+
+tags:
+  - name: Authentication
+    description: User authentication operations
+  - name: Profile Management
+    description: User profile and personal information management
+  - name: File Management
+    description: File upload and management operations
+  - name: Account Management
+    description: Account settings and details management
+  - name: Password Management
+    description: Password-related operations
+  - name: User Settings
+    description: User preferences and settings
+  - name: Invitations
+    description: Invitation request operations
+  - name: Payment Integration
+    description: Stripe payment integration
+  - name: Legal & Compliance
+    description: Policy acceptance operations
+  - name: User Search
+    description: User search and discovery
+  - name: Public Profile
+    description: Public profile data operations
+  - name: Analytics
+    description: User action logging
+  - name: Feedback
+    description: User feedback operations
+  - name: Notifications
+    description: Notification management
+  - name: User Experience
+    description: Tour and user experience features
