@@ -1,0 +1,526 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-post-marking-api",
+		"name": "CollabMedia Post Marking API",
+		"description": "Complete API collection for marking posts with different types in CollabMedia Journal system. These endpoints allow you to categorize and mark posts as different types (Ad, Key, General, Question, Info, etc.)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-post-marking-api"
+	},
+	"item": [
+		{
+			"name": "Post Type Marking",
+			"item": [
+				{
+					"name": "Mark as Regular Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsPost"
+							]
+						},
+						"description": "Marks a post as a regular post type. Updates the PostType field to 'Post' in the Medias array of the Page collection."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"PostId\": \"68d1489a39ada5d6841a8e29\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/journal/markAsPost",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"journal",
+										"markAsPost"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"status\": 200,\n  \"message\": \"Post updated successfully.\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Mark as Ad Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsAdPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsAdPost"
+							]
+						},
+						"description": "Marks a post as an advertisement post. Updates the PostType field to 'AdPost' in the Medias array of the Page collection."
+					},
+					"response": [
+						{
+							"name": "Success Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"PostId\": \"68d1489a39ada5d6841a8e29\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/journal/markAsAdPost",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"journal",
+										"markAsAdPost"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"status\": 200,\n  \"message\": \"Post updated successfully.\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Mark as Key Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\",\n  \"KeyPostType\": \"Comment\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsKeyPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsKeyPost"
+							]
+						},
+						"description": "Marks a post as a key post. Updates the PostType field to indicate this is a key/important post. KeyPostType is optional (defaults to 'Comment')."
+					},
+					"response": []
+				},
+				{
+					"name": "Mark as General Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsGeneralPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsGeneralPost"
+							]
+						},
+						"description": "Marks a post as a general post type."
+					},
+					"response": []
+				},
+				{
+					"name": "Mark as Question Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsQuestionPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsQuestionPost"
+							]
+						},
+						"description": "Marks a post as a question post type."
+					},
+					"response": []
+				},
+				{
+					"name": "Mark as Info Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsInfoPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsInfoPost"
+							]
+						},
+						"description": "Marks a post as an informational post type."
+					},
+					"response": []
+				},
+				{
+					"name": "Mark as Info Post Owner",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsInfoPostOwner",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsInfoPostOwner"
+							]
+						},
+						"description": "Marks a post as an informational post owned by the current user."
+					},
+					"response": []
+				},
+				{
+					"name": "Mark as Broadcast Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsBroadcastPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsBroadcastPost"
+							]
+						},
+						"description": "Marks a post as a broadcast post. Updates the PostType field to 'BroadcastPost' in the Medias array of the Page collection."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Post Launch Status",
+			"item": [
+				{
+					"name": "Mark as Pre-Launch Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsIsPreLaunchPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsIsPreLaunchPost"
+							]
+						},
+						"description": "Marks a post as a pre-launch post."
+					},
+					"response": []
+				},
+				{
+					"name": "Mark as Not Pre-Launch Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsNotPreLaunchPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsNotPreLaunchPost"
+							]
+						},
+						"description": "Marks a post as not being a pre-launch post."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Post Privacy Settings",
+			"item": [
+				{
+					"name": "Mark as Public Question Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsPublicQuestionPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsPublicQuestionPost"
+							]
+						},
+						"description": "Marks a question post as public (visible to all users)."
+					},
+					"response": []
+				},
+				{
+					"name": "Mark as Private Question Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsPrivateQuestionPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsPrivateQuestionPost"
+							]
+						},
+						"description": "Marks a question post as private (visible only to the owner)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Post Scheduling",
+			"item": [
+				{
+					"name": "Mark as One-Time Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsOneTimePost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsOneTimePost"
+							]
+						},
+						"description": "Marks a post as a one-time post (not recurring)."
+					},
+					"response": []
+				},
+				{
+					"name": "Mark as Repeat Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"POST_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/markAsRepeatPost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"markAsRepeatPost"
+							]
+						},
+						"description": "Marks a post as a repeat post (recurring)."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		}
+	]
+}

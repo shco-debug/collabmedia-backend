@@ -1,0 +1,155 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-relationships-api",
+		"name": "CollabMedia Relationships API",
+		"description": "Complete API collection for testing CollabMedia Relationship management endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-relationships-api"
+	},
+	"item": [
+		{
+			"name": "Get All Relationships",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/relationships/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"relationships",
+						""
+					]
+				},
+				"description": "Retrieve all active relationships"
+			},
+			"response": []
+		},
+		{
+			"name": "Get Default Relationship",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/relationships/default",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"relationships",
+						"default"
+					]
+				},
+				"description": "Get the default relationship type"
+			},
+			"response": []
+		},
+		{
+			"name": "Add New Relationship",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"title\": \"Mentor\",\n  \"description\": \"Professional mentor relationship\",\n  \"icon\": \"🎓\",\n  \"color\": \"#17a2b8\",\n  \"order\": 5,\n  \"isDefault\": false\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/relationships/add",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"relationships",
+						"add"
+					]
+				},
+				"description": "Create a new relationship type"
+			},
+			"response": []
+		},
+		{
+			"name": "Update Relationship",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"{{relationship_id}}\",\n  \"title\": \"Updated Mentor\",\n  \"description\": \"Updated professional mentor relationship\",\n  \"icon\": \"🎓\",\n  \"color\": \"#17a2b8\",\n  \"order\": 5,\n  \"isActive\": true\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/relationships/update",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"relationships",
+						"update"
+					]
+				},
+				"description": "Update an existing relationship type"
+			},
+			"response": []
+		},
+		{
+			"name": "Delete Relationship",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"{{relationship_id}}\"\n}"
+				},
+				"url": {
+					"raw": "{{base_url}}/relationships/delete",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"relationships",
+						"delete"
+					]
+				},
+				"description": "Soft delete a relationship type (cannot delete default)"
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		},
+		{
+			"key": "relationship_id",
+			"value": "507f1f77bcf86cd799439011",
+			"type": "string"
+		}
+	]
+}

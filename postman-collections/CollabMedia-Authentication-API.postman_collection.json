@@ -1,0 +1,667 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-auth-api",
+		"name": "CollabMedia Authentication API",
+		"description": "Complete authentication API collection for CollabMedia platform including user, admin, and subadmin login with 7-day session configuration",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-auth-api"
+	},
+	"item": [
+		{
+			"name": "User Authentication",
+			"item": [
+				{
+					"name": "User Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"userpassword123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/user/login",
+							"host": ["{{base_url}}"],
+							"path": ["user", "login"]
+						},
+						"description": "Authenticate user and create 7-day session. Returns session information and user data."
+					},
+					"response": [
+						{
+							"name": "Successful Login",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"userpassword123\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/user/login",
+									"host": ["{{base_url}}"],
+									"path": ["user", "login"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Set-Cookie",
+									"value": "connect.sid=s%3Aexample_session_id; Path=/; HttpOnly; Expires=Wed, 06 Feb 2025 10:30:00 GMT"
+								}
+							],
+							"cookie": [
+								{
+									"name": "connect.sid",
+									"value": "s%3Aexample_session_id",
+									"path": "/",
+									"httpOnly": true,
+									"expires": "2025-02-06T10:30:00.000Z"
+								}
+							],
+							"body": "{\n  \"code\": \"200\",\n  \"msg\": \"Success\",\n  \"usersession\": {\n    \"_id\": \"user_id_here\",\n    \"Name\": \"User Name\",\n    \"Email\": \"user@example.com\",\n    \"ProfilePic\": \"/path/to/profile.jpg\"\n  },\n  \"sessionId\": \"example_session_id\",\n  \"sessionExpires\": \"2025-02-06T10:30:00.000Z\",\n  \"message\": \"Login successful. Session will expire in 7 days.\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Check User Login Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/user/chklogin",
+							"host": ["{{base_url}}"],
+							"path": ["user", "chklogin"]
+						},
+						"description": "Check if user is logged in using session cookie. Requires valid session cookie."
+					},
+					"response": []
+				},
+				{
+					"name": "User Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/user/logout",
+							"host": ["{{base_url}}"],
+							"path": ["user", "logout"]
+						},
+						"description": "Logout user and destroy session."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Admin Authentication",
+			"item": [
+				{
+					"name": "Admin Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@scrpt.com\",\n  \"password\": \"admin123\",\n  \"remember\": \"1\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/signin",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "signin"]
+						},
+						"description": "Authenticate admin user and create 7-day session. Returns session information and admin data."
+					},
+					"response": [
+						{
+							"name": "Successful Admin Login",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"admin@scrpt.com\",\n  \"password\": \"admin123\",\n  \"remember\": \"1\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/signin",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "signin"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Set-Cookie",
+									"value": "connect.sid=s%3Aadmin_session_id; Path=/; HttpOnly; Expires=Wed, 06 Feb 2025 10:30:00 GMT"
+								}
+							],
+							"cookie": [
+								{
+									"name": "connect.sid",
+									"value": "s%3Aadmin_session_id",
+									"path": "/",
+									"httpOnly": true,
+									"expires": "2025-02-06T10:30:00.000Z"
+								}
+							],
+							"body": "{\n  \"code\": \"200\",\n  \"msg\": \"Login successful\",\n  \"adminsession\": {\n    \"_id\": \"admin_id_here\",\n    \"name\": \"Admin Name\",\n    \"email\": \"admin@scrpt.com\",\n    \"role\": \"admin\",\n    \"permissions\": [\"user_management\", \"content_moderation\"]\n  },\n  \"sessionId\": \"admin_session_id\",\n  \"sessionExpires\": \"2025-02-06T10:30:00.000Z\",\n  \"message\": \"Admin login successful. Session will expire in 7 days.\",\n  \"cookieName\": \"connect.sid\",\n  \"cookieValue\": \"admin_session_id\",\n  \"fullCookie\": \"connect.sid=admin_session_id\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Check Admin Login Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{admin_session_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/chklogin",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "chklogin"]
+						},
+						"description": "Check if admin is logged in using session cookie. Requires valid admin session cookie."
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{admin_session_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/admin/logout",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "logout"]
+						},
+						"description": "Logout admin and destroy session."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "SubAdmin Authentication",
+			"item": [
+				{
+					"name": "SubAdmin Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"subadmin@scrpt.com\",\n  \"password\": \"subadmin123\",\n  \"remember\": \"1\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/subadmin/signin",
+							"host": ["{{base_url}}"],
+							"path": ["subadmin", "signin"]
+						},
+						"description": "Authenticate subadmin user and create 7-day session. Returns session information and subadmin data."
+					},
+					"response": [
+						{
+							"name": "Successful SubAdmin Login",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"subadmin@scrpt.com\",\n  \"password\": \"subadmin123\",\n  \"remember\": \"1\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/subadmin/signin",
+									"host": ["{{base_url}}"],
+									"path": ["subadmin", "signin"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Set-Cookie",
+									"value": "connect.sid=s%3Asubadmin_session_id; Path=/; HttpOnly; Expires=Wed, 06 Feb 2025 10:30:00 GMT"
+								}
+							],
+							"cookie": [
+								{
+									"name": "connect.sid",
+									"value": "s%3Asubadmin_session_id",
+									"path": "/",
+									"httpOnly": true,
+									"expires": "2025-02-06T10:30:00.000Z"
+								}
+							],
+							"body": "{\n  \"code\": \"200\",\n  \"msg\": \"Login successful\",\n  \"subAdminsession\": {\n    \"_id\": \"subadmin_id_here\",\n    \"name\": \"SubAdmin Name\",\n    \"email\": \"subadmin@scrpt.com\",\n    \"role\": \"subadmin\",\n    \"permissions\": [\"content_moderation\"]\n  },\n  \"sessionId\": \"subadmin_session_id\",\n  \"sessionExpires\": \"2025-02-06T10:30:00.000Z\",\n  \"message\": \"SubAdmin login successful. Session will expire in 7 days.\",\n  \"cookieName\": \"connect.sid\",\n  \"cookieValue\": \"subadmin_session_id\",\n  \"fullCookie\": \"connect.sid=subadmin_session_id\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Check SubAdmin Login Status",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{subadmin_session_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/subadmin/chklogin",
+							"host": ["{{base_url}}"],
+							"path": ["subadmin", "chklogin"]
+						},
+						"description": "Check if subadmin is logged in using session cookie. Requires valid subadmin session cookie."
+					},
+					"response": []
+				},
+				{
+					"name": "SubAdmin Logout",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{subadmin_session_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/subadmin/logout",
+							"host": ["{{base_url}}"],
+							"path": ["subadmin", "logout"]
+						},
+						"description": "Logout subadmin and destroy session."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "User Management",
+			"item": [
+				{
+					"name": "Create Admin User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"System Administrator\",\n  \"email\": \"admin@scrpt.com\",\n  \"password\": \"admin123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/user/createAdmin",
+							"host": ["{{base_url}}"],
+							"path": ["user", "createAdmin"]
+						},
+						"description": "Create a new admin user. No authentication required for user creation."
+					},
+					"response": []
+				},
+				{
+					"name": "Create SubAdmin User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Content Moderator\",\n  \"email\": \"subadmin@scrpt.com\",\n  \"password\": \"subadmin123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/user/createSubAdmin",
+							"host": ["{{base_url}}"],
+							"path": ["user", "createSubAdmin"]
+						},
+						"description": "Create a new subadmin user. No authentication required for user creation."
+					},
+					"response": []
+				},
+				{
+					"name": "Promote User to SubAdmin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{admin_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"673e606638a4fd1fb5eba090\",\n  \"password\": \"newPassword123\",\n  \"permissions\": [\n    \"content_moderation\",\n    \"user_management\",\n    \"basic_analytics\",\n    \"content_editing\"\n  ],\n  \"role\": \"subadmin\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/promoteUserToSubAdmin",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "promoteUserToSubAdmin"]
+						},
+						"description": "Promote a regular user to subadmin status. Requires admin authentication. Creates a new subadmin account using the user's existing data."
+					},
+					"response": [
+						{
+							"name": "Successful Promotion",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"userId\": \"673e606638a4fd1fb5eba090\",\n  \"password\": \"newPassword123\",\n  \"permissions\": [\"content_moderation\", \"user_management\"],\n  \"role\": \"subadmin\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/promoteUserToSubAdmin",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "promoteUserToSubAdmin"]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"code\": 201,\n  \"msg\": \"User promoted to subadmin successfully\",\n  \"data\": {\n    \"subAdmin\": {\n      \"_id\": \"673e606638a4fd1fb5eba092\",\n      \"name\": \"John Doe\",\n      \"email\": \"john.doe@example.com\",\n      \"role\": \"subadmin\",\n      \"isActive\": true,\n      \"permissions\": [\"content_moderation\", \"user_management\"],\n      \"assignedDomains\": [],\n      \"assignedCategories\": [],\n      \"ProfilePic\": \"/assets/users/default.png\",\n      \"createdAt\": \"2024-01-15T10:30:00.000Z\",\n      \"updatedAt\": \"2024-01-15T10:30:00.000Z\"\n    },\n    \"originalUser\": {\n      \"_id\": \"673e606638a4fd1fb5eba090\",\n      \"Name\": \"John Doe\",\n      \"Email\": \"john.doe@example.com\",\n      \"ProfilePic\": \"/assets/users/default.png\"\n    }\n  }\n}"
+						},
+						{
+							"name": "User Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"userId\": \"invalid_user_id\",\n  \"password\": \"newPassword123\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/promoteUserToSubAdmin",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "promoteUserToSubAdmin"]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"code\": 404,\n  \"msg\": \"User not found\"\n}"
+						},
+						{
+							"name": "User Already SubAdmin",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"userId\": \"673e606638a4fd1fb5eba090\",\n  \"password\": \"newPassword123\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/admin/promoteUserToSubAdmin",
+									"host": ["{{base_url}}"],
+									"path": ["admin", "promoteUserToSubAdmin"]
+								}
+							},
+							"status": "Conflict",
+							"code": 409,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"code\": 409,\n  \"msg\": \"User is already a subadmin\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Get All SubAdmins",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{admin_session_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/subadmin/subadmins",
+							"host": ["{{base_url}}"],
+							"path": ["subadmin", "subadmins"]
+						},
+						"description": "Get all subadmins in the system. Requires admin authentication."
+					},
+					"response": [
+						{
+							"name": "Successful Response",
+							"originalRequest": {
+								"method": "GET",
+								"header": [],
+								"url": {
+									"raw": "{{base_url}}/subadmin/subadmins",
+									"host": ["{{base_url}}"],
+									"path": ["subadmin", "subadmins"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"code\": 200,\n  \"msg\": \"SubAdmins retrieved successfully\",\n  \"data\": [\n    {\n      \"_id\": \"673e606638a4fd1fb5eba092\",\n      \"name\": \"John Doe\",\n      \"email\": \"john.doe@example.com\",\n      \"role\": \"subadmin\",\n      \"isActive\": true,\n      \"permissions\": [\"content_moderation\", \"user_management\"],\n      \"assignedDomains\": [],\n      \"assignedCategories\": [],\n      \"ProfilePic\": \"/assets/users/default.png\",\n      \"createdAt\": \"2024-01-15T10:30:00.000Z\",\n      \"updatedAt\": \"2024-01-15T10:30:00.000Z\"\n    }\n  ]\n}"
+						}
+					]
+				},
+				{
+					"name": "Create SubAdmin Directly",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{admin_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"New SubAdmin\",\n  \"email\": \"newsubadmin@example.com\",\n  \"password\": \"securePassword123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/subadmin/create",
+							"host": ["{{base_url}}"],
+							"path": ["subadmin", "create"]
+						},
+						"description": "Create a new subadmin directly without promoting from existing user. Requires admin authentication."
+					},
+					"response": [
+						{
+							"name": "Successful Creation",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"New SubAdmin\",\n  \"email\": \"newsubadmin@example.com\",\n  \"password\": \"securePassword123\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/subadmin/create",
+									"host": ["{{base_url}}"],
+									"path": ["subadmin", "create"]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"code\": 201,\n  \"msg\": \"SubAdmin created successfully\",\n  \"data\": {\n    \"_id\": \"673e606638a4fd1fb5eba093\",\n    \"name\": \"New SubAdmin\",\n    \"email\": \"newsubadmin@example.com\",\n    \"role\": \"subadmin\",\n    \"isActive\": true,\n    \"permissions\": [],\n    \"assignedDomains\": [],\n    \"assignedCategories\": [],\n    \"ProfilePic\": \"/assets/users/default.png\",\n    \"createdAt\": \"2024-01-15T10:30:00.000Z\",\n    \"updatedAt\": \"2024-01-15T10:30:00.000Z\"\n  }\n}"
+						}
+					]
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		},
+		{
+			"key": "user_session_id",
+			"value": "your_user_session_id_here",
+			"type": "string"
+		},
+		{
+			"key": "admin_session_id",
+			"value": "your_admin_session_id_here",
+			"type": "string"
+		},
+		{
+			"key": "subadmin_session_id",
+			"value": "your_subadmin_session_id_here",
+			"type": "string"
+		}
+	]
+}

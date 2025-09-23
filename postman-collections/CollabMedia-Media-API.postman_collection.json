@@ -1,0 +1,1207 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-media-api",
+		"name": "CollabMedia Media API",
+		"description": "Complete API collection for testing CollabMedia Media endpoints including file upload, link upload, editing, viewing, deletion operations, and Single Post CRUD operations. IMPORTANT: For complete media setup, use the flow: 1) uploadLink → 2) addTagsToUploadedMedia",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-media-api"
+	},
+	"item": [
+		{
+			"name": "Media Management",
+			"item": [
+				{
+					"name": "Upload Media File",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "multipart/form-data"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "myFile",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/massmediaupload/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"massmediaupload",
+								"add"
+							]
+						},
+						"description": "Upload a media file (image, video, audio, or document). Requires admin/subadmin session. File will be processed and thumbnails generated for images. Returns updated media list."
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Media Link",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": \"Link\",\n  \"linkType\": \"website\",\n  \"thumbnail\": \"https://example.com/thumb.jpg\",\n  \"url\": \"https://example.com/media\",\n  \"title\": \"Sample Media Link\",\n  \"description\": \"Description of the media link\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/uploadLink",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								"uploadLink"
+							]
+						},
+						"description": "Upload a media link (URL, Notes, or Montage). Requires admin/subadmin session. Supports different link types and custom thumbnails."
+					},
+					"response": []
+				},
+				{
+					"name": "View All Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"\",\n  \"gt\": \"\",\n  \"collection\": \"\",\n  \"offset\": 0,\n  \"limit\": 20\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/massmediaupload/view",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"massmediaupload",
+								"view"
+							]
+						},
+						"description": "View all media with optional filtering by title, group tags, and collections. Supports pagination with offset and limit parameters."
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{media_id}}\",\n  \"title\": \"Updated Media Title\",\n  \"description\": \"Updated description\",\n  \"groupTags\": [\"{{group_tag_id_1}}\", \"{{group_tag_id_2}}\"],\n  \"collections\": [\"{{collection_id_1}}\", \"{{collection_id_2}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/massmediaupload/edit",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"massmediaupload",
+								"edit"
+							]
+						},
+						"description": "Edit a single media item by ID. Update title, description, group tags, and collections. Requires admin/subadmin session."
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Edit Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ids\": [\"{{media_id_1}}\", \"{{media_id_2}}\"],\n  \"groupTags\": [\"{{group_tag_id_1}}\", \"{{group_tag_id_2}}\"],\n  \"collections\": [\"{{collection_id_1}}\", \"{{collection_id_2}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/massmediaupload/editall",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"massmediaupload",
+								"editall"
+							]
+						},
+						"description": "Bulk edit multiple media items with the same metadata. Useful for applying consistent tags and collections across multiple media files."
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Media Tags",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mediaId\": \"{{media_id}}\",\n  \"groupTags\": [\"{{group_tag_id_1}}\", \"{{group_tag_id_2}}\"],\n  \"metaTags\": [\"{{meta_tag_id_1}}\", \"{{meta_tag_id_2}}\"],\n  \"metaMetaTags\": [\"{{meta_meta_tag_id_1}}\", \"{{meta_meta_tag_id_2}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/massmediaupload/editTag",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"massmediaupload",
+								"editTag"
+							]
+						},
+						"description": "Update only the tags for a specific media item. Modify group tags, meta tags, and meta meta tags without changing other properties."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Tags to Uploaded Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaID\": \"{{media_id}}\",\n  \"mmt\": \"{{meta_meta_tag_id}}\",\n  \"gt\": \"{{group_tag_id_1}}\",\n  \"Tags\": \"tag1,tag2,tag3\",\n  \"isPrivate\": 0,\n  \"data\": {\n    \"MediaType\": \"Link\",\n    \"ContentType\": \"Link\",\n    \"thumbnail\": \"https://example.com/thumb.jpg\"\n  },\n  \"board\": \"{{board_id}}\",\n  \"gtsa\": \"Sample Group Tag\",\n  \"owner\": \"{{user_id}}\",\n  \"Statement\": \"Sample statement for the media\",\n  \"Themes\": [],\n  \"IsOnlyForOwner\": false,\n  \"PostPrivacySetting\": \"PublicWithoutName\",\n  \"IsUnsplashImage\": false,\n  \"TaggedUsers\": [],\n  \"IsAddedFromStream\": false,\n  \"StreamId\": null,\n  \"IsPostForUser\": false,\n  \"IsPostForTeam\": false,\n  \"QuestionPostId\": null\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addTagsToUploadedMedia",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								"addTagsToUploadedMedia"
+							]
+						},
+						"description": "Add tags, metatags, and manage board relationships for uploaded media. This endpoint is called after uploadLink to complete the media setup with tags, privacy settings, and board integration. Supports Montage special handling and theme management. IMPORTANT: The 'owner' field is used to fetch the user's FSGs instead of relying on session data."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mediaId\": \"{{media_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/massmediaupload/delete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"massmediaupload",
+								"delete"
+							]
+						},
+						"description": "Delete a media item by ID. This will remove the media from the system and clean up associated files and thumbnails."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Single Post CRUD Operations",
+			"description": "Complete CRUD operations for individual posts within boards/pages. Posts are embedded in the Medias array of boards/pages.",
+			"item": [
+				{
+					"name": "Create Post (Add Media to Board)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"media\": \"{{media_id}}\",\n  \"url\": \"https://example.com/image.jpg\",\n  \"title\": \"Sample Post Title\",\n  \"prompt\": \"Sample post prompt or description\",\n  \"locator\": \"sample_locator_123\",\n  \"themeId\": \"{{theme_id}}\",\n  \"theme\": \"Sample Theme Title\",\n  \"data\": {\n    \"value\": {\n      \"MediaType\": \"Image\",\n      \"ContentType\": \"image/jpeg\",\n      \"Content\": \"Sample content for the post\"\n    }\n  },\n  \"owner\": \"{{user_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/addMedia",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board",
+								"addMedia"
+							]
+						},
+						"description": "Create a new post by adding media to a board. The post will be embedded in the board's Medias array. Requires user session. Returns success confirmation and updated board data."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"PostId\": \"{{post_id}}\",\n  \"media\": \"{{media_id}}\",\n  \"url\": \"https://example.com/updated-image.jpg\",\n  \"title\": \"Updated Post Title\",\n  \"prompt\": \"Updated post prompt\",\n  \"locator\": \"updated_locator_456\",\n  \"themeId\": \"{{theme_id}}\",\n  \"theme\": \"Updated Theme Title\",\n  \"data\": {\n    \"value\": {\n      \"MediaType\": \"Image\",\n      \"ContentType\": \"image/jpeg\",\n      \"Content\": \"Updated content for the post\"\n    }\n  },\n  \"Content\": \"Updated content for the post\",\n  \"owner\": \"{{user_id}}\",\n  \"thumbnail\": \"https://example.com/thumb.jpg\",\n  \"Statement\": \"Updated post statement\",\n  \"IsOnlyForOwner\": false,\n  \"PostPrivacySetting\": \"PublicWithoutName\",\n  \"IsUnsplashImage\": false,\n  \"Themes\": [],\n  \"TaggedUsers\": [],\n  \"Label\": \"{{label_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/updatePost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board",
+								"updatePost"
+							]
+						},
+						"description": "Update an existing post within a board. Updates all post fields including title, prompt, content, privacy settings, and themes. Requires user session. Returns updated post data."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"post_id\": \"{{post_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/deleteMedia",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board",
+								"deleteMedia"
+							]
+						},
+						"description": "Delete a specific post from a board. Removes the post from the board's Medias array and cleans up associated PageStream data. Requires user session. Returns success confirmation."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Post Label",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"post_id\": \"{{post_id}}\",\n  \"label_id\": \"{{label_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/updatePostLabelId",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"updatePostLabelId"
+							]
+						},
+						"description": "Update the label for a specific post. Can set or remove labels. Updates both regular and dashed edit pages. Requires user session. Returns success confirmation."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Post Link URL",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"{{post_id}}\",\n  \"PostLinkUrl\": \"AdPost\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/updatePostLinkUrl",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"updatePostLinkUrl"
+							]
+						},
+						"description": "Update the link URL type for a post. Possible values: AdPost, BroadcastPost, Post. Updates both regular and dashed edit pages. Requires user session. Returns success confirmation."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Post Editor Pick Status",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"postId\": \"{{post_id}}\",\n  \"isEditorPick\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/editorPickUpdatePost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								"editorPickUpdatePost"
+							]
+						},
+						"description": "Update the editor pick status for a post. Can mark posts as editor picks or remove the status. Requires admin/editor session. Returns success confirmation."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Post Details",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board"
+							]
+						},
+						"description": "Get all posts from a board. Returns the complete board data including all posts in the Medias array. Requires user session. Returns board with populated post data."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Comment to Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"postId\": \"{{post_id}}\",\n  \"comment\": \"Sample comment text\",\n  \"commentType\": \"text\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/addComment",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board",
+								"addComment"
+							]
+						},
+						"description": "Add a comment to a specific post. Supports different comment types. Requires user session. Returns success confirmation and updated post data."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Comment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"commentId\": \"{{comment_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/cmntDelete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board",
+								"cmntDelete"
+							]
+						},
+						"description": "Delete a comment from a post. Requires user session and appropriate permissions. Returns success confirmation."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Single Post CRUD Operations",
+			"description": "Complete CRUD operations for individual posts within boards/pages. Posts are embedded in the Medias array of boards/pages.",
+			"item": [
+				{
+					"name": "Create Post (Add Media to Board)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"media\": \"{{media_id}}\",\n  \"url\": \"https://example.com/image.jpg\",\n  \"title\": \"Sample Post Title\",\n  \"prompt\": \"Sample post prompt or description\",\n  \"locator\": \"sample_locator_123\",\n  \"themeId\": \"{{theme_id}}\",\n  \"theme\": \"Sample Theme Title\",\n  \"data\": {\n    \"value\": {\n      \"MediaType\": \"Image\",\n      \"ContentType\": \"image/jpeg\",\n      \"Content\": \"Sample content for the post\"\n    }\n  },\n  \"owner\": \"{{user_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/addMedia",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board",
+								"addMedia"
+							]
+						},
+						"description": "Create a new post by adding media to a board. The post will be embedded in the board's Medias array. Requires user session. Returns success confirmation and updated board data."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"PostId\": \"{{post_id}}\",\n  \"media\": \"{{media_id}}\",\n  \"url\": \"https://example.com/updated-image.jpg\",\n  \"title\": \"Updated Post Title\",\n  \"prompt\": \"Updated post prompt\",\n  \"locator\": \"updated_locator_456\",\n  \"themeId\": \"{{theme_id}}\",\n  \"theme\": \"Updated Theme Title\",\n  \"data\": {\n    \"value\": {\n      \"MediaType\": \"Image\",\n      \"ContentType\": \"image/jpeg\",\n      \"Content\": \"Updated content for the post\"\n    }\n  },\n  \"Content\": \"Updated content for the post\",\n  \"owner\": \"{{user_id}}\",\n  \"thumbnail\": \"https://example.com/thumb.jpg\",\n  \"Statement\": \"Updated post statement\",\n  \"IsOnlyForOwner\": false,\n  \"PostPrivacySetting\": \"PublicWithoutName\",\n  \"IsUnsplashImage\": false,\n  \"Themes\": [],\n  \"TaggedUsers\": [],\n  \"Label\": \"{{label_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/updatePost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board",
+								"updatePost"
+							]
+						},
+						"description": "Update an existing post within a board. Updates all post fields including title, prompt, content, privacy settings, and themes. Requires user session. Returns updated post data."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"post_id\": \"{{post_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/deleteMedia",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board",
+								"deleteMedia"
+							]
+						},
+						"description": "Delete a specific post from a board. Removes the post from the board's Medias array and cleans up associated PageStream data. Requires user session. Returns success confirmation."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Post Label",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"post_id\": \"{{post_id}}\",\n  \"label_id\": \"{{label_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/updatePostLabelId",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"updatePostLabelId"
+							]
+						},
+						"description": "Update the label for a specific post. Can set or remove labels. Updates both regular and dashed edit pages. Requires user session. Returns success confirmation."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Post Link URL",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"{{post_id}}\",\n  \"PostLinkUrl\": \"AdPost\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/updatePostLinkUrl",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"journal",
+								"updatePostLinkUrl"
+							]
+						},
+						"description": "Update the link URL type for a post. Possible values: AdPost, BroadcastPost, Post. Updates both regular and dashed edit pages. Requires user session. Returns success confirmation."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Post Editor Pick Status",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"postId\": \"{{post_id}}\",\n  \"isEditorPick\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/editorPickUpdatePost",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								"editorPickUpdatePost"
+							]
+						},
+						"description": "Update the editor pick status for a post. Can mark posts as editor picks or remove the status. Requires admin/editor session. Returns success confirmation."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Post Details",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board"
+							]
+						},
+						"description": "Get all posts from a board. Returns the complete board data including all posts in the Medias array. Requires user session. Returns board with populated post data."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Comment to Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"postId\": \"{{post_id}}\",\n  \"comment\": \"Sample comment text\",\n  \"commentType\": \"text\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/addComment",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board",
+								"addComment"
+							]
+						},
+						"description": "Add a comment to a specific post. Supports different comment types. Requires user session. Returns success confirmation and updated post data."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Comment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"postId\": \"{{post_id}}\",\n  \"commentId\": \"{{comment_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/cmntDelete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board",
+								"cmntDelete"
+							]
+						},
+						"description": "Delete a comment from a post. Requires user session and appropriate permissions. Returns success confirmation."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "New Media Endpoints",
+			"description": "Newly added media endpoints for single post creation, user posts management, and privacy updates",
+			"item": [
+				{
+					"name": "Create Single Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"My Amazing Post\",\n  \"content\": \"This is the content of my post\",\n  \"prompt\": \"A beautiful sunset over the mountains\",\n  \"postStatement\": \"This represents my thoughts on nature\",\n  \"postType\": \"Image\",\n  \"mediaArray\": [\n    {\n      \"url\": \"https://example.com/image1.jpg\",\n      \"type\": \"image\",\n      \"title\": \"Sunset Image\"\n    }\n  ],\n  \"keywords\": [\n    {\n      \"id\": \"673e606638a4fd1fb5eba090\",\n      \"title\": \"nature\"\n    },\n    {\n      \"id\": \"673e606638a4fd1fb5eba091\",\n      \"title\": \"sunset\"\n    }\n  ],\n  \"pageId\": \"673e606638a4fd1fb5eba092\",\n  \"blendSettings\": {\n    \"image1\": {\n      \"url\": \"https://example.com/image1.jpg\",\n      \"lightness\": 0.6\n    },\n    \"image2\": {\n      \"url\": \"https://example.com/image2.jpg\",\n      \"lightness\": 0.4\n    },\n    \"blendMode\": \"screen\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/createSinglePost",
+							"host": ["{{base_url}}"],
+							"path": ["media", "createSinglePost"]
+						},
+						"description": "Create a single post with media. Can be added to a page (if pageId provided) or created as independent media. Supports image blending and group tag extraction."
+					},
+					"response": [
+						{
+							"name": "Successful Creation",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"title\": \"My Amazing Post\",\n  \"content\": \"This is the content of my post\",\n  \"mediaArray\": [{\"url\": \"https://example.com/image1.jpg\"}]\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/media/createSinglePost",
+									"host": ["{{base_url}}"],
+									"path": ["media", "createSinglePost"]
+								}
+							},
+							"status": "Created",
+							"code": 201,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"code\": 201,\n  \"msg\": \"Post created successfully\",\n  \"data\": {\n    \"mediaId\": \"673e606638a4fd1fb5eba090\",\n    \"pageId\": \"673e606638a4fd1fb5eba092\",\n    \"blendedImageUrl\": \"https://s3.amazonaws.com/bucket/blended_image.jpg\",\n    \"location\": [\n      {\n        \"url\": \"https://example.com/image1.jpg\",\n        \"type\": \"source\",\n        \"index\": 0\n      },\n      {\n        \"url\": \"https://example.com/image2.jpg\",\n        \"type\": \"source\",\n        \"index\": 1\n      },\n      {\n        \"url\": \"https://s3.amazonaws.com/bucket/blended_image.jpg\",\n        \"type\": \"blended\",\n        \"index\": 2\n      }\n    ]\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Get User Posts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"page\": 1,\n  \"limit\": 10,\n  \"sortBy\": \"createdAt\",\n  \"sortOrder\": \"desc\",\n  \"filters\": {\n    \"postPrivacySetting\": \"OnlyForOwner\",\n    \"mediaType\": \"Image\",\n    \"dateRange\": {\n      \"start\": \"2024-01-01\",\n      \"end\": \"2024-12-31\"\n    }\n  },\n  \"searchTerm\": \"sunset\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/getUserPosts",
+							"host": ["{{base_url}}"],
+							"path": ["media", "getUserPosts"]
+						},
+						"description": "Get posts created by the logged-in user with advanced filtering, sorting, and pagination. Supports privacy filtering and search."
+					},
+					"response": [
+						{
+							"name": "Successful Response",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"page\": 1,\n  \"limit\": 10\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/media/getUserPosts",
+									"host": ["{{base_url}}"],
+									"path": ["media", "getUserPosts"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"code\": 200,\n  \"msg\": \"Posts retrieved successfully\",\n  \"data\": {\n    \"posts\": [\n      {\n        \"_id\": \"673e606638a4fd1fb5eba090\",\n        \"title\": \"My Amazing Post\",\n        \"content\": \"This is the content of my post\",\n        \"prompt\": \"A beautiful sunset over the mountains\",\n        \"postStatement\": \"This represents my thoughts on nature\",\n        \"postType\": \"Image\",\n        \"postPrivacySetting\": \"OnlyForOwner\",\n        \"location\": [\n          {\n            \"url\": \"https://example.com/image1.jpg\",\n            \"type\": \"source\",\n            \"index\": 0\n          }\n        ],\n        \"groupTags\": [\"nature\", \"sunset\"],\n        \"lightness\": 0.5,\n        \"createdAt\": \"2024-01-15T10:30:00.000Z\",\n        \"updatedAt\": \"2024-01-15T10:30:00.000Z\"\n      }\n    ],\n    \"pagination\": {\n      \"currentPage\": 1,\n      \"totalPages\": 5,\n      \"totalPosts\": 50,\n      \"hasNextPage\": true,\n      \"hasPrevPage\": false\n    }\n  }\n}"
+						}
+					]
+				},
+				{
+					"name": "Update Post Privacy",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"postId\": \"673e606638a4fd1fb5eba090\",\n  \"privacySetting\": \"PublicWithName\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/updatePostPrivacy",
+							"host": ["{{base_url}}"],
+							"path": ["media", "updatePostPrivacy"]
+						},
+						"description": "Update the privacy setting of a user's post. Valid privacy settings: OnlyForOwner, PublicWithName, PublicWithoutName."
+					},
+					"response": [
+						{
+							"name": "Successful Update",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"postId\": \"673e606638a4fd1fb5eba090\",\n  \"privacySetting\": \"PublicWithName\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/media/updatePostPrivacy",
+									"host": ["{{base_url}}"],
+									"path": ["media", "updatePostPrivacy"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"code\": 200,\n  \"msg\": \"Post privacy updated successfully\",\n  \"data\": {\n    \"postId\": \"673e606638a4fd1fb5eba090\",\n    \"oldPrivacySetting\": \"OnlyForOwner\",\n    \"newPrivacySetting\": \"PublicWithName\",\n    \"updatedAt\": \"2024-01-15T10:30:00.000Z\"\n  }\n}"
+						},
+						{
+							"name": "Post Not Found",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"postId\": \"invalid_post_id\",\n  \"privacySetting\": \"PublicWithName\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/media/updatePostPrivacy",
+									"host": ["{{base_url}}"],
+									"path": ["media", "updatePostPrivacy"]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"code\": 404,\n  \"msg\": \"Post not found or you don't have permission to update it\"\n}"
+						}
+					]
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		},
+		{
+			"key": "media_id",
+			"value": "your_media_id_here",
+			"type": "string"
+		},
+		{
+			"key": "domain_id",
+			"value": "your_domain_id_here",
+			"type": "string"
+		},
+		{
+			"key": "group_tag_id_1",
+			"value": "your_group_tag_id_1_here",
+			"type": "string"
+		},
+		{
+			"key": "group_tag_id_2",
+			"value": "your_group_tag_id_2_here",
+			"type": "string"
+		},
+		{
+			"key": "collection_id_1",
+			"value": "your_collection_id_1_here",
+			"type": "string"
+		},
+		{
+			"key": "collection_id_2",
+			"value": "your_collection_id_2_here",
+			"type": "string"
+		},
+		{
+			"key": "meta_tag_id",
+			"value": "your_meta_tag_id_here",
+			"type": "string"
+		},
+		{
+			"key": "meta_meta_tag_id",
+			"value": "your_meta_meta_tag_id_here",
+			"type": "string"
+		},
+		{
+			"key": "board_id",
+			"value": "your_board_id_here",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "your_user_id_here",
+			"type": "string"
+		},
+		{
+			"key": "post_id",
+			"value": "your_post_id_here",
+			"type": "string"
+		},
+		{
+			"key": "theme_id",
+			"value": "your_theme_id_here",
+			"type": "string"
+		},
+		{
+			"key": "label_id",
+			"value": "your_label_id_here",
+			"type": "string"
+		},
+		{
+			"key": "comment_id",
+			"value": "your_comment_id_here",
+			"type": "string"
+		}
+	]
+}

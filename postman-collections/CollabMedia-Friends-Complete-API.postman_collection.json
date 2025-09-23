@@ -1,0 +1,811 @@
+{
+	"info": {
+		"_postman_id": "friends-complete-api-collection",
+		"name": "CollabMedia Friends API - Complete Collection",
+		"description": "Complete API collection for testing all friend management endpoints in CollabMedia including friend requests, relationships, and user management",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "friends-complete-api-collection"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "User Registration",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"password123\",\n  \"name\": \"Test User\",\n  \"username\": \"testuser\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/register",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"user",
+								"register"
+							]
+						},
+						"description": "Register a new user account. User must verify email before login."
+					},
+					"response": []
+				},
+				{
+					"name": "User Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"type": "text/javascript",
+								"exec": [
+									"// Extract session cookie from login response",
+									"if (pm.response.code === 200) {",
+									"    const cookies = pm.response.headers.get('Set-Cookie');",
+									"    if (cookies) {",
+									"        const sessionCookie = cookies.split(';')[0];",
+									"        if (sessionCookie.includes('connect.sid')) {",
+									"            pm.globals.set('session_cookie', sessionCookie);",
+									"            console.log('Session cookie saved:', sessionCookie);",
+									"        }",
+									"    }",
+									"    ",
+									"    // Save user data",
+									"    const response = pm.response.json();",
+									"    if (response.usersession) {",
+									"        pm.globals.set('user_id', response.usersession._id);",
+									"        pm.globals.set('user_email', response.usersession.Email);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"testuser@example.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/login",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"user",
+								"login"
+							]
+						},
+						"description": "Login user and get session cookie. Session cookie is automatically saved for other requests."
+					},
+					"response": []
+				},
+				{
+					"name": "Check Session",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "{{session_cookie}}",
+								"description": "Session cookie from login"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/user/profile",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"user",
+								"profile"
+							]
+						},
+						"description": "Test if session is working - check user profile"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Friend Management",
+			"item": [
+				{
+					"name": "Get All Friends",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/members/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								""
+							]
+						},
+						"description": "Retrieve all friends for the current user (Status: 1, IsDeleted: 0)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Friends Paginated",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"perPage\": 10,\n  \"pageNo\": 1,\n  \"startsWith\": \"J\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								""
+							]
+						},
+						"description": "Get paginated list of friends with optional search filter"
+					},
+					"response": []
+				},
+				{
+					"name": "Search Users",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"searchTerm\": \"john\",\n  \"perPage\": 10,\n  \"pageNo\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/searchUsers",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"searchUsers"
+							]
+						},
+						"description": "Search for users in the system to add as friends"
+					},
+					"response": []
+				},
+				{
+					"name": "Friends Starting With",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"startsWith\": \"J\",\n  \"perPage\": 20,\n  \"pageNo\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/allFriendsStartingWith",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"allFriendsStartingWith"
+							]
+						},
+						"description": "Get friends whose names start with specific letters (autocomplete)"
+					},
+					"response": []
+				},
+				{
+					"name": "Exclude Members",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"excludeIds\": [\"507f1f77bcf86cd799439011\", \"507f1f77bcf86cd799439012\"],\n  \"perPage\": 10,\n  \"pageNo\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/excludeMembers",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"excludeMembers"
+							]
+						},
+						"description": "Get friends list excluding specific member IDs"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Friend Actions",
+			"item": [
+				{
+					"name": "Add Friend (Registered User)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"friend@example.com\",\n  \"name\": \"John Doe\",\n  \"relation\": \"Friend~{{relationship_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/addFriend",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"addFriend"
+							]
+						},
+						"description": "Add a registered user as friend with relationship type. Creates bidirectional friendship."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Friend (Non-Registered User)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"newuser@example.com\",\n  \"name\": \"New User\",\n  \"relation\": \"Friend~{{relationship_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/addFriend",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"addFriend"
+							]
+						},
+						"description": "Add a non-registered user as friend. Creates pending friend request and sends invitation."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Friend (Default Relationship)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"defaultfriend@example.com\",\n  \"name\": \"Default Friend\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/addFriend",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"addFriend"
+							]
+						},
+						"description": "Add friend without specifying relationship - uses default relationship from system"
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Friend",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"friendEmail\": \"friend@example.com\",\n  \"name\": \"Updated Name\",\n  \"nickName\": \"Johnny\",\n  \"relation\": \"Family~{{family_relationship_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/editFriend",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"editFriend"
+							]
+						},
+						"description": "Edit friend information including name, nickname, and relationship type"
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Friend",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"friendEmail\": \"friend@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/removeFriend",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"removeFriend"
+							]
+						},
+						"description": "Remove a friend from friend list (soft delete)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Friend Requests",
+			"item": [
+				{
+					"name": "Get Pending Friend Requests",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/members/pendingFriendRequests",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"pendingFriendRequests"
+							]
+						},
+						"description": "Retrieve all pending friend requests for the current user (Status: 0)"
+					},
+					"response": []
+				},
+				{
+					"name": "Accept Friend Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"friendEmail\": \"newuser@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/acceptFriendRequest",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"acceptFriendRequest"
+							]
+						},
+						"description": "Accept a pending friend request. Updates Status from 0 to 1."
+					},
+					"response": []
+				},
+				{
+					"name": "Decline Friend Request",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"friendEmail\": \"newuser@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/declineFriendRequest",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"declineFriendRequest"
+							]
+						},
+						"description": "Decline a pending friend request. Updates Status to 2 (declined)."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Relationship Management",
+			"item": [
+				{
+					"name": "Get All Relationships",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/relationships/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"relationships",
+								""
+							]
+						},
+						"description": "Retrieve all active relationship types (Friend, Family, Colleague, etc.)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Default Relationship",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/relationships/default",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"relationships",
+								"default"
+							]
+						},
+						"description": "Get the default relationship type (usually 'Friend')"
+					},
+					"response": []
+				},
+				{
+					"name": "Add New Relationship",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Mentor\",\n  \"description\": \"Professional mentor relationship\",\n  \"icon\": \"🎓\",\n  \"color\": \"#17a2b8\",\n  \"order\": 5,\n  \"isDefault\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/relationships/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"relationships",
+								"add"
+							]
+						},
+						"description": "Create a new relationship type"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Relationship",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{relationship_id}}\",\n  \"title\": \"Updated Mentor\",\n  \"description\": \"Updated professional mentor relationship\",\n  \"icon\": \"🎓\",\n  \"color\": \"#17a2b8\",\n  \"order\": 5,\n  \"isActive\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/relationships/update",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"relationships",
+								"update"
+							]
+						},
+						"description": "Update an existing relationship type"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Relationship",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{relationship_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/relationships/delete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"relationships",
+								"delete"
+							]
+						},
+						"description": "Soft delete a relationship type (cannot delete default relationship)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Internal APIs",
+			"item": [
+				{
+					"name": "Add Friend Internal API",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{session_cookie}}",
+								"description": "Session cookie for authentication"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"internal@example.com\",\n  \"name\": \"Internal User\",\n  \"relation\": \"Friend~{{relationship_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/members/addFriend_INTERNAL_API",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"addFriend_INTERNAL_API"
+							]
+						},
+						"description": "Internal API for adding friends (used by system processes)"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Set dynamic variables",
+					"pm.globals.set('timestamp', Date.now());",
+					"",
+					"// You can set session cookie here after login",
+					"// pm.globals.set('session_cookie', 'your-session-cookie-value');"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Basic response validation",
+					"pm.test('Status code is 200', function () {",
+					"    pm.response.to.have.status(200);",
+					"});",
+					"",
+					"pm.test('Response has JSON body', function () {",
+					"    pm.response.to.be.json;",
+					"});",
+					"",
+					"// Extract relationship IDs for use in other requests",
+					"if (pm.response.json().relationships) {",
+					"    const relationships = pm.response.json().relationships;",
+					"    if (relationships.length > 0) {",
+					"        pm.globals.set('relationship_id', relationships[0]._id);",
+					"        ",
+					"        // Find specific relationship types",
+					"        const familyRel = relationships.find(r => r.RelationshipTitle === 'Family');",
+					"        if (familyRel) {",
+					"            pm.globals.set('family_relationship_id', familyRel._id);",
+					"        }",
+					"    }",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string",
+			"description": "Base URL for CollabMedia API"
+		},
+		{
+			"key": "session_cookie",
+			"value": "your-session-cookie-here",
+			"type": "string",
+			"description": "Session cookie for authentication - update after login"
+		},
+		{
+			"key": "relationship_id",
+			"value": "507f1f77bcf86cd799439011",
+			"type": "string",
+			"description": "Default relationship ID (Friend)"
+		},
+		{
+			"key": "family_relationship_id",
+			"value": "507f1f77bcf86cd799439012",
+			"type": "string",
+			"description": "Family relationship ID"
+		}
+	]
+}

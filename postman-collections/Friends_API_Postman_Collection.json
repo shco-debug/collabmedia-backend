@@ -1,0 +1,740 @@
+{
+	"info": {
+		"_postman_id": "friends-api-collection",
+		"name": "Friends API Collection",
+		"description": "Complete collection for testing all friend-related endpoints in CollabMedia backend",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get All Friends",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Cookie",
+						"value": "connect.sid=YOUR_SESSION_ID_HERE",
+						"description": "Replace with your actual session ID"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/members/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"members",
+						""
+					]
+				},
+				"description": "Retrieve all friends for the authenticated user"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/members/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								""
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"code\": 200,\n  \"friends\": [\n    {\n      \"_id\": \"60f1234567890abcdef12345\",\n      \"UserID\": \"60f1234567890abcdef12346\",\n      \"Friend\": {\n        \"ID\": \"60f1234567890abcdef12347\",\n        \"Email\": \"john@example.com\",\n        \"Name\": \"John Doe\",\n        \"NickName\": \"Johnny\",\n        \"Pic\": \"/assets/users/john.jpg\",\n        \"Relation\": \"Friend\",\n        \"RelationID\": \"57fc1357c51f7e980747f2ce\",\n        \"IsRegistered\": true\n      },\n      \"Status\": true,\n      \"IsDeleted\": false,\n      \"CreatedOn\": \"2023-07-15T10:30:00.000Z\",\n      \"ModifiedOn\": \"2023-07-15T10:30:00.000Z\"\n    }\n  ]\n}"
+				}
+			]
+		},
+		{
+			"name": "Get Friends with Pagination",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Cookie",
+						"value": "connect.sid=YOUR_SESSION_ID_HERE",
+						"description": "Replace with your actual session ID"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"perPage\": 10,\n  \"pageNo\": 1,\n  \"startsWith\": \"John\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/members/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"members",
+						""
+					]
+				},
+				"description": "Get friends with pagination and optional name filtering"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"perPage\": 10,\n  \"pageNo\": 1,\n  \"startsWith\": \"John\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/members/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								""
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"code\": 200,\n  \"friends\": [\n    {\n      \"_id\": \"60f1234567890abcdef12345\",\n      \"UserID\": \"60f1234567890abcdef12346\",\n      \"Friend\": {\n        \"ID\": \"60f1234567890abcdef12347\",\n        \"Email\": \"john@example.com\",\n        \"Name\": \"John Doe\",\n        \"NickName\": \"Johnny\",\n        \"Pic\": \"/assets/users/john.jpg\",\n        \"Relation\": \"Friend\",\n        \"RelationID\": \"57fc1357c51f7e980747f2ce\",\n        \"IsRegistered\": true\n      },\n      \"Status\": true,\n      \"IsDeleted\": false,\n      \"CreatedOn\": \"2023-07-15T10:30:00.000Z\",\n      \"ModifiedOn\": \"2023-07-15T10:30:00.000Z\"\n    }\n  ],\n  \"total\": 1\n}"
+				}
+			]
+		},
+		{
+			"name": "Search Friends Starting With",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Cookie",
+						"value": "connect.sid=YOUR_SESSION_ID_HERE",
+						"description": "Replace with your actual session ID"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"startsWith\": \"John\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/members/allFriendsStartingWith",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"members",
+						"allFriendsStartingWith"
+					]
+				},
+				"description": "Search friends whose names start with a specific string (auto-complete functionality)"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"startsWith\": \"John\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/members/allFriendsStartingWith",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"allFriendsStartingWith"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"code\": 200,\n  \"friends\": [\n    {\n      \"_id\": \"60f1234567890abcdef12345\",\n      \"UserID\": \"60f1234567890abcdef12346\",\n      \"Friend\": {\n        \"ID\": \"60f1234567890abcdef12347\",\n        \"Email\": \"john@example.com\",\n        \"Name\": \"John Doe\",\n        \"NickName\": \"Johnny\",\n        \"Pic\": \"/assets/users/john.jpg\",\n        \"Relation\": \"Friend\",\n        \"RelationID\": \"57fc1357c51f7e980747f2ce\",\n        \"IsRegistered\": true\n      },\n      \"Status\": true,\n      \"IsDeleted\": false,\n      \"CreatedOn\": \"2023-07-15T10:30:00.000Z\",\n      \"ModifiedOn\": \"2023-07-15T10:30:00.000Z\"\n    }\n  ]\n}"
+				}
+			]
+		},
+		{
+			"name": "Add Friend",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Cookie",
+						"value": "connect.sid=YOUR_SESSION_ID_HERE",
+						"description": "Replace with your actual session ID"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"email\": \"friend@example.com\",\n  \"name\": \"John Doe\",\n  \"relation\": \"Friend~57fc1357c51f7e980747f2ce\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/members/addFriend",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"members",
+						"addFriend"
+					]
+				},
+				"description": "Add a new friend to the user's friend list"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"friend@example.com\",\n  \"name\": \"John Doe\",\n  \"relation\": \"Friend~57fc1357c51f7e980747f2ce\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/members/addFriend",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"addFriend"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"code\": 200,\n  \"msg\": \"data saved\"\n}"
+				},
+				{
+					"name": "Already Friends Error",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"friend@example.com\",\n  \"name\": \"John Doe\",\n  \"relation\": \"Friend~57fc1357c51f7e980747f2ce\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/members/addFriend",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"addFriend"
+							]
+						}
+					},
+					"status": "Bad Request",
+					"code": 400,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"code\": 400,\n  \"msg\": \"Already a friend\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Add Friend (Internal API)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Cookie",
+						"value": "connect.sid=YOUR_SESSION_ID_HERE",
+						"description": "Replace with your actual session ID"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"userId\": \"60f1234567890abcdef12346\",\n  \"email\": \"friend@example.com\",\n  \"name\": \"John Doe\",\n  \"relation\": \"Friend~57fc1357c51f7e980747f2ce\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/members/addFriend_INTERNAL_API",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"members",
+						"addFriend_INTERNAL_API"
+					]
+				},
+				"description": "Internal API to add a friend (used by other parts of the application)"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"60f1234567890abcdef12346\",\n  \"email\": \"friend@example.com\",\n  \"name\": \"John Doe\",\n  \"relation\": \"Friend~57fc1357c51f7e980747f2ce\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/members/addFriend_INTERNAL_API",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"addFriend_INTERNAL_API"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"code\": 200,\n  \"msg\": \"data saved\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Remove Friend",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Cookie",
+						"value": "connect.sid=YOUR_SESSION_ID_HERE",
+						"description": "Replace with your actual session ID"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"email\": \"friend@example.com\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/members/removeFriend",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"members",
+						"removeFriend"
+					]
+				},
+				"description": "Remove a friend from the user's friend list (soft delete)"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"friend@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/members/removeFriend",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"removeFriend"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"code\": 200,\n  \"msg\": \"Friend removed successfully\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Edit Friend",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Cookie",
+						"value": "connect.sid=YOUR_SESSION_ID_HERE",
+						"description": "Replace with your actual session ID"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"email\": \"friend@example.com\",\n  \"name\": \"John Updated\",\n  \"nickName\": \"Johnny Updated\",\n  \"relation\": \"Family~57fc1357c51f7e980747f2cf\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/members/editFriend",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"members",
+						"editFriend"
+					]
+				},
+				"description": "Edit friend details (name, nickname, relationship)"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"friend@example.com\",\n  \"name\": \"John Updated\",\n  \"nickName\": \"Johnny Updated\",\n  \"relation\": \"Family~57fc1357c51f7e980747f2cf\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/members/editFriend",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"editFriend"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"code\": 200,\n  \"msg\": \"Friend updated successfully\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Search Users",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Cookie",
+						"value": "connect.sid=YOUR_SESSION_ID_HERE",
+						"description": "Replace with your actual session ID"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"searchTerm\": \"john\",\n  \"excludeFriends\": true\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/members/searchUsers",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"members",
+						"searchUsers"
+					]
+				},
+				"description": "Search for users to potentially add as friends"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"searchTerm\": \"john\",\n  \"excludeFriends\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/members/searchUsers",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"searchUsers"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"code\": 200,\n  \"users\": [\n    {\n      \"_id\": \"60f1234567890abcdef12347\",\n      \"Email\": \"john@example.com\",\n      \"Name\": \"John Doe\",\n      \"NickName\": \"Johnny\",\n      \"ProfilePic\": \"/assets/users/john.jpg\"\n    }\n  ]\n}"
+				}
+			]
+		},
+		{
+			"name": "Exclude Members",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					},
+					{
+						"key": "Cookie",
+						"value": "connect.sid=YOUR_SESSION_ID_HERE",
+						"description": "Replace with your actual session ID"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"excludeIds\": [\"60f1234567890abcdef12347\", \"60f1234567890abcdef12348\"]\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/members/excludeMembers",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"members",
+						"excludeMembers"
+					]
+				},
+				"description": "Exclude specific members from search results"
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"excludeIds\": [\"60f1234567890abcdef12347\", \"60f1234567890abcdef12348\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/members/excludeMembers",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"members",
+								"excludeMembers"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n  \"code\": 200,\n  \"users\": [\n    {\n      \"_id\": \"60f1234567890abcdef12349\",\n      \"Email\": \"jane@example.com\",\n      \"Name\": \"Jane Smith\",\n      \"NickName\": \"Jane\",\n      \"ProfilePic\": \"/assets/users/jane.jpg\"\n    }\n  ]\n}"
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		}
+	]
+}

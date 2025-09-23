@@ -1,0 +1,1239 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-boards-api-comprehensive",
+		"name": "CollabMedia Boards API - Comprehensive",
+		"description": "Complete API collection for testing CollabMedia Boards endpoints including authentication, project management, GroupTags, board CRUD operations, media management, collaboration features, and social interactions. All endpoints require user authentication with 7-day session timeout.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-boards-api-comprehensive"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "User Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{test_user_email}}\",\n  \"password\": \"{{test_user_password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/user/login",
+							"host": ["{{base_url}}"],
+							"path": ["user", "login"]
+						},
+						"description": "Authenticate user and create 7-day session. Returns session information and user data. Session cookie is automatically extracted and stored in user_session_id environment variable."
+					},
+					"response": []
+				},
+				{
+					"name": "Admin Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{test_admin_email}}\",\n  \"password\": \"{{test_admin_password}}\",\n  \"remember\": \"1\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/signin",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "signin"]
+						},
+						"description": "Authenticate admin and create 7-day session. Returns session information and admin data. Session cookie is automatically extracted and stored in admin_session_id environment variable."
+					},
+					"response": []
+				}
+			],
+			"description": "Authentication endpoints for user and admin login. All sessions last 7 days."
+		},
+		{
+			"name": "Project Management",
+			"item": [
+				{
+					"name": "Get All Projects",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/projects/",
+							"host": ["{{base_url}}"],
+							"path": ["projects"]
+						},
+						"description": "Retrieve all projects owned by the current user. Projects are organizational containers for boards."
+					},
+					"response": []
+				},
+				{
+					"name": "Create New Project",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"My Creative Workspace\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/projects/add",
+							"host": ["{{base_url}}"],
+							"path": ["projects", "add"]
+						},
+						"description": "Create a new project container. Returns updated project list with new project ID."
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Project",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{project_id}}\",\n  \"name\": \"Updated Project Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/projects/edit",
+							"host": ["{{base_url}}"],
+							"path": ["projects", "edit"]
+						},
+						"description": "Update project title. Only project owner can edit."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Project",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{project_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/projects/delete",
+							"host": ["{{base_url}}"],
+							"path": ["projects", "delete"]
+						},
+						"description": "Soft delete a project. Only project owner can delete."
+					},
+					"response": []
+				}
+			],
+			"description": "Project management endpoints for creating, reading, updating, and deleting projects."
+		},
+		{
+			"name": "GroupTags Management",
+			"item": [
+				{
+					"name": "Get All GroupTags",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{admin_session_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/groupTags/view",
+							"host": ["{{base_url}}"],
+							"path": ["groupTags", "view"]
+						},
+						"description": "Retrieve all active GroupTags for theme selection. Use these IDs in the gt array when creating boards."
+					},
+					"response": []
+				},
+				{
+					"name": "Create New GroupTag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{admin_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Digital Art\",\n  \"notes\": \"Digital art and design themes\",\n  \"status\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groupTags/add",
+							"host": ["{{base_url}}"],
+							"path": ["groupTags", "add"]
+						},
+						"description": "Create a new GroupTag for theme management. Required: name."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Keywords",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{admin_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"startsWith\": \"art\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groupTags/getKeywords",
+							"host": ["{{base_url}}"],
+							"path": ["groupTags", "getKeywords"]
+						},
+						"description": "Search for GroupTags and keywords starting with specified text."
+					},
+					"response": []
+				}
+			],
+			"description": "GroupTags management endpoints for creating and managing themes."
+		},
+		{
+			"name": "Board CRUD Operations",
+			"item": [
+				{
+					"name": "Get All Boards",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"pageNo\": 0,\n  \"perPage\": 10,\n  \"project\": \"{{project_id}}\",\n  \"id\": \"{{board_id}}\",\n  \"gt\": \"{{theme_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/",
+							"host": ["{{base_url}}"],
+							"path": ["boards"]
+						},
+						"description": "Retrieve all boards with optional filtering by project, board ID, or theme. Supports pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Create New Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"My Creative Board\",\n  \"boardType\": \"FriendsGroup\",\n  \"displayName\": \"RealNames\",\n  \"project\": \"{{project_id}}\",\n  \"gt\": [\n    \"68b9459d6d25b9d819e729f4~Digital Art\",\n    \"68b9459d6d25b9d819e729f5~Photography\"\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/add",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "add"]
+						},
+						"description": "Create a new board with themes and privacy settings. Required: name, boardType, displayName, project. Optional: gt array for themes."
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"name\": \"Updated Board Name\",\n  \"boardType\": \"Public\",\n  \"displayName\": \"NickName\",\n  \"gt\": [\n    \"68b9459d6d25b9d819e729f6~Design\"\n  ]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/edit",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "edit"]
+						},
+						"description": "Update board properties including name, privacy settings, and themes. Only board owner can edit."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/delete",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "delete"]
+						},
+						"description": "Soft delete a board. Only board owner can delete."
+					},
+					"response": []
+				},
+				{
+					"name": "Duplicate Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/duplicate",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "duplicate"]
+						},
+						"description": "Clone an existing board with all its media and settings."
+					},
+					"response": []
+				},
+				{
+					"name": "Rename Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"name\": \"New Board Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/rename",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "rename"]
+						},
+						"description": "Change board title. Only board owner can rename."
+					},
+					"response": []
+				},
+				{
+					"name": "Move Board to Project",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"project\": \"{{new_project_id}}\",\n  \"projectTitle\": \"New Project Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/move",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "move"]
+						},
+						"description": "Transfer board to a different project. Only board owner can move."
+					},
+					"response": []
+				},
+				{
+					"name": "Get User Boards",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/boards/userBoards",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "userBoards"]
+						},
+						"description": "Retrieve all boards owned by the current user."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current Board Details",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"pageNo\": 0,\n  \"perPage\": 20\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "getCurrentBoardDetails"]
+						},
+						"description": "Get detailed board information including media with pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Project Boards",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"project\": \"{{project_id}}\",\n  \"pageNo\": 0,\n  \"perPage\": 10\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/getProjectBoards",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "getProjectBoards"]
+						},
+						"description": "Retrieve all boards belonging to a specific project."
+					},
+					"response": []
+				}
+			],
+			"description": "Complete CRUD operations for boards including creation, editing, deletion, duplication, and retrieval."
+		},
+		{
+			"name": "Media Management",
+			"item": [
+				{
+					"name": "Add Media to Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"media\": \"{{media_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "addMedia"]
+						},
+						"description": "Add existing media to a board. Media must exist in the system."
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Media to Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "myFile",
+									"type": "file",
+									"src": "path/to/image.jpg",
+									"description": "Image file to upload"
+								},
+								{
+									"key": "id",
+									"value": "{{board_id}}",
+									"type": "text",
+									"description": "Board ID to add media to"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/uploadMedia",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "uploadMedia"]
+						},
+						"description": "Upload a file directly to a board. Supports image files."
+					},
+					"response": []
+				},
+				{
+					"name": "Post Drawing Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"imageData\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==\",\n  \"title\": \"My Drawing\",\n  \"description\": \"User-created drawing\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/postDrawingImage",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "postDrawingImage"]
+						},
+						"description": "Upload a user-created drawing as base64 data."
+					},
+					"response": []
+				},
+				{
+					"name": "Post Blending Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"imageData\": \"data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==\",\n  \"title\": \"Blended Image\",\n  \"description\": \"AI-generated blended image\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/postBlendingImage",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "postBlendingImage"]
+						},
+						"description": "Upload an AI-blended image as base64 data."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Media from Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"mediaId\": \"{{media_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/deleteMedia",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "deleteMedia"]
+						},
+						"description": "Remove media from a board. Only board owner or media poster can delete."
+					},
+					"response": []
+				},
+				{
+					"name": "View Posted Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"pageNo\": 0,\n  \"perPage\": 20\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/viewPostedMedia",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "viewPostedMedia"]
+						},
+						"description": "Get detailed information about media posted in a board."
+					},
+					"response": []
+				},
+				{
+					"name": "Add from Boards",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"sourceBoardId\": \"{{source_board_id}}\",\n  \"targetBoardId\": \"{{target_board_id}}\",\n  \"mediaIds\": [\"{{media_id_1}}\", \"{{media_id_2}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/addFromBoards",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "addFromBoards"]
+						},
+						"description": "Copy media from one board to another."
+					},
+					"response": []
+				}
+			],
+			"description": "Complete media management for boards including upload, deletion, and transfer operations."
+		},
+		{
+			"name": "Collaboration & Social Features",
+			"item": [
+				{
+					"name": "Add Members to Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"emails\": [\"friend1@example.com\", \"friend2@example.com\"],\n  \"message\": \"Join my creative board!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/addMembers",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "addMembers"]
+						},
+						"description": "Invite members to collaborate on a board. Sends email invitations."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Invitee from Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"inviteeId\": \"{{invitee_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/deleteInvitee",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "deleteInvitee"]
+						},
+						"description": "Remove a member from board collaboration."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Comment to Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"mediaId\": \"{{media_id}}\",\n  \"comment\": \"Great work on this piece!\",\n  \"parentCommentId\": null\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/addComment",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "addComment"]
+						},
+						"description": "Add a comment to board media. Supports threaded comments."
+					},
+					"response": []
+				},
+				{
+					"name": "Vote on Comment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"commentId\": \"{{comment_id}}\",\n  \"voteType\": \"upvote\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/cmntVote",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "cmntVote"]
+						},
+						"description": "Vote on a comment (upvote/downvote)."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Comment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"commentId\": \"{{comment_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/cmntDelete",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "cmntDelete"]
+						},
+						"description": "Delete a comment. Only comment author or board owner can delete."
+					},
+					"response": []
+				}
+			],
+			"description": "Collaboration and social features including member management, commenting, and voting systems."
+		},
+		{
+			"name": "Theme Management",
+			"item": [
+				{
+					"name": "Create Group Tag (Theme)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"themeName\": \"Digital Art\",\n  \"description\": \"Digital art and design themes\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/createGroupTag",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "createGroupTag"]
+						},
+						"description": "Create a new theme/GroupTag for a board."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Group Tag to Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"themeId\": \"{{theme_id}}\",\n  \"themeTitle\": \"Photography\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/addGroupTag",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "addGroupTag"]
+						},
+						"description": "Add an existing theme/GroupTag to a board."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Group Tag from Board",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"themeId\": \"{{theme_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/deleteGroupTag",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "deleteGroupTag"]
+						},
+						"description": "Remove a theme/GroupTag from a board."
+					},
+					"response": []
+				},
+				{
+					"name": "Rename Theme",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"themeId\": \"{{theme_id}}\",\n  \"newName\": \"Updated Theme Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/renameTheme",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "renameTheme"]
+						},
+						"description": "Rename a theme/GroupTag in a board."
+					},
+					"response": []
+				}
+			],
+			"description": "Theme/GroupTag management for boards including creation, addition, removal, and renaming."
+		},
+		{
+			"name": "Board Utilities",
+			"item": [
+				{
+					"name": "Upload Header Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "myFile",
+									"type": "file",
+									"src": "path/to/header.jpg",
+									"description": "Header image file"
+								},
+								{
+									"key": "id",
+									"value": "{{board_id}}",
+									"type": "text",
+									"description": "Board ID to set header for"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/boards/uploadHeader",
+							"host": ["{{base_url}}"],
+							"path": ["boards", "uploadHeader"]
+						},
+						"description": "Upload a header/cover image for a board."
+					},
+					"response": []
+				}
+			],
+			"description": "Utility functions for board management including header image upload."
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Auto-populate session cookies if available",
+					"if (pm.environment.get('user_session_id')) {",
+					"    pm.request.headers.add({",
+					"        key: 'Cookie',",
+					"        value: 'connect.sid=' + pm.environment.get('user_session_id')",
+					"    });",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Auto-extract session cookies from login responses",
+					"if (pm.response.headers.get('Set-Cookie')) {",
+					"    const setCookieHeader = pm.response.headers.get('Set-Cookie');",
+					"    const cookieMatch = setCookieHeader.match(/connect\\.sid=([^;]+)/);",
+					"    if (cookieMatch) {",
+					"        const sessionId = cookieMatch[1];",
+					"        // Decode URL-encoded session ID",
+					"        const decodedSessionId = decodeURIComponent(sessionId);",
+					"        ",
+					"        // Determine which session variable to set based on the endpoint",
+					"        const url = pm.request.url.toString();",
+					"        if (url.includes('/user/login')) {",
+					"            pm.environment.set('user_session_id', decodedSessionId);",
+					"            console.log('User session ID saved:', decodedSessionId);",
+					"        } else if (url.includes('/admin/signin')) {",
+					"            pm.environment.set('admin_session_id', decodedSessionId);",
+					"            console.log('Admin session ID saved:', decodedSessionId);",
+					"        } else if (url.includes('/subadmin/signin')) {",
+					"            pm.environment.set('subadmin_session_id', decodedSessionId);",
+					"            console.log('SubAdmin session ID saved:', decodedSessionId);",
+					"        }",
+					"    }",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		}
+	]
+}
