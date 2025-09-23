@@ -1,0 +1,263 @@
+{
+	"info": {
+		"_postman_id": "audio-upload-collection-001",
+		"name": "CollabMedia Audio Upload API",
+		"description": "Collection for testing audio upload functionality in CollabMedia backend",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Audio Upload",
+			"item": [
+				{
+					"name": "Upload Audio File",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "multipart/form-data"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": [],
+									"description": "Audio file to upload (MP3, WAV, OGG, etc.)"
+								},
+								{
+									"key": "content",
+									"value": "This is my amazing audio post! Check out this cool content I created. #audio #awesome #content",
+									"type": "text",
+									"description": "Content/description of the audio post"
+								},
+								{
+									"key": "title",
+									"value": "My Awesome Audio Post",
+									"type": "text",
+									"description": "Title of the audio post"
+								},
+								{
+									"key": "prompt",
+									"value": "An audio showcasing amazing content creation",
+									"type": "text",
+									"description": "Prompt or description for the audio"
+								},
+								{
+									"key": "groupTags",
+									"value": "audio,music,recording,awesome,content",
+									"type": "text",
+									"description": "Comma-separated group tags for the audio"
+								},
+								{
+									"key": "postPrivacySetting",
+									"value": "PublicWithName",
+									"type": "text",
+									"description": "Privacy setting for the post (PublicWithName, OnlyForOwner, etc.)"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/media/audioUpload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"media",
+								"audioUpload"
+							]
+						},
+						"description": "Upload an audio file with text content and metadata. The audio will be converted to MP3 format and stored on S3."
+					},
+					"response": [
+						{
+							"name": "Successful Audio Upload",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": []
+										},
+										{
+											"key": "content",
+											"value": "This is my amazing audio post!",
+											"type": "text"
+										},
+										{
+											"key": "title",
+											"value": "My Awesome Audio Post",
+											"type": "text"
+										},
+										{
+											"key": "prompt",
+											"value": "An audio showcasing amazing content creation",
+											"type": "text"
+										},
+										{
+											"key": "groupTags",
+											"value": "audio,music,recording",
+											"type": "text"
+										},
+										{
+											"key": "postPrivacySetting",
+											"value": "PublicWithName",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/media/audioUpload",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"media",
+										"audioUpload"
+									]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"success\": true,\n  \"message\": \"Audio uploaded successfully\",\n  \"data\": {\n    \"_id\": \"68d27850bebbd3bbea951393\",\n    \"Location\": [\n      {\n        \"Size\": \"1234567\",\n        \"URL\": \"https://scrpt.s3.us-east-1.amazonaws.com/audio/original/1758623821568_recording_371.mp3\",\n        \"Type\": \"original\",\n        \"Index\": 0,\n        \"S3Key\": \"audio/original/1758623821568_recording_371.mp3\"\n      }\n    ],\n    \"AutoId\": 371,\n    \"UploadedBy\": \"user\",\n    \"UploadedOn\": 1758623821568,\n    \"UploaderID\": \"689b5a7fb3106fdcb42d5abb\",\n    \"Source\": \"User-generated\",\n    \"SourceUniqueID\": null,\n    \"Domains\": null,\n    \"GroupTags\": [\"68cd76e4b119e31d81a26d3a\", \"68cd756cb119e31d81a24a32\"],\n    \"Collection\": null,\n    \"Status\": 2,\n    \"MetaMetaTags\": null,\n    \"MetaTags\": null,\n    \"AddedWhere\": \"board\",\n    \"IsDeleted\": 0,\n    \"TagType\": \"\",\n    \"ContentType\": \"audio/mp3\",\n    \"MediaType\": \"Audio\",\n    \"AddedHow\": \"recording\",\n    \"OwnerFSGs\": {\n      \"Gender\": \"Male,Female\",\n      \"Age\": \"20-30,30-40\",\n      \"Country\": \"India,China\",\n      \"Company\": \"50-100,100-500\",\n      \"MBTI\": \"INTJ\",\n      \"Personality\": \"Architect\",\n      \"Extraversion\": \"20\",\n      \"Sensing\": \"30\",\n      \"Thinking\": \"90\",\n      \"Judging\": \"\"\n    },\n    \"IsPrivate\": 0,\n    \"Locator\": \"1758623821568_recording_371\",\n    \"thumbnail\": \"\",\n    \"Content\": \"This is my amazing audio post! Check out this cool content I created. #audio #awesome #content\",\n    \"Title\": \"My Awesome Audio Post\",\n    \"Prompt\": \"An audio showcasing amazing content creation\",\n    \"PostPrivacySetting\": \"PublicWithName\",\n    \"PostedBy\": \"689b5a7fb3106fdcb42d5abb\",\n    \"PostedOn\": \"2025-09-23T10:37:04.989Z\",\n    \"UpdatedOn\": \"2025-09-23T10:37:04.989Z\",\n    \"PostType\": \"Post\",\n    \"KeyPostType\": \"Comment\",\n    \"IsPreLaunchPost\": false,\n    \"IsPrivateQuestionPost\": false,\n    \"IsOnetimeStream\": false,\n    \"Statements\": [],\n    \"RandomSortId\": \"cFT0X6hiL\",\n    \"RandomSortId_UpdatedOn\": \"2025-09-23T10:37:05.013Z\",\n    \"__v\": 0\n  },\n  \"s3Info\": {\n    \"s3Key\": \"audio/original/1758623821568_recording_371.mp3\",\n    \"url\": \"https://scrpt.s3.us-east-1.amazonaws.com/audio/original/1758623821568_recording_371.mp3\",\n    \"bucket\": \"scrpt\",\n    \"region\": \"us-east-1\"\n  }\n}"
+						},
+						{
+							"name": "Error - No File Uploaded",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "content",
+											"value": "This is my amazing audio post!",
+											"type": "text"
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/media/audioUpload",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"media",
+										"audioUpload"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"success\": false,\n  \"error\": \"No files uploaded\"\n}"
+						},
+						{
+							"name": "Error - Unsupported File Type",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "multipart/form-data"
+									}
+								],
+								"body": {
+									"mode": "formdata",
+									"formdata": [
+										{
+											"key": "file",
+											"type": "file",
+											"src": []
+										}
+									]
+								},
+								"url": {
+									"raw": "{{base_url}}/media/audioUpload",
+									"host": [
+										"{{base_url}}"
+									],
+									"path": [
+										"media",
+										"audioUpload"
+									]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"cookie": [],
+							"body": "{\n  \"success\": false,\n  \"error\": \"Unsupported file extension: txt. Supported: mp4, avi, mov, wmv, flv, mkv, m4v, webm, mp3, wav, ogg\"\n}"
+						}
+					]
+				}
+			],
+			"description": "Audio upload endpoints for uploading audio files with text content and metadata."
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		}
+	]
+}

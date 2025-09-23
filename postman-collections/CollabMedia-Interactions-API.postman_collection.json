@@ -1,0 +1,914 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-interactions-api",
+		"name": "CollabMedia - Complete Interactions API",
+		"description": "Comprehensive API collection for all user interactions including likes, comments, votes, reactions, feedback, notifications, and engagement tracking in CollabMedia platform.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-interactions-api"
+	},
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "User Login",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"{{user_email}}\",\n  \"password\": \"{{user_password}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/user/login",
+							"host": ["{{base_url}}"],
+							"path": ["user", "login"]
+						},
+						"description": "Login user to get session for interaction endpoints"
+					},
+					"response": []
+				},
+				{
+					"name": "Check Login Status",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/user/chklogin",
+							"host": ["{{base_url}}"],
+							"path": ["user", "chklogin"]
+						},
+						"description": "Check if user is logged in and session is valid"
+					},
+					"response": []
+				},
+				{
+					"name": "User Logout",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/user/logout",
+							"host": ["{{base_url}}"],
+							"path": ["user", "logout"]
+						},
+						"description": "Logout user and clear session"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Post Interactions",
+			"item": [
+				{
+					"name": "Like/Unlike Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaId\": \"{{media_id}}\",\n  \"BoardId\": \"{{page_id}}\",\n  \"Action\": \"Vote\",\n  \"LikeType\": \"1\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/actions",
+							"host": ["{{base_url}}"],
+							"path": ["media", "actions"]
+						},
+						"description": "Like or unlike a post. LikeType: '1' for like, '0' for unlike"
+					},
+					"response": []
+				},
+				{
+					"name": "Dislike Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaId\": \"{{media_id}}\",\n  \"BoardId\": \"{{page_id}}\",\n  \"Action\": \"Vote\",\n  \"LikeType\": \"2\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/actions",
+							"host": ["{{base_url}}"],
+							"path": ["media", "actions"]
+						},
+						"description": "Dislike a post. LikeType: '2' for dislike"
+					},
+					"response": []
+				},
+				{
+					"name": "Mark/Bookmark Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaId\": \"{{media_id}}\",\n  \"BoardId\": \"{{page_id}}\",\n  \"Action\": \"Mark\",\n  \"Themes\": [\"motivation\", \"inspiration\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/actions",
+							"host": ["{{base_url}}"],
+							"path": ["media", "actions"]
+						},
+						"description": "Mark or bookmark a post for later reference"
+					},
+					"response": []
+				},
+				{
+					"name": "Stamp Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaId\": \"{{media_id}}\",\n  \"BoardId\": \"{{page_id}}\",\n  \"Action\": \"Stamp\",\n  \"Themes\": [\"favorite\", \"important\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/actions",
+							"host": ["{{base_url}}"],
+							"path": ["media", "actions"]
+						},
+						"description": "Stamp a post with custom themes/tags"
+					},
+					"response": []
+				},
+				{
+					"name": "Repost/Share Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaId\": \"{{media_id}}\",\n  \"BoardId\": \"{{page_id}}\",\n  \"Action\": \"Post\",\n  \"Themes\": [\"shared\", \"recommended\"],\n  \"IsOnlyForOwner\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/actions",
+							"host": ["{{base_url}}"],
+							"path": ["media", "actions"]
+						},
+						"description": "Repost or share a post to your own board/page"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Comment Interactions",
+			"item": [
+				{
+					"name": "Add Comment to Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{page_id}}\",\n  \"postId\": \"{{post_id}}\",\n  \"comment\": \"This is a great post!\",\n  \"commentType\": \"text\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/addComment",
+							"host": ["{{base_url}}"],
+							"path": ["board", "addComment"]
+						},
+						"description": "Add a comment to a specific post"
+					},
+					"response": []
+				},
+				{
+					"name": "Add Comment Action (MediaActionLogs)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaId\": \"{{media_id}}\",\n  \"BoardId\": \"{{page_id}}\",\n  \"Action\": \"Comment\",\n  \"Comment\": \"This is really helpful!\",\n  \"IsOnlyForOwner\": false,\n  \"Themes\": [\"feedback\", \"appreciation\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/actions",
+							"host": ["{{base_url}}"],
+							"path": ["media", "actions"]
+						},
+						"description": "Add a comment action to MediaActionLogs collection"
+					},
+					"response": []
+				},
+				{
+					"name": "Like Comment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"boardId\": \"{{page_id}}\",\n  \"cmntId\": \"{{comment_id}}\",\n  \"voterId\": \"{{user_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/cmntVote",
+							"host": ["{{base_url}}"],
+							"path": ["board", "cmntVote"]
+						},
+						"description": "Like a comment (vote on comment)"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Comment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"boardId\": \"{{page_id}}\",\n  \"cmntId\": \"{{comment_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/cmntDelete",
+							"host": ["{{base_url}}"],
+							"path": ["board", "cmntDelete"]
+						},
+						"description": "Delete a comment from a post"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Fetch Interactions",
+			"item": [
+				{
+					"name": "Get Page with Comments and Votes",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{page_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/",
+							"host": ["{{base_url}}"],
+							"path": ["board"]
+						},
+						"description": "Get page data with embedded comments and comment votes"
+					},
+					"response": []
+				},
+				{
+					"name": "Get User's Likes",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PageId\": \"{{page_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/getMyLikes",
+							"host": ["{{base_url}}"],
+							"path": ["media", "getMyLikes"]
+						},
+						"description": "Get all likes by current user (function exists, route may need to be added)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Votes for Posts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"AllPostIds\": [\"{{post_id_1}}\", \"{{post_id_2}}\", \"{{post_id_3}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/getAllVotes",
+							"host": ["{{base_url}}"],
+							"path": ["media", "getAllVotes"]
+						},
+						"description": "Get all votes for multiple posts (function exists, route may need to be added)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Comments for Posts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"AllPostIds\": [\"{{post_id_1}}\", \"{{post_id_2}}\", \"{{post_id_3}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/getAllComments",
+							"host": ["{{base_url}}"],
+							"path": ["media", "getAllComments"]
+						},
+						"description": "Get all comments for multiple posts (function exists, route may need to be added)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Comments for Single Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"{{post_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/getComments",
+							"host": ["{{base_url}}"],
+							"path": ["media", "getComments"]
+						},
+						"description": "Get comments for a single post (function exists, route may need to be added)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "User Feedback & Analytics",
+			"item": [
+				{
+					"name": "Log User Action",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"page_view\",\n  \"details\": {\n    \"pageId\": \"{{page_id}}\",\n    \"timestamp\": \"2025-01-01T00:00:00Z\",\n    \"duration\": 30\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/user/logUserAction",
+							"host": ["{{base_url}}"],
+							"path": ["user", "logUserAction"]
+						},
+						"description": "Log user actions for analytics tracking"
+					},
+					"response": []
+				},
+				{
+					"name": "Log User Feedback",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"feedback\": \"Great platform, easy to use\",\n  \"rating\": 5\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/user/logUserFeedback",
+							"host": ["{{base_url}}"],
+							"path": ["user", "logUserFeedback"]
+						},
+						"description": "Log user feedback and ratings"
+					},
+					"response": []
+				},
+				{
+					"name": "Add Media View",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaId\": \"{{media_id}}\",\n  \"BoardId\": \"{{page_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addViews",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addViews"]
+						},
+						"description": "Track media views for analytics"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Notifications",
+			"item": [
+				{
+					"name": "Get User Notifications Count",
+					"request": {
+						"method": "POST",
+						"url": {
+							"raw": "{{base_url}}/user/getUserNotificationsCount",
+							"host": ["{{base_url}}"],
+							"path": ["user", "getUserNotificationsCount"]
+						},
+						"description": "Get count of unread notifications for the user"
+					},
+					"response": []
+				},
+				{
+					"name": "Update Notification Seen Status",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notificationIds\": [\"{{notification_id_1}}\", \"{{notification_id_2}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/user/updateNotificationSeenStatus",
+							"host": ["{{base_url}}"],
+							"path": ["user", "updateNotificationSeenStatus"]
+						},
+						"description": "Mark notifications as seen"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Legacy Media Action Logs",
+			"item": [
+				{
+					"name": "Add Media Action (Legacy)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaId\": \"{{media_id}}\",\n  \"Action\": \"Post\",\n  \"Title\": \"Action Title\",\n  \"Prompt\": \"Action prompt\",\n  \"Locator\": \"action_locator\",\n  \"URL\": \"https://example.com\",\n  \"MediaType\": \"Image\",\n  \"ContentType\": \"image/jpeg\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/mediaActionLogs",
+							"host": ["{{base_url}}"],
+							"path": ["media", "mediaActionLogs"]
+						},
+						"description": "Legacy endpoint for logging media actions (Post/Stamp only)"
+					},
+					"response": []
+				},
+				{
+					"name": "Test User Score",
+					"request": {
+						"method": "GET",
+						"url": {
+							"raw": "{{base_url}}/media/test_userscore?user_id={{user_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["media", "test_userscore"],
+							"query": [
+								{
+									"key": "user_id",
+									"value": "{{user_id}}"
+								}
+							]
+						},
+						"description": "Test user score calculation based on interactions"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Post Management",
+			"item": [
+				{
+					"name": "Update Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"postId\": \"{{post_id}}\",\n  \"boardId\": \"{{page_id}}\",\n  \"updates\": {\n    \"title\": \"Updated Post Title\",\n    \"content\": \"Updated post content\",\n    \"themes\": [\"updated\", \"theme\"]\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/updatePost",
+							"host": ["{{base_url}}"],
+							"path": ["board", "updatePost"]
+						},
+						"description": "Update post content and metadata"
+					},
+					"response": []
+				},
+				{
+					"name": "Editor Pick Update Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"postId\": \"{{post_id}}\",\n  \"boardId\": \"{{page_id}}\",\n  \"isEditorPicked\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/editorPickUpdatePost",
+							"host": ["{{base_url}}"],
+							"path": ["board", "editorPickUpdatePost"]
+						},
+						"description": "Mark post as editor's pick"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mediaId\": \"{{media_id}}\",\n  \"boardId\": \"{{page_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/deleteMedia",
+							"host": ["{{base_url}}"],
+							"path": ["board", "deleteMedia"]
+						},
+						"description": "Delete a post from a page/board"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Advanced Interactions",
+			"item": [
+				{
+					"name": "Like Comment (PostCommentLikeLogs)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostCommentId\": \"{{comment_id_from_media_action_log}}\",\n  \"LikedById\": \"{{user_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/saveCommentLike",
+							"host": ["{{base_url}}"],
+							"path": ["media", "saveCommentLike"]
+						},
+						"description": "Like a comment using PostCommentLikeLogs (function exists, route may need to be added)"
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Comment Like",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostCommentId\": \"{{comment_id_from_media_action_log}}\",\n  \"LikedById\": \"{{user_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/removeCommentLike",
+							"host": ["{{base_url}}"],
+							"path": ["media", "removeCommentLike"]
+						},
+						"description": "Remove like from a comment (function exists, route may need to be added)"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Comment (MediaActionLogs)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"CommentId\": \"{{comment_id_from_media_action_log}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/deleteComment",
+							"host": ["{{base_url}}"],
+							"path": ["media", "deleteComment"]
+						},
+						"description": "Delete comment from MediaActionLogs (function exists, route may need to be added)"
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		},
+		{
+			"key": "user_email",
+			"value": "test@example.com",
+			"type": "string"
+		},
+		{
+			"key": "user_password",
+			"value": "password123",
+			"type": "string"
+		},
+		{
+			"key": "user_id",
+			"value": "68a733773931522f1b7f4632",
+			"type": "string"
+		},
+		{
+			"key": "page_id",
+			"value": "68b715be67a6852e1d3b2498",
+			"type": "string"
+		},
+		{
+			"key": "media_id",
+			"value": "68b96b332d109bdd537ad1d5",
+			"type": "string"
+		},
+		{
+			"key": "post_id",
+			"value": "68b96b332d109bdd537ad1d5",
+			"type": "string"
+		},
+		{
+			"key": "comment_id",
+			"value": "comment_id_here",
+			"type": "string"
+		},
+		{
+			"key": "notification_id_1",
+			"value": "notif_1",
+			"type": "string"
+		},
+		{
+			"key": "notification_id_2",
+			"value": "notif_2",
+			"type": "string"
+		}
+	]
+}

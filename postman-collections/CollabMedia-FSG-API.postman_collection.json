@@ -1,0 +1,171 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-fsg-api",
+		"name": "CollabMedia FSG API",
+		"description": "Complete API collection for testing CollabMedia FSG (Functional Service Groups) endpoints including view, add, edit, and delete operations",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-fsg-api"
+	},
+	"item": [
+		{
+			"name": "FSG Management",
+			"item": [
+				{
+					"name": "Get All FSGs",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/fsg/view",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"fsg",
+								"view"
+							]
+						},
+						"description": "Retrieve all active FSGs (Functional Service Groups) ordered by their order field. Returns FSGs with status=1 and isDeleted≠1."
+					},
+					"response": []
+				},
+				{
+					"name": "Add New FSG",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Technology Solutions\",\n  \"values\": \"Web Development;Mobile Apps;Cloud Services;AI/ML\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/fsg/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"fsg",
+								"add"
+							]
+						},
+						"description": "Create a new FSG with a title and multiple values. Values should be semicolon-separated. After creation, returns the updated list of all FSGs."
+					},
+					"response": []
+				},
+				{
+					"name": "Edit FSG",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{fsg_id}}\",\n  \"name\": \"Updated Technology Solutions\",\n  \"values\": \"Web Development;Mobile Apps;Cloud Services;AI/ML;Blockchain\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/fsg/edit",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"fsg",
+								"edit"
+							]
+						},
+						"description": "Update an existing FSG by ID. Requires the FSG ID, new name, and new values (semicolon-separated). Updates LastModified timestamp and returns the updated list of all FSGs."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete FSG",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{fsg_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/fsg/delete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"fsg",
+								"delete"
+							]
+						},
+						"description": "Soft delete an FSG by setting isDeleted=1. Requires the FSG ID. Returns the updated list of all active FSGs."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "fsg_id",
+			"value": "your_fsg_id_here",
+			"type": "string"
+		}
+	]
+}

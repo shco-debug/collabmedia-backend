@@ -1,0 +1,897 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-metatags-api",
+		"name": "CollabMedia MetaTags API",
+		"description": "Complete API collection for testing CollabMedia MetaTags, Meta Meta Tags, Group Tags, and Domains endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-metatags-api"
+	},
+	"item": [
+		{
+			"name": "Meta Meta Tags",
+			"item": [
+				{
+					"name": "Get All Meta Meta Tags",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/metaMetaTags/view",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaMetaTags",
+								"view"
+							]
+						},
+						"description": "Retrieve all active meta meta tags"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Meta Meta Tags by Domain",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"domainid\": \"{{domain_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/metaMetaTags/view",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaMetaTags",
+								"view"
+							]
+						},
+						"description": "Retrieve all meta meta tags for a specific domain"
+					},
+					"response": []
+				},
+				{
+					"name": "Add New Meta Meta Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"AI and Machine Learning\",\n  \"notes\": \"Artificial Intelligence and Machine Learning related content\",\n  \"status\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/metaMetaTags/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaMetaTags",
+								"add"
+							]
+						},
+						"description": "Create a new meta meta tag with required fields: name, notes, status"
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Meta Meta Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{meta_meta_tag_id}}\",\n  \"name\": \"Updated AI and Machine Learning\",\n  \"notes\": \"Updated description for AI and ML content\",\n  \"status\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/metaMetaTags/edit",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaMetaTags",
+								"edit"
+							]
+						},
+						"description": "Update an existing meta meta tag. Required: id, name"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Meta Meta Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{meta_meta_tag_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/metaMetaTags/delete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaMetaTags",
+								"delete"
+							]
+						},
+						"description": "Soft delete a meta meta tag (sets status to 0)"
+					},
+					"response": []
+				},
+				{
+					"name": "Add Domain to Meta Meta Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{meta_meta_tag_id}}\",\n  \"domainid\": \"{{domain_id}}\",\n  \"title\": \"Technology\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/metaMetaTags/addDomain",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaMetaTags",
+								"addDomain"
+							]
+						},
+						"description": "Add a single domain to an existing meta meta tag. The 'domainid' should be the '_id' from the Domains collection, and 'title' should be the 'DomainTitle' from that same domain record."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Multiple Domains to Meta Meta Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{meta_meta_tag_id}}\",\n  \"domains\": [\n    {\n      \"DomainId\": \"{{domain_id_1}}\",\n      \"DomainTitle\": \"Technology\"\n    },\n    {\n      \"DomainId\": \"{{domain_id_2}}\",\n      \"DomainTitle\": \"Science\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/metaMetaTags/addDomains",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaMetaTags",
+								"addDomains"
+							]
+						},
+						"description": "Add multiple domains to an existing meta meta tag"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for managing Meta Meta Tags (top-level categories)"
+		},
+		{
+			"name": "Meta Tags",
+			"item": [
+				{
+					"name": "Get Meta Tags by Meta Meta Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mmt\": \"{{meta_meta_tag_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/metaTags/view",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaTags",
+								"view"
+							]
+						},
+						"description": "Retrieve all active meta tags for a specific meta meta tag"
+					},
+					"response": []
+				},
+				{
+					"name": "Add New Meta Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mmt\": \"{{meta_meta_tag_id}}\",\n  \"MetaTagTitle\": \"Deep Learning\",\n  \"MetaTagDescription\": \"Deep learning algorithms and neural networks\",\n  \"IsAllowedForIdeas\": true,\n  \"Order\": 1000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/metaTags/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaTags",
+								"add"
+							]
+						},
+						"description": "Create a new meta tag within a meta meta tag. Required: mmt, MetaTagTitle"
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Meta Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mmt\": \"{{meta_meta_tag_id}}\",\n  \"metaTagId\": \"{{meta_tag_id}}\",\n  \"MetaTagTitle\": \"Updated Deep Learning\",\n  \"MetaTagDescription\": \"Updated description for deep learning\",\n  \"IsAllowedForIdeas\": true,\n  \"Order\": 1000\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/metaTags/edit",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaTags",
+								"edit"
+							]
+						},
+						"description": "Update an existing meta tag. Required: mmt, metaTagId, MetaTagTitle"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Meta Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mmt\": \"{{meta_meta_tag_id}}\",\n  \"metaTagId\": \"{{meta_tag_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/metaTags/delete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"metaTags",
+								"delete"
+							]
+						},
+						"description": "Soft delete a meta tag from a meta meta tag"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for managing Meta Tags within Meta Meta Tags"
+		},
+		{
+			"name": "Group Tags",
+			"item": [
+				{
+					"name": "Get All Group Tags",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/groupTags/view",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groupTags",
+								"view"
+							]
+						},
+						"description": "Retrieve all active group tags"
+					},
+					"response": []
+				},
+				{
+					"name": "Add New Group Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Neural Networks\",\n  \"notes\": \"Neural network architectures and implementations\",\n  \"mmt\": \"{{meta_meta_tag_id}}\",\n  \"mt\": \"{{meta_tag_id}}\",\n  \"status\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/groupTags/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groupTags",
+								"add"
+							]
+						},
+						"description": "Create a new group tag. Required: name"
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Group Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{group_tag_id}}\",\n  \"name\": \"Updated Neural Networks\",\n  \"notes\": \"Updated description for neural networks\",\n  \"status\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/groupTags/edit",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groupTags",
+								"edit"
+							]
+						},
+						"description": "Update an existing group tag. Required: id, name"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Group Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{group_tag_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/groupTags/delete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groupTags",
+								"delete"
+							]
+						},
+						"description": "Soft delete a group tag (sets status to 0)"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Group Tags by Meta Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"metaid\": \"{{meta_tag_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/groupTags/viewmt",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groupTags",
+								"viewmt"
+							]
+						},
+						"description": "Retrieve all group tags for a specific meta tag"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for managing Group Tags"
+		},
+		{
+			"name": "Group Tag Bindings",
+			"item": [
+				{
+					"name": "Get All Group Tag Bindings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"groupTagId\": \"{{group_tag_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/gtbinding/view",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"gtbinding",
+								"view"
+							]
+						},
+						"description": "Retrieve all group tag bindings (optional filter by groupTagId)"
+					},
+					"response": []
+				},
+				{
+					"name": "Add New Group Tag Binding",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"groupTagId\": \"{{group_tag_id}}\",\n  \"tagId\": \"{{tag_id}}\",\n  \"status\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/gtbinding/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"gtbinding",
+								"add"
+							]
+						},
+						"description": "Create a new group tag binding. Required: groupTagId, tagId"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Group Tag Binding",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{binding_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/gtbinding/delete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"gtbinding",
+								"delete"
+							]
+						},
+						"description": "Remove a group tag binding"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for managing Group Tag Bindings"
+		},
+		{
+			"name": "Tags",
+			"item": [
+				{
+					"name": "Get Tags by Group Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"groupTagId\": \"{{group_tag_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/tags/view",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tags",
+								"view"
+							]
+						},
+						"description": "Retrieve all tags for a specific group tag"
+					},
+					"response": []
+				},
+				{
+					"name": "Add New Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"groupTagId\": \"{{group_tag_id}}\",\n  \"TagTitle\": \"TensorFlow\",\n  \"TagDescription\": \"Google's TensorFlow framework\",\n  \"status\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/tags/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tags",
+								"add"
+							]
+						},
+						"description": "Create a new tag within a group tag. Required: groupTagId, TagTitle, TagDescription"
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{tag_id}}\",\n  \"TagTitle\": \"Updated TensorFlow\",\n  \"TagDescription\": \"Updated description for TensorFlow\",\n  \"status\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/tags/edit",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tags",
+								"edit"
+							]
+						},
+						"description": "Update an existing tag. Required: id"
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{tag_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/tags/delete",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"tags",
+								"delete"
+							]
+						},
+						"description": "Soft delete a tag (sets status to 0)"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for managing individual Tags"
+		},
+		{
+			"name": "Domains",
+			"item": [
+				{
+					"name": "Get All Domains",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/domains/view",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"domains",
+								"view"
+							]
+						},
+						"description": "Retrieve all active domains"
+					},
+					"response": []
+				},
+				{
+					"name": "Add New Domain",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Technology\",\n  \"notes\": \"Technology and innovation related content\",\n  \"status\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/domains/add",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"domains",
+								"add"
+							]
+						},
+						"description": "Create a new domain. Required: name, notes"
+					},
+					"response": []
+				},
+				{
+					"name": "Edit Domain",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{domain_id}}\",\n  \"name\": \"Updated Technology\",\n  \"notes\": \"Updated technology description\",\n  \"status\": 1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/domains/edit",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"domains",
+								"edit"
+							]
+						},
+						"description": "Update an existing domain. Required: id"
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for managing Domains"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Auto-set Content-Type header if not present",
+					"if (!pm.request.headers.has('Content-Type')) {",
+					"    pm.request.headers.add('Content-Type', 'application/json');",
+					"}",
+					"",
+					"// Log request details for debugging",
+					"console.log('Request:', pm.request.method, pm.request.url);",
+					"if (pm.request.body && pm.request.body.mode === 'raw') {",
+					"    console.log('Body:', pm.request.body.raw);",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Basic response validation",
+					"pm.test('Response status is valid', function () {",
+					"    pm.expect(pm.response.code).to.be.oneOf([200, 201, 400, 401, 404, 500]);",
+					"});",
+					"",
+					"pm.test('Response has required structure', function () {",
+					"    if (pm.response.code === 200 || pm.response.code === 201) {",
+					"        const responseJson = pm.response.json();",
+					"        pm.expect(responseJson).to.have.property('code');",
+					"        pm.expect(responseJson).to.have.property('msg');",
+					"    }",
+					"});",
+					"",
+					"// Log response for debugging",
+					"console.log('Response Status:', pm.response.status);",
+					"console.log('Response Body:', pm.response.text());",
+					"",
+					"// Store IDs from successful responses for reuse",
+					"if (pm.response.code === 200 || pm.response.code === 201) {",
+					"    const responseJson = pm.response.json();",
+					"    if (responseJson.response && responseJson.response._id) {",
+					"        // Store the ID based on the endpoint",
+					"        const url = pm.request.url.toString();",
+					"        if (url.includes('/metaMetaTags/add')) {",
+					"            pm.environment.set('meta_meta_tag_id', responseJson.response._id);",
+					"            console.log('Stored meta_meta_tag_id:', responseJson.response._id);",
+					"        } else if (url.includes('/metaTags/add')) {",
+					"            pm.environment.set('meta_tag_id', responseJson.response._id);",
+					"            console.log('Stored meta_tag_id:', responseJson.response._id);",
+					"        } else if (url.includes('/groupTags/add')) {",
+					"            pm.environment.set('group_tag_id', responseJson.response._id);",
+					"            console.log('Stored group_tag_id:', responseJson.response._id);",
+					"        } else if (url.includes('/tags/add')) {",
+					"            pm.environment.set('tag_id', responseJson.response._id);",
+					"            console.log('Stored tag_id:', responseJson.response._id);",
+					"        } else if (url.includes('/domains/add')) {",
+					"            pm.environment.set('domain_id', responseJson.response._id);",
+					"            console.log('Stored domain_id:', responseJson.response._id);",
+					"        }",
+					"    }",
+					"}",
+					"",
+					"// Handle errors gracefully",
+					"if (pm.response.code >= 400) {",
+					"    console.log('Error Response:', pm.response.text());",
+					"    const responseJson = pm.response.json();",
+					"    if (responseJson && responseJson.msg) {",
+					"        console.log('Error Message:', responseJson.msg);",
+					"    }",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string",
+			"description": "Base URL for the CollabMedia API server"
+		},
+		{
+			"key": "meta_meta_tag_id",
+			"value": "",
+			"type": "string",
+			"description": "ID of a meta meta tag (will be auto-populated after creation)"
+		},
+		{
+			"key": "meta_tag_id",
+			"value": "",
+			"type": "string",
+			"description": "ID of a meta tag (will be auto-populated after creation)"
+		},
+		{
+			"key": "group_tag_id",
+			"value": "",
+			"type": "string",
+			"description": "ID of a group tag (will be auto-populated after creation)"
+		},
+		{
+			"key": "tag_id",
+			"value": "",
+			"type": "string",
+			"description": "ID of an individual tag (will be auto-populated after creation)"
+		},
+		{
+			"key": "domain_id",
+			"value": "",
+			"type": "string",
+			"description": "ID of a domain (will be auto-populated after creation)"
+		},
+		{
+			"key": "domain_id_1",
+			"value": "",
+			"type": "string",
+			"description": "First domain ID for testing multiple domains"
+		},
+		{
+			"key": "domain_id_2",
+			"value": "",
+			"type": "string",
+			"description": "Second domain ID for testing multiple domains"
+		},
+		{
+			"key": "binding_id",
+			"value": "",
+			"type": "string",
+			"description": "ID of a group tag binding (will be auto-populated after creation)"
+		}
+	]
+}

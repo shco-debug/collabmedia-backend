@@ -1,0 +1,1866 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-capsule-api",
+		"name": "CollabMedia Capsule API",
+		"description": "Complete API collection for testing CollabMedia Capsule endpoints including CRUD operations, publishing, sharing, and advanced features. All endpoints require user authentication with 7-day session timeout. Use the Authentication collection to login first and get session cookies.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-capsule-api"
+	},
+	"item": [
+		{
+			"name": "Capsule CRUD Operations",
+			"item": [
+				{
+					"name": "Create New Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/create",
+"host": ["{{base_url}}"],
+"path": ["capsules", "create"]
+						},
+						"description": "Create a new capsule. Requires user session (7-day timeout). Returns capsule with default values including 'Untitled Capsule' title. Use session cookie: connect.sid"
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Capsules",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/capsules/",
+							"host": ["{{base_url}}"],
+							"path": ["capsules"]
+						},
+						"description": "Retrieve all user capsules (created, duplicated, added from library) that are not published. Requires user session (7-day timeout). Use session cookie: connect.sid"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Capsules Paginated",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"qc\": \"all\",\n  \"perPage\": 10,\n  \"pageNo\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/",
+							"host": ["{{base_url}}"],
+							"path": ["capsules"]
+						},
+						"description": "Get paginated capsules. qc values: 'all', 'createdByMe', 'sharedWithMe', 'byTheHouse', 'allPublished', 'publishedByMe', 'publishedForMe', 'invitationForMe', 'ForSalesByMe'"
+					},
+					"response": []
+				},
+				{
+					"name": "Duplicate Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/duplicate",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "duplicate"]
+						},
+						"description": "Duplicate an existing capsule with all its content. Requires capsule_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/remove",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "remove"]
+						},
+						"description": "Remove/delete a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Capsule Name",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"New Capsule Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/updateCapsuleName",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "updateCapsuleName"]
+						},
+						"description": "Update the title/name of a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Capsule Library & Sharing",
+			"item": [
+				{
+					"name": "Add From Library",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{library_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/addFromLibrary",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "addFromLibrary"]
+						},
+						"description": "Add a capsule from the library to user's collection."
+					},
+					"response": []
+				},
+				{
+					"name": "Share Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"shareWithEmail\": \"user@example.com\",\n  \"shareWithName\": \"User Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/share",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "share"]
+						},
+						"description": "Share a capsule with another user by email. Requires capsule_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Invite Member",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"member@example.com\",\n  \"name\": \"Member Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/inviteMember",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "inviteMember"]
+						},
+						"description": "Invite a member to collaborate on a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Invitee",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"member@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/removeInvitee",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "removeInvitee"]
+						},
+						"description": "Remove an invitee from a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Capsule Publishing & Launch",
+			"item": [
+				{
+					"name": "Publish Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"makingFor\": \"ME\",\n  \"participation\": \"private\",\n  \"title\": \"Published Capsule Title\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/publish",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "publish"]
+						},
+						"description": "Publish a capsule with launch settings. Requires capsule_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Check Capsule Completeness",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/capsule/capsule__checkCompleteness",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "capsule__checkCompleteness"]
+						},
+						"description": "Check if a capsule is complete and ready for publishing."
+					},
+					"response": []
+				},
+				{
+					"name": "Save Launch Settings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"audience\": \"ME\",\n  \"shareMode\": \"private\",\n  \"invitees\": []\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/saveSettings",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "saveSettings"]
+						},
+						"description": "Save launch settings for a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Capsule Media & Assets",
+			"item": [
+				{
+					"name": "Upload Cover Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "coverImage",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/uploadCover",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "uploadCover"]
+						},
+						"description": "Upload cover image for a capsule. Requires capsule_id in headers and file upload."
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Menu Icon",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "menuIcon",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/uploadMenuIcon",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "uploadMenuIcon"]
+						},
+						"description": "Upload menu icon for a capsule. Requires capsule_id in headers and file upload."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Cover Art",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/delCoverArt",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "delCoverArt"]
+						},
+						"description": "Delete cover art from a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Menu Icon",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/delMenuIcon",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "delMenuIcon"]
+						},
+						"description": "Delete menu icon from a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Capsule Metadata & Settings",
+			"item": [
+				{
+					"name": "Save Metadata Settings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"description\": \"Capsule description\",\n  \"edition\": \"1.0\",\n  \"publisher\": \"Publisher Name\",\n  \"author\": \"Author Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/saveMetaDataSettings",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "saveMetaDataSettings"]
+						},
+						"description": "Save basic metadata for a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Save Metadata FSG",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"fsg\": {\n    \"technology\": \"Web Development\",\n    \"industry\": \"E-commerce\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/saveMetaDataFsg",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "saveMetaDataFsg"]
+						},
+						"description": "Save FSG (Functional Service Groups) metadata for a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Save Phase Focus Keywords",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"phase\": [\"planning\", \"development\"],\n  \"focus\": [\"user experience\", \"performance\"],\n  \"keywords\": \"web development, e-commerce, user experience\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/savePhaseFocusKey",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "savePhaseFocusKey"]
+						},
+						"description": "Save phase, focus, and keywords metadata for a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Capsule Commerce & Sales",
+			"item": [
+				{
+					"name": "Approve Capsule for Sales",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"price\": 29.99,\n  \"discountPrice\": 19.99,\n  \"isAllowedForSales\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/approveCapsuleForSales",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "approveCapsuleForSales"]
+						},
+						"description": "Approve a capsule for sales with pricing. Requires capsule_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Cart Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/getCartCapsule",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "getCartCapsule"]
+						},
+						"description": "Get capsule information for shopping cart."
+					},
+					"response": []
+				},
+				{
+					"name": "Buy Now",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"paymentMethod\": \"stripe\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "buyNow"]
+						},
+						"description": "Purchase a capsule immediately. Handles payment processing."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Capsule Analytics & Reports",
+			"item": [
+				{
+					"name": "Get My Purchases",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"limit\": 20,\n  \"offset\": 0\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/getMyPurchases",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "getMyPurchases"]
+						},
+						"description": "Get list of capsules purchased by the current user."
+					},
+					"response": []
+				},
+				{
+					"name": "Get My Sales",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"limit\": 20,\n  \"offset\": 0\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/getMySales",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "getMySales"]
+						},
+						"description": "Get list of capsules sold by the current user."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Sales Excel",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/capsule/getSalesExcel",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "getSalesExcel"]
+						},
+						"description": "Download sales report in Excel format."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Advanced Capsule Features",
+			"item": [
+				{
+					"name": "Toggle Stream",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"streamEnabled\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/toggleStream",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "toggleStream"]
+						},
+						"description": "Enable/disable streaming features for a capsule. Requires capsule_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Celebrity Instance",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"celebrityType\": \"influencer\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/createCelebrityInstance",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "createCelebrityInstance"]
+						},
+						"description": "Create a celebrity/influencer instance of a capsule."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Posts on Event Day",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"eventDate\": \"2024-01-15\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsule/createPostsOnEventDay_INTERNAL_API",
+							"host": ["{{base_url}}"],
+							"path": ["capsule", "createPostsOnEventDay_INTERNAL_API"]
+						},
+						"description": "Create automated posts for a specific event date. Internal API endpoint."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Capsule Cart & Commerce Management",
+			"item": [
+				{
+					"name": "Get Stream Price Map",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"streamType\": \"monthly\",\n  \"frequency\": 2\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getStreamPriceMap",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getStreamPriceMap"]
+						},
+						"description": "Get pricing information for different stream types and frequencies."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cart Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"operation\": \"push\",\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"CapsuleCreatedBy\": \"{{user_session_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCartCapsule",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCartCapsule"]
+						},
+						"description": "Add or remove capsule from user's cart. Operation: 'push' to add, 'pull' to remove. Requires user session."
+					},
+					"response": [
+						{
+							"name": "Success - Add to Cart",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									},
+									{
+										"key": "Cookie",
+										"value": "connect.sid=user_session_id"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"operation\": \"push\",\n  \"capsuleId\": \"capsule_id_here\",\n  \"CapsuleCreatedBy\": \"user_id_here\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/capsules/updateCartCapsule",
+									"host": ["{{base_url}}"],
+									"path": ["capsules", "updateCartCapsule"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"status\": 200,\n  \"message\": \"Capsules has been added to cart.\",\n  \"results\": {\n    \"_id\": \"cart_id_here\",\n    \"CreatedById\": \"user_id_here\",\n    \"CreatedByEmail\": \"user@example.com\",\n    \"CartItems\": [\n      {\n        \"CapsuleId\": {\n          \"_id\": \"capsule_id_here\",\n          \"Title\": \"Capsule Title\",\n          \"Price\": 10.99\n        },\n        \"CapsuleCreatedBy\": {\n          \"_id\": \"creator_id_here\",\n          \"Name\": \"Creator Name\"\n        },\n        \"MonthFor\": 1,\n        \"Frequency\": 2\n      }\n    ]\n  }\n}"
+						},
+						{
+							"name": "Error - Missing Fields",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"operation\": \"push\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+									"raw": "{{base_url}}/capsules/updateCartCapsule",
+									"host": ["{{base_url}}"],
+									"path": ["capsules", "updateCartCapsule"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"body": "{\n  \"status\": 400,\n  \"message\": \"CapsuleId is required\",\n  \"results\": null\n}"
+						}
+					]
+				},
+				{
+					"name": "Update Pull Cart Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"pullSettings\": {\n    \"enabled\": true,\n    \"frequency\": \"weekly\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updatePullCartCapsule",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updatePullCartCapsule"]
+						},
+						"description": "Update pull cart settings for a capsule."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Cart",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/capsules/getCart",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getCart"]
+						},
+						"description": "Retrieve current user's shopping cart contents."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cart Owners",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"owners\": [\"owner1@email.com\", \"owner2@email.com\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCartOwners",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCartOwners"]
+						},
+						"description": "Update the list of owners for a capsule in cart."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Capsule Owners",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/capsules/getCapsuleOwners?capsuleId={{capsule_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getCapsuleOwners"],
+							"query": [
+								{
+									"key": "capsuleId",
+									"value": "{{capsule_id}}"
+								}
+							]
+						},
+						"description": "Get list of owners for a specific capsule."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Pull Cart Owners",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"pullOwners\": [\"owner1@email.com\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updatePullCartOwners",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updatePullCartOwners"]
+						},
+						"description": "Update pull cart owners for a capsule."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cart For Myself",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"forMyself\": true,\n  \"settings\": {\n    \"frequency\": \"daily\",\n    \"emailTemplate\": \"default\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCartForMyself",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCartForMyself"]
+						},
+						"description": "Update cart settings for personal use of a capsule."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cart For Gift",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"giftSettings\": {\n    \"recipientEmail\": \"recipient@email.com\",\n    \"message\": \"Happy Birthday!\",\n    \"deliveryDate\": \"2024-12-25\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCartForGift",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCartForGift"]
+						},
+						"description": "Configure cart for gifting a capsule to someone."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cart For Surprise Gift",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"surpriseGiftSettings\": {\n    \"recipientEmail\": \"recipient@email.com\",\n    \"surpriseDate\": \"2024-12-25\",\n    \"isSurprise\": true\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCartForSurpriseGift",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCartForSurpriseGift"]
+						},
+						"description": "Configure cart for surprise gift delivery."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cart For Month",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"monthSettings\": {\n    \"month\": \"January\",\n    \"year\": 2024,\n    \"frequency\": \"monthly\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCartForMonth",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCartForMonth"]
+						},
+						"description": "Update cart settings for monthly delivery."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cart For Frequency",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"frequencySettings\": {\n    \"frequency\": \"weekly\",\n    \"daysBetween\": 7\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCartForFrequency",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCartForFrequency"]
+						},
+						"description": "Update cart frequency settings for capsule delivery."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cart For Email Template",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"emailTemplate\": \"ProfessionalThinker\",\n  \"customMessage\": \"Your personalized content is ready!\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCartForEmailTemplate",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCartForEmailTemplate"]
+						},
+						"description": "Update email template settings for capsule delivery."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cart For Month Active Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"activeMonthSettings\": {\n    \"month\": \"January\",\n    \"year\": 2024,\n    \"isActive\": true\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCartForMonth_ActiveCapsule",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCartForMonth_ActiveCapsule"]
+						},
+						"description": "Update active capsule settings for specific month."
+					},
+					"response": []
+				},
+				{
+					"name": "Unsubscribe Change Settings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"unsubscribeSettings\": {\n    \"unsubscribe\": true,\n    \"reason\": \"too frequent\",\n    \"newFrequency\": \"monthly\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/unsubscribe_changeSettings",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "unsubscribe_changeSettings"]
+						},
+						"description": "Handle unsubscribe requests and change delivery settings."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Cart For Frequency Active Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"activeFrequencySettings\": {\n    \"frequency\": \"weekly\",\n    \"isActive\": true,\n    \"daysBetween\": 7\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCartForFrequency_ActiveCapsule",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCartForFrequency_ActiveCapsule"]
+						},
+						"description": "Update active capsule frequency settings."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Stream Settings Active Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"streamSettings\": {\n    \"streamType\": \"continuous\",\n    \"isActive\": true,\n    \"paused\": false\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateStreamSettings_ActiveCapsule",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateStreamSettings_ActiveCapsule"]
+						},
+						"description": "Update active capsule stream settings."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Stream Settings Active Capsule Group Stream",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"groupStreamSettings\": {\n    \"streamType\": \"group\",\n    \"isActive\": true,\n    \"groupSize\": 5,\n    \"syncMode\": \"real-time\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateStreamSettings_ActiveCapsule_GroupStream",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateStreamSettings_ActiveCapsule_GroupStream"]
+						},
+						"description": "Update active capsule group stream settings."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Capsule Utility & Information",
+			"item": [
+				{
+					"name": "Preview Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"previewMode\": \"full\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/preview",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "preview"]
+						},
+						"description": "Preview a capsule before publishing."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current Capsule",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/capsules/current",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "current"]
+						},
+						"description": "Get the currently active/selected capsule."
+					},
+					"response": []
+				},
+				{
+					"name": "Invite User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"email\": \"user@email.com\",\n  \"role\": \"viewer\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/invite",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "invite"]
+						},
+						"description": "Invite a user to collaborate on a capsule."
+					},
+					"response": []
+				},
+				{
+					"name": "Save Birthday Settings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"birthdaySettings\": {\n    \"birthdayDate\": \"1990-05-15\",\n    \"reminderEnabled\": true,\n    \"giftMode\": true\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/saveBirthday",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "saveBirthday"]
+						},
+						"description": "Save birthday-related settings for a capsule."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"title\": \"Updated Capsule Title\",\n  \"description\": \"Updated description\",\n  \"settings\": {\n    \"isPublic\": true,\n    \"allowComments\": true\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateCapsule",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateCapsule"]
+						},
+						"description": "Update general capsule information and settings."
+					},
+					"response": []
+				},
+				{
+					"name": "Get All IDs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/capsules/getAllIds",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getAllIds"]
+						},
+						"description": "Get all capsule IDs for the current user."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Unique IDs",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/capsules/getUniqueIds",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getUniqueIds"]
+						},
+						"description": "Get unique capsule IDs (no duplicates)."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Creater Name",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/capsules/getCreaterName?capsuleId={{capsule_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getCreaterName"],
+							"query": [
+								{
+									"key": "capsuleId",
+									"value": "{{capsule_id}}"
+								}
+							]
+						},
+						"description": "Get the creator name for a specific capsule."
+					},
+					"response": []
+				},
+				{
+					"name": "Check Post Streams",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"checkType\": \"all\",\n  \"dateRange\": {\n    \"start\": \"2024-01-01\",\n    \"end\": \"2024-12-31\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/checkPostStreams",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "checkPostStreams"]
+						},
+						"description": "Check post streams for a capsule within a date range."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Capsule Posts & Media",
+			"item": [
+				{
+					"name": "Get Chapters in Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"qc\": \"allByCapsuleId\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/getLaunchedChapters",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "getLaunchedChapters"]
+						},
+						"description": "Get all chapters within a specific capsule. Use this to get chapter IDs for fetching pages and posts."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Pages in Capsule Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"chapterCheck\": true,\n  \"chapterId\": \"{{chapter_id}}\",\n  \"perPage\": 100,\n  \"pageNo\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getPageLibrary",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getPageLibrary"]
+						},
+						"description": "Get all pages within a specific chapter of a capsule. Use this to get page IDs for fetching posts."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Posts from Capsule Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": \"Image\",\n  \"selectedKeyword\": \"{{group_tag_id}}\",\n  \"skip\": 0,\n  \"limit\": 20\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getMedia",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getMedia"]
+						},
+						"description": "Get posts/media from a specific page within a capsule. Type can be 'Image' or 'Video'. selectedKeyword is optional."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Community Posts from Capsule Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"page\": 1,\n  \"per_page\": 20\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getCommunityPosts",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getCommunityPosts"]
+						},
+						"description": "Get community posts from a page within a capsule. Returns posts from other users who have the same page."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Platform Posts from Capsule Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"page\": 1,\n  \"per_page\": 20,\n  \"ThemeId\": \"{{theme_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getPlateformPosts",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getPlateformPosts"]
+						},
+						"description": "Get platform posts from a page within a capsule. Returns posts from the entire platform. ThemeId is optional."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		},
+		{
+			"key": "capsule_id",
+			"value": "your_capsule_id_here",
+			"type": "string"
+		},
+		{
+			"key": "library_capsule_id",
+			"value": "library_capsule_id_here",
+			"type": "string"
+		},
+		{
+			"key": "user_session_id",
+			"value": "your_user_session_id_here",
+			"type": "string",
+			"description": "User session ID from login response (7-day timeout)"
+		},
+		{
+			"key": "chapter_id",
+			"value": "your_chapter_id_here",
+			"type": "string"
+		},
+		{
+			"key": "page_id",
+			"value": "your_page_id_here",
+			"type": "string"
+		},
+		{
+			"key": "group_tag_id",
+			"value": "your_group_tag_id_here",
+			"type": "string"
+		},
+		{
+			"key": "theme_id",
+			"value": "your_theme_id_here",
+			"type": "string"
+		}
+	]
+}

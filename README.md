@@ -1,64 +1,33 @@
 # CollabMedia Backend
 
-## Description
-Backend API for CollabMedia platform.
+This is the backend API for the CollabMedia application.
 
-## Installation
-```bash
-npm install
-```
+## Getting Started
 
-## Environment Setup
-Copy `.env.example` to `.env` and configure:
-```
-NODE_ENV=development
-PORT=3002
-MONGODB_URI=mongodb://127.0.0.1:27017/collabmedia
-SESSION_SECRET=your_session_secret
-SECRET_API_KEY=your_api_key
-```
+### Prerequisites
+- Node.js
+- MongoDB
+- Required npm packages
 
-## Running the Application
-```bash
-# Development
-npm run dev
-
-# Production
-npm start
-```
+### Installation
+1. Clone the repository
+2. Install dependencies: `npm install`
+3. Configure environment variables
+4. Start the server: `npm start`
 
 ## API Endpoints
-- Base URL: http://localhost:3002
-- API Documentation: Available in OpenAPI format
 
-## Database
-- MongoDB required
-- Database name: collabmedia
-- Collections created on-demand
-
-## Dependencies
-- Node.js 18+
-- MongoDB 3.6+
-- Redis (optional)
-
-## Project Structure
-```
-collabmedia-backend/
-├── server/           # Backend server code
-│   ├── controllers/  # API controllers
-│   ├── models/       # Database models
-│   ├── routes/       # API routes
-│   └── middlewares/  # Express middlewares
-├── config/           # Configuration files
-├── project_cluster_scrpt.js  # Main entry point
-└── package.json      # Backend dependencies
-```
-
-## API Features
-- User authentication and management
+The API provides various endpoints for:
+- User management
 - Media upload and processing
-- Content management
-- Real-time notifications (Socket.IO)
-- Cron jobs for automated tasks
-- Google APIs integration
-- Payment processing (Stripe) 
+- Capsule management
+- Board and page management
+- Social interactions
+
+## Development
+
+For development setup and contribution guidelines, please refer to the project documentation.
+
+## License
+
+This project is proprietary software.

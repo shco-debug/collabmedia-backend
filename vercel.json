@@ -1,0 +1,27 @@
+{
+  "version": 2,
+  "name": "collabmedia-backend",
+  "builds": [
+    {
+      "src": "server.js",
+      "use": "@vercel/node"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "/server.js"
+    }
+  ],
+  "env": {
+    "NODE_ENV": "development",
+    "PORT": "3002"
+  },
+  "functions": {
+    "server.js": {
+      "maxDuration": 30
+    }
+  },
+  "regions": ["iad1"],
+  "framework": null
+}

@@ -1,0 +1,814 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-capsule-purchase-api",
+		"name": "CollabMedia Capsule Purchase API",
+		"description": "Comprehensive API collection for testing CollabMedia Capsule Purchase system including shopping cart, payment processing, order management, and purchase analytics. All endpoints require user authentication with 7-day session timeout. Use the Authentication collection to login first and get session cookies.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-capsule-purchase-api"
+	},
+	"item": [
+		{
+			"name": "🔍 Capsule Discovery & Browsing",
+			"item": [
+				{
+					"name": "Browse Public Gallery Capsules",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"qc\": \"galleryCapsulesList\",\n    \"skip\": 0,\n    \"limit\": 20,\n    \"sortBy\": \"createdOn\",\n    \"sortOrder\": \"desc\",\n    \"filters\": {\n        \"priceRange\": {\n            \"min\": 0,\n            \"max\": 100\n        },\n        \"categories\": [],\n        \"tags\": []\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules",
+							"host": ["{{base_url}}"],
+							"path": ["capsules"]
+						},
+						"description": "Browse capsules available for purchase in the public gallery. Supports filtering by price range, categories, and tags. Returns paginated list of capsules with pricing and metadata."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Capsule Details for Purchase",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/capsules/{{capsule_id}}",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "{{capsule_id}}"]
+						},
+						"description": "Get detailed information about a specific capsule including pricing, content preview, and purchase options. Use this to display capsule details before adding to cart."
+					},
+					"response": []
+				},
+				{
+					"name": "Search Capsules by Keywords",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"qc\": \"galleryCapsulesList\",\n    \"searchQuery\": \"productivity mindfulness\",\n    \"skip\": 0,\n    \"limit\": 20,\n    \"filters\": {\n        \"priceRange\": {\n            \"min\": 10,\n            \"max\": 50\n        },\n        \"categories\": [\"wellness\", \"business\"],\n        \"tags\": [\"mindfulness\", \"productivity\"]\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules",
+							"host": ["{{base_url}}"],
+							"path": ["capsules"]
+						},
+						"description": "Search capsules by keywords, categories, and tags. Supports advanced filtering options for finding relevant capsules to purchase."
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for discovering and browsing capsules available for purchase"
+		},
+		{
+			"name": "🛒 Shopping Cart & Purchase",
+			"item": [
+				{
+					"name": "Purchase Capsule (Buy Now)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"stripeToken\": \"tok_visa\",\n    \"purchaseFor\": [\"ME\"],\n    \"owners\": [\n        {\n            \"UserEmail\": \"buyer@example.com\",\n            \"UserName\": \"John Doe\",\n            \"uniqueId\": \"unique_owner_id_123\"\n        }\n    ],\n    \"paymentMethod\": \"stripe\",\n    \"billingAddress\": {\n        \"street\": \"123 Main St\",\n        \"city\": \"New York\",\n        \"state\": \"NY\",\n        \"zipCode\": \"10001\",\n        \"country\": \"US\"\n    },\n    \"orderNotes\": \"Gift purchase for team member\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Complete capsule purchase using Stripe payment processing. Creates personalized capsule instances for each owner. Supports single or multiple owners (gift purchases). Requires valid Stripe token and owner information."
+					},
+					"response": []
+				},
+				{
+					"name": "Purchase Multiple Capsules",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"stripeToken\": \"tok_visa\",\n    \"purchaseFor\": [\"ME\", \"OTHERS\"],\n    \"owners\": [\n        {\n            \"UserEmail\": \"buyer@example.com\",\n            \"UserName\": \"John Doe\",\n            \"uniqueId\": \"unique_owner_id_123\"\n        },\n        {\n            \"UserEmail\": \"gift@example.com\",\n            \"UserName\": \"Jane Smith\",\n            \"uniqueId\": \"unique_owner_id_456\"\n        }\n    ],\n    \"paymentMethod\": \"stripe\",\n    \"billingAddress\": {\n        \"street\": \"123 Main St\",\n        \"city\": \"New York\",\n        \"state\": \"NY\",\n        \"zipCode\": \"10001\",\n        \"country\": \"US\"\n    },\n    \"orderNotes\": \"Bulk purchase for team training\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Purchase multiple capsules for multiple owners (bulk/gift purchases). Creates separate capsule instances for each owner. Useful for team purchases or gift giving."
+					},
+					"response": []
+				},
+				{
+					"name": "Selective Purchase (Buy Specific Capsules)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"tok_visa\",\n    \"selectedCapsuleIds\": [\"{{capsule_id_1}}\", \"{{capsule_id_2}}\"],\n    \"tokenEmail\": \"buyer@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Purchase only specific capsules from cart by providing capsule IDs. Useful when cart has multiple items but user wants to buy only selected ones. Validates that selected capsules exist in cart before processing payment."
+					},
+					"response": []
+				},
+				{
+					"name": "Purchase All Cart Items (Default)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"token\": \"tok_visa\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Purchase all items in cart (default behavior). No capsule IDs specified - processes all cart items. This is the original behavior maintained for backward compatibility."
+					},
+					"response": []
+				},
+				{
+					"name": "Create Celebrity Instance",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"capsuleId\": \"{{capsule_id}}\",\n    \"celebrityName\": \"Tony Robbins\",\n    \"celebrityEmail\": \"tony@robbins.com\",\n    \"celebrityBio\": \"Motivational speaker and life coach\",\n    \"customizationOptions\": {\n        \"personalizedIntro\": true,\n        \"customBranding\": false,\n        \"specialMessages\": [\"Welcome to your personalized journey\"]\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/createCelebrityInstance",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "createCelebrityInstance"]
+						},
+						"description": "Create a special celebrity/influencer instance of a capsule. Used for high-profile purchases or celebrity endorsements with custom branding and personalization."
+					},
+					"response": []
+				}
+			],
+			"description": "Core purchase endpoints for buying capsules and creating instances"
+		},
+		{
+			"name": "📦 Order Management",
+			"item": [
+				{
+					"name": "Get My Purchases",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"skip\": 0,\n    \"limit\": 20,\n    \"sortBy\": \"purchaseDate\",\n    \"sortOrder\": \"desc\",\n    \"filters\": {\n        \"status\": [\"completed\", \"active\"],\n        \"dateRange\": {\n            \"start\": \"2024-01-01\",\n            \"end\": \"2024-12-31\"\n        },\n        \"priceRange\": {\n            \"min\": 0,\n            \"max\": 100\n        }\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getMyPurchases",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getMyPurchases"]
+						},
+						"description": "Get all capsules purchased by the current user. Includes purchase history, order details, and capsule access information. Supports filtering and pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get My Sales (Creator)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"skip\": 0,\n    \"limit\": 20,\n    \"sortBy\": \"saleDate\",\n    \"sortOrder\": \"desc\",\n    \"filters\": {\n        \"status\": [\"completed\"],\n        \"dateRange\": {\n            \"start\": \"2024-01-01\",\n            \"end\": \"2024-12-31\"\n        },\n        \"capsuleIds\": [\"{{capsule_id}}\"],\n        \"revenueRange\": {\n            \"min\": 0,\n            \"max\": 1000\n        }\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getMySales",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getMySales"]
+						},
+						"description": "Get sales data for capsules created by the current user. Includes revenue, buyer information, and sales analytics. Useful for creators to track their earnings."
+					},
+					"response": []
+				},
+				{
+					"name": "Export Sales Data (Excel)",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/capsules/getSalesExcel?startDate=2024-01-01&endDate=2024-12-31&format=xlsx",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getSalesExcel"],
+							"query": [
+								{
+									"key": "startDate",
+									"value": "2024-01-01",
+									"description": "Start date for sales data export"
+								},
+								{
+									"key": "endDate",
+									"value": "2024-12-31",
+									"description": "End date for sales data export"
+								},
+								{
+									"key": "format",
+									"value": "xlsx",
+									"description": "Export format (xlsx, csv)"
+								}
+							]
+						},
+						"description": "Export sales data to Excel format for detailed analysis. Includes buyer information, revenue breakdown, and sales trends. Useful for accounting and business analysis."
+					},
+					"response": []
+				}
+			],
+			"description": "Order management endpoints for tracking purchases and sales"
+		},
+		{
+			"name": "👥 Buyer Analytics & Management",
+			"item": [
+				{
+					"name": "Get Capsule Buyers",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}",
+								"description": "ID of the capsule to get buyers for"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"capsule_id\": \"{{capsule_id}}\",\n    \"skip\": 0,\n    \"limit\": 50,\n    \"filters\": {\n        \"purchaseDateRange\": {\n            \"start\": \"2024-01-01\",\n            \"end\": \"2024-12-31\"\n        },\n        \"orderStatus\": [\"Completed\"],\n        \"paymentMethod\": [\"stripe\", \"credit_card\"]\n    },\n    \"includeUserDetails\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getCapsuleBuyers",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getCapsuleBuyers"]
+						},
+						"description": "Get all users who purchased a specific capsule. Includes buyer details, purchase information, and user profiles. Useful for customer support, marketing, and analytics."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Buyer Purchase History",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"buyerEmail\": \"buyer@example.com\",\n    \"skip\": 0,\n    \"limit\": 20,\n    \"includeCapsuleDetails\": true,\n    \"includeOrderDetails\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getBuyerHistory",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getBuyerHistory"]
+						},
+						"description": "Get complete purchase history for a specific buyer. Useful for customer support and understanding buyer behavior patterns."
+					},
+					"response": []
+				}
+			],
+			"description": "Analytics and management endpoints for understanding buyers and purchase patterns"
+		},
+		{
+			"name": "📊 Purchase Analytics & Reporting",
+			"item": [
+				{
+					"name": "Get Purchase Analytics Dashboard",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dateRange\": {\n        \"start\": \"2024-01-01\",\n        \"end\": \"2024-12-31\"\n    },\n    \"metrics\": [\n        \"totalRevenue\",\n        \"totalSales\",\n        \"averageOrderValue\",\n        \"topSellingCapsules\",\n        \"buyerDemographics\",\n        \"salesTrends\",\n        \"refundRate\"\n    ],\n    \"groupBy\": \"month\",\n    \"includeCharts\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getPurchaseAnalytics",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getPurchaseAnalytics"]
+						},
+						"description": "Get comprehensive purchase analytics including revenue, sales trends, buyer demographics, and performance metrics. Useful for business intelligence and reporting."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Revenue Breakdown",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"dateRange\": {\n        \"start\": \"2024-01-01\",\n        \"end\": \"2024-12-31\"\n    },\n    \"breakdownBy\": \"capsule\",\n    \"includeCommission\": true,\n    \"includeTaxes\": true,\n    \"includeRefunds\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getRevenueBreakdown",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getRevenueBreakdown"]
+						},
+						"description": "Get detailed revenue breakdown by capsule, including platform commission, taxes, and refunds. Useful for financial reporting and profit analysis."
+					},
+					"response": []
+				}
+			],
+			"description": "Advanced analytics and reporting endpoints for purchase data"
+		},
+		{
+			"name": "🎁 Gift & Bulk Purchases",
+			"item": [
+				{
+					"name": "Purchase Capsule as Gift",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"stripeToken\": \"tok_visa\",\n    \"purchaseFor\": [\"OTHERS\"],\n    \"owners\": [\n        {\n            \"UserEmail\": \"gift@example.com\",\n            \"UserName\": \"Gift Recipient\",\n            \"uniqueId\": \"gift_unique_id_123\"\n        }\n    ],\n    \"giftOptions\": {\n        \"giftMessage\": \"Happy Birthday! Enjoy this learning journey.\",\n        \"giftDeliveryDate\": \"2024-12-25\",\n        \"anonymousGift\": false,\n        \"giftNotification\": true\n    },\n    \"paymentMethod\": \"stripe\",\n    \"billingAddress\": {\n        \"street\": \"123 Main St\",\n        \"city\": \"New York\",\n        \"state\": \"NY\",\n        \"zipCode\": \"10001\",\n        \"country\": \"US\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Purchase a capsule as a gift for someone else. Includes gift message, delivery options, and notification settings. Creates a personalized capsule instance for the gift recipient."
+					},
+					"response": []
+				},
+				{
+					"name": "Bulk Purchase for Team",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"stripeToken\": \"tok_visa\",\n    \"purchaseFor\": [\"OTHERS\"],\n    \"owners\": [\n        {\n            \"UserEmail\": \"team1@company.com\",\n            \"UserName\": \"Team Member 1\",\n            \"uniqueId\": \"team_unique_id_1\"\n        },\n        {\n            \"UserEmail\": \"team2@company.com\",\n            \"UserName\": \"Team Member 2\",\n            \"uniqueId\": \"team_unique_id_2\"\n        },\n        {\n            \"UserEmail\": \"team3@company.com\",\n            \"UserName\": \"Team Member 3\",\n            \"uniqueId\": \"team_unique_id_3\"\n        }\n    ],\n    \"bulkOptions\": {\n        \"teamDiscount\": true,\n        \"bulkNotification\": true,\n        \"teamWelcomeMessage\": \"Welcome to our team learning program!\",\n        \"adminAccess\": true\n    },\n    \"paymentMethod\": \"stripe\",\n    \"billingAddress\": {\n        \"street\": \"123 Corporate Blvd\",\n        \"city\": \"New York\",\n        \"state\": \"NY\",\n        \"zipCode\": \"10001\",\n        \"country\": \"US\"\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Purchase capsules for multiple team members at once. Includes team discounts, bulk notifications, and admin access options. Useful for corporate training programs."
+					},
+					"response": []
+				}
+			],
+			"description": "Special purchase scenarios for gifts and bulk orders"
+		},
+		{
+			"name": "🔧 Purchase Configuration & Settings",
+			"item": [
+				{
+					"name": "Get Purchase Settings",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/capsules/getPurchaseSettings",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getPurchaseSettings"]
+						},
+						"description": "Get user's purchase preferences and settings including payment methods, billing information, and notification preferences."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Purchase Settings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"defaultPaymentMethod\": \"stripe\",\n    \"billingAddress\": {\n        \"street\": \"123 Main St\",\n        \"city\": \"New York\",\n        \"state\": \"NY\",\n        \"zipCode\": \"10001\",\n        \"country\": \"US\"\n    },\n    \"notificationPreferences\": {\n        \"purchaseConfirmation\": true,\n        \"giftNotifications\": true,\n        \"salesUpdates\": false,\n        \"promotionalEmails\": true\n    },\n    \"privacySettings\": {\n        \"sharePurchaseHistory\": false,\n        \"allowMarketing\": true\n    }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updatePurchaseSettings",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updatePurchaseSettings"]
+						},
+						"description": "Update user's purchase preferences including default payment methods, billing information, and notification settings."
+					},
+					"response": []
+				}
+			],
+			"description": "Configuration endpoints for managing purchase preferences and settings"
+		},
+		{
+			"name": "📱 Post-Purchase Content Access",
+			"item": [
+				{
+					"name": "Get Posts from Purchased Capsules",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"skip\": 0,\n    \"limit\": 20,\n    \"sortBy\": \"uploadedOn\",\n    \"sortOrder\": \"desc\",\n    \"filters\": {\n        \"mediaType\": [\"Image\", \"Video\"],\n        \"capsuleIds\": [\"{{capsule_id}}\"],\n        \"dateRange\": {\n            \"start\": \"2024-01-01\",\n            \"end\": \"2024-12-31\"\n        }\n    },\n    \"includeInteractions\": true,\n    \"includeUserDetails\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getUserPurchasedCapsulesPosts",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getUserPurchasedCapsulesPosts"]
+						},
+						"description": "Get all posts from capsules purchased by the user. Includes media content, interactions (likes, comments), and user details. Supports filtering and pagination."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Single Capsule Posts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie (7-day timeout)"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}",
+								"description": "ID of the capsule to get posts from"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"capsuleId\": \"{{capsule_id}}\",\n    \"skip\": 0,\n    \"limit\": 20,\n    \"type\": \"Image\",\n    \"selectedKeyword\": \"mindfulness\",\n    \"includeInteractions\": true,\n    \"includeUserDetails\": true\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getCapsulePosts",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getCapsulePosts"]
+						},
+						"description": "Get posts from a specific purchased capsule. Includes media filtering, keyword search, and interaction data. Useful for accessing capsule content after purchase."
+					},
+					"response": []
+				}
+			],
+			"description": "Endpoints for accessing content after successful purchase"
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Auto-set common variables",
+					"if (!pm.environment.get('base_url')) {",
+					"    pm.environment.set('base_url', 'http://localhost:3002');",
+					"}",
+					"",
+					"// Generate unique IDs for testing",
+					"if (!pm.environment.get('capsule_id')) {",
+					"    pm.environment.set('capsule_id', '68badf21e7111ff6b63383ac');",
+					"}",
+					"",
+					"if (!pm.environment.get('user_session_id')) {",
+					"    pm.environment.set('user_session_id', 's%3Ayour_session_id_here');",
+					"}"
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Common test scripts for all requests",
+					"pm.test('Response time is less than 5000ms', function () {",
+					"    pm.expect(pm.response.responseTime).to.be.below(5000);",
+					"});",
+					"",
+					"pm.test('Response has valid JSON structure', function () {",
+					"    pm.response.to.be.json;",
+					"});",
+					"",
+					"// Test for successful responses",
+					"if (pm.response.code === 200) {",
+					"    pm.test('Response contains success indicators', function () {",
+					"        const jsonData = pm.response.json();",
+					"        pm.expect(jsonData).to.have.property('code');",
+					"        pm.expect(jsonData.code).to.be.oneOf(['200', 200]);",
+					"    });",
+					"}",
+					"",
+					"// Test for error responses",
+					"if (pm.response.code >= 400) {",
+					"    pm.test('Error response has proper structure', function () {",
+					"        const jsonData = pm.response.json();",
+					"        pm.expect(jsonData).to.have.property('code');",
+					"        pm.expect(jsonData).to.have.property('message');",
+					"    });",
+					"}"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"description": "Base URL for CollabMedia API server"
+		},
+		{
+			"key": "capsule_id",
+			"value": "68badf21e7111ff6b63383ac",
+			"description": "Sample capsule ID for testing"
+		},
+		{
+			"key": "user_session_id",
+			"value": "s%3Ayour_session_id_here",
+			"description": "User session ID from login (7-day timeout)"
+		}
+	]
+}

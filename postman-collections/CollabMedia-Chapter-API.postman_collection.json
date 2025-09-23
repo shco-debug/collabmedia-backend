@@ -1,0 +1,1083 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-chapter-api",
+		"name": "CollabMedia Chapter API",
+		"description": "Complete API collection for testing CollabMedia Chapter endpoints including CRUD operations, publishing, sharing, and advanced features",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-chapter-api"
+	},
+	"item": [
+		{
+			"name": "Chapter CRUD Operations",
+			"item": [
+				{
+					"name": "Create New Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"CapsuleId\": \"{{capsule_id}}\",\n  \"Title\": \"New Chapter Title\",\n  \"Order\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/create",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "create"]
+						},
+						"description": "Create a new chapter within a capsule. Requires capsule_id in body."
+					},
+					"response": []
+				},
+				{
+					"name": "Get All Chapters",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/chapters/",
+							"host": ["{{base_url}}"],
+							"path": ["chapters"]
+						},
+						"description": "Retrieve all user chapters that are not published."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Chapters Paginated",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"qc\": \"all\",\n  \"perPage\": 10,\n  \"pageNo\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/",
+							"host": ["{{base_url}}"],
+							"path": ["chapters"]
+						},
+						"description": "Get paginated chapters. qc values: 'all', 'createdByMe', 'sharedWithMe', 'createdForMe', 'byTheHouse', 'allByCapsuleId'"
+					},
+					"response": []
+				},
+				{
+					"name": "Duplicate Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/duplicate",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "duplicate"]
+						},
+						"description": "Duplicate an existing chapter with all its content and pages. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/remove",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "remove"]
+						},
+						"description": "Remove/delete a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Update Chapter Name",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Title\": \"Updated Chapter Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/updateChapterName",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "updateChapterName"]
+						},
+						"description": "Update the title/name of a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Reorder Chapters",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"chapterIds\": [\"{{chapter_id_1}}\", \"{{chapter_id_2}}\", \"{{chapter_id_3}}\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/reorder",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "reorder"]
+						},
+						"description": "Reorder chapters within a capsule. Provide chapter IDs in desired order."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chapter Library & Sharing",
+			"item": [
+				{
+					"name": "Add From Library",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"chapterId\": \"{{library_chapter_id}}\",\n  \"capsuleId\": \"{{capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/addFromLibrary",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "addFromLibrary"]
+						},
+						"description": "Add a chapter from the library to a capsule."
+					},
+					"response": []
+				},
+				{
+					"name": "Share Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"shareWithEmail\": \"user@example.com\",\n  \"shareWithName\": \"User Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/share",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "share"]
+						},
+						"description": "Share a chapter with another user by email. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Invite Member",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"member@example.com\",\n  \"name\": \"Member Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/inviteMember",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "inviteMember"]
+						},
+						"description": "Invite a member to collaborate on a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Invitee",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"member@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/removeInvitee",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "removeInvitee"]
+						},
+						"description": "Remove an invitee from a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Add Owner",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"owner@example.com\",\n  \"name\": \"Owner Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/addOwner",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "addOwner"]
+						},
+						"description": "Add an owner to a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Remove Owner",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"owner@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/removeOwner",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "removeOwner"]
+						},
+						"description": "Remove an owner from a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chapter Publishing & Launch",
+			"item": [
+				{
+					"name": "Save and Launch",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MakingFor\": \"ME\",\n  \"ShareMode\": \"friend-group\",\n  \"Invitees\": []\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/saveAndLaunch",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "saveAndLaunch"]
+						},
+						"description": "Save launch settings and launch a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Launched Chapters",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"qc\": \"all\",\n  \"perPage\": 10,\n  \"pageNo\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/getLaunchedChapters",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "getLaunchedChapters"]
+						},
+						"description": "Get launched chapters. qc values: 'all', 'launchedByMe', 'invitationForMe', 'byTheHouse'"
+					},
+					"response": []
+				},
+				{
+					"name": "Save Launch Settings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MakingFor\": \"ME\",\n  \"ShareMode\": \"friend-group\",\n  \"Invitees\": []\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/saveSetting",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "saveSetting"]
+						},
+						"description": "Save launch settings for a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chapter Media & Assets",
+			"item": [
+				{
+					"name": "Upload Cover Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "coverImage",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/uploadCover",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "uploadCover"]
+						},
+						"description": "Upload cover image for a chapter. Requires chapter_id in headers and file upload."
+					},
+					"response": []
+				},
+				{
+					"name": "Upload Menu Icon",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "menuIcon",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/uploadMenuIcon",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "uploadMenuIcon"]
+						},
+						"description": "Upload menu icon for a chapter. Requires chapter_id in headers and file upload."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Cover Art",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/delCoverArt",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "delCoverArt"]
+						},
+						"description": "Delete cover art from a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Menu Icon",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/delMenuIcon",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "delMenuIcon"]
+						},
+						"description": "Delete menu icon from a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chapter Content & Pages",
+			"item": [
+				{
+					"name": "Update Chapter for Page ID",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"pageId\": \"{{page_id}}\",\n  \"action\": \"add\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/updateChapterForPageId",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "updateChapterForPageId"]
+						},
+						"description": "Update pages array in a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Chapter Intro Details",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/chapter-intro-details",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "chapter-intro-details"]
+						},
+						"description": "Get chapter introduction details. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Preview Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/preview",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "preview"]
+						},
+						"description": "Preview a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chapter Playlist & Audio",
+			"item": [
+				{
+					"name": "Add Audio to Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"audioId\": \"{{audio_id}}\",\n  \"order\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/addAudioToChapter",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "addAudioToChapter"]
+						},
+						"description": "Add audio to chapter playlist. Requires chapter_id in headers."
+					},
+					"response": []
+				},
+				{
+					"name": "Delete Audio from Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"audioId\": \"{{audio_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/deleteAudioToChapter",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "deleteAudioToChapter"]
+						},
+						"description": "Remove audio from chapter playlist. Requires chapter_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chapter Dashboard & Analytics",
+			"item": [
+				{
+					"name": "Dashboard - Find All Launched",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/chapters/dashboard",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "dashboard"]
+						},
+						"description": "Get dashboard view of all launched chapters."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Current Chapters",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/chapters/current",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "current"]
+						},
+						"description": "Get current chapters data for launch settings."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Invited Friends",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/chapters/getInvitedFriends",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "getInvitedFriends"]
+						},
+						"description": "Get list of friends invited to chapters."
+					},
+					"response": []
+				},
+				{
+					"name": "Find All Chapter IDs",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"qc\": \"all\",\n  \"perPage\": 10,\n  \"pageNo\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/findAllChapterIds",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "findAllChapterIds"]
+						},
+						"description": "Find all chapter IDs with pagination. qc values: 'all', 'createdByMe', 'sharedWithMe', 'createdForMe', 'byTheHouse'"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chapter Invitations & Collaboration",
+			"item": [
+				{
+					"name": "Invite to Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"invitee@example.com\",\n  \"name\": \"Invitee Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/chapters/invite",
+							"host": ["{{base_url}}"],
+							"path": ["chapters", "invite"]
+						},
+						"description": "Invite someone to a chapter. Requires chapter_id in headers."
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Chapter Posts & Media",
+			"item": [
+				{
+					"name": "Get Pages in Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"chapterCheck\": true,\n  \"chapterId\": \"{{chapter_id}}\",\n  \"perPage\": 100,\n  \"pageNo\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getPageLibrary",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getPageLibrary"]
+						},
+						"description": "Get all pages within a specific chapter. Use this to get page IDs for fetching posts."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Posts from Chapter Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": \"Image\",\n  \"selectedKeyword\": \"{{group_tag_id}}\",\n  \"skip\": 0,\n  \"limit\": 20\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getMedia",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getMedia"]
+						},
+						"description": "Get posts/media from a specific page within a chapter. Type can be 'Image' or 'Video'. selectedKeyword is optional."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Community Posts from Chapter Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"page\": 1,\n  \"per_page\": 20\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getCommunityPosts",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getCommunityPosts"]
+						},
+						"description": "Get community posts from a page within a chapter. Returns posts from other users who have the same page."
+					},
+					"response": []
+				},
+				{
+					"name": "Get Platform Posts from Chapter Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							},
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"page\": 1,\n  \"per_page\": 20,\n  \"ThemeId\": \"{{theme_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getPlateformPosts",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getPlateformPosts"]
+						},
+						"description": "Get platform posts from a page within a chapter. Returns posts from the entire platform. ThemeId is optional."
+					},
+					"response": []
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		},
+		{
+			"key": "chapter_id",
+			"value": "your_chapter_id_here",
+			"type": "string"
+		},
+		{
+			"key": "capsule_id",
+			"value": "your_capsule_id_here",
+			"type": "string"
+		},
+		{
+			"key": "page_id",
+			"value": "your_page_id_here",
+			"type": "string"
+		},
+		{
+			"key": "audio_id",
+			"value": "your_audio_id_here",
+			"type": "string"
+		},
+		{
+			"key": "library_chapter_id",
+			"value": "library_chapter_id_here",
+			"type": "string"
+		},
+		{
+			"key": "group_tag_id",
+			"value": "your_group_tag_id_here",
+			"type": "string"
+		},
+		{
+			"key": "theme_id",
+			"value": "your_theme_id_here",
+			"type": "string"
+		}
+	]
+}

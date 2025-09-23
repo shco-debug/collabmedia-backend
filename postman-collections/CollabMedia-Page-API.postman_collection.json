@@ -1,0 +1,1238 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-page-comprehensive-api",
+		"name": "CollabMedia - Comprehensive Page API",
+		"description": "Complete API collection for all Page operations including CRUD, media operations, content building, post management, and page customization. This collection consolidates all page-related endpoints into one comprehensive resource.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Page Management",
+			"item": [
+				{
+					"name": "Create Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Title\": \"Sample Page\",\n  \"PageType\": \"gallery\",\n  \"Order\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/create",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "create"]
+						},
+						"description": "Create a new page. PageType can be: 'gallery', 'content', or 'qaw-gallery'"
+					}
+				},
+				{
+					"name": "Get Page Data",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/pages/getPageData",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getPageData"]
+						},
+						"description": "Get page data (excludes Medias and UploadedMedia fields)"
+					}
+				},
+				{
+					"name": "Get Page Library",
+					"request": {
+						"method": "POST",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"qc\": \"all\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getPageLibrary",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getPageLibrary"]
+						},
+						"description": "Get page library with different query types: 'all', 'createdByMe', 'sharedWithMe', 'byTheHouse', 'allMyBoards__ForPastMediaPosting'"
+					},
+					"response": []
+				},
+				{
+					"name": "Get Pages by Chapter",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"chapterCheck\": true,\n  \"chapterId\": \"{{chapter_id}}\",\n  \"perPage\": 100,\n  \"pageNo\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getPageLibrary",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getPageLibrary"]
+						},
+						"description": "Get all pages within a specific chapter. Use chapterCheck=true and provide chapterId to filter pages by chapter."
+					},
+					"response": []
+				},
+				{
+					"name": "Duplicate Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}",
+								"type": "text"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/duplicate",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "duplicate"]
+						},
+						"description": "Duplicate an existing page with all its content, widgets, and media"
+					}
+				},
+				{
+					"name": "Remove Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/remove",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "remove"]
+						},
+						"description": "Remove/delete a page"
+					}
+				},
+				{
+					"name": "Reorder Pages",
+					"request": {
+						"method": "POST",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"pageOrder\": [\"page_id_1\", \"page_id_2\", \"page_id_3\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/reorder",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "reorder"]
+						},
+						"description": "Reorder pages within a chapter"
+					}
+				},
+				{
+					"name": "Add From Library",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "chapter_id",
+								"value": "{{chapter_id}}",
+								"type": "text"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/addFromLibrary",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "addFromLibrary"]
+						},
+						"description": "Add a page from the library to a chapter"
+					}
+				},
+				{
+					"name": "Preview Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/preview",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "preview"]
+						},
+						"description": "Preview a page before publishing"
+					}
+				},
+				{
+					"name": "Share Page",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"shareWithEmail\": \"user@example.com\",\n  \"shareWithName\": \"User Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/share",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "share"]
+						},
+						"description": "Share a page with another user"
+					}
+				}
+			]
+		},
+		{
+			"name": "Content Page Builder",
+			"item": [
+				{
+					"name": "Update Widgets",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ViewportDesktopSections\": {\n    \"Widgets\": [\n      {\n        \"Type\": \"text\",\n        \"Content\": \"Sample text widget\",\n        \"W\": 200,\n        \"H\": 100,\n        \"X\": 50,\n        \"Y\": 50\n      }\n    ]\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/updateWidgets",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "updateWidgets"]
+						},
+						"description": "Update widgets for a content page"
+					}
+				},
+				{
+					"name": "Update Background",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Background\": {\n    \"Type\": \"color\",\n    \"Data\": \"#ffffff\",\n    \"BgOpacity\": \"1\"\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/updateBackground",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "updateBackground"]
+						},
+						"description": "Update background for a content page"
+					}
+				},
+				{
+					"name": "Update Common Params",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"CommonParams\": {\n    \"IsGrid\": false,\n    \"IsSnap\": false,\n    \"ViewportDesktop\": true,\n    \"ViewportTablet\": false,\n    \"ViewportMobile\": false\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/updateCommonParams",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "updateCommonParams"]
+						},
+						"description": "Update common parameters for a content page"
+					}
+				},
+				{
+					"name": "Create Widget",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"widgetType\": \"text\",\n  \"widgetData\": {\n    \"Type\": \"text\",\n    \"Content\": \"New widget content\",\n    \"W\": 200,\n    \"H\": 100,\n    \"X\": 100,\n    \"Y\": 100\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/createWidget",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "createWidget"]
+						},
+						"description": "Create a new widget on a content page"
+					}
+				},
+				{
+					"name": "Remove Widget",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"widgetId\": \"{{widget_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/removeWidget",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "removeWidget"]
+						},
+						"description": "Remove a widget from a content page"
+					}
+				}
+			]
+		},
+		{
+			"name": "Media Operations",
+			"item": [
+				{
+					"name": "Upload Media (File)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "myFile",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "MediaType",
+									"value": "WidgetImage",
+									"type": "text"
+								},
+								{
+									"key": "AddedHow",
+									"value": "hardDrive",
+									"type": "text"
+								},
+								{
+									"key": "gt",
+									"value": "{{group_tag_id}}",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/uploadMedia",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "uploadMedia"]
+						},
+						"description": "Upload media file to content page. MediaType can be: WidgetImage, WidgetVideo, WidgetAudio, WidgetQuestAnswer, WidgetBgImage, WidgetBgVideo"
+					}
+				},
+				{
+					"name": "Upload Link",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"linkType\": \"image\",\n  \"content\": \"https://example.com/image.jpg\",\n  \"thumbnail\": \"https://example.com/thumb.jpg\",\n  \"MediaType\": \"WidgetLink\",\n  \"AddedHow\": \"dragDropLink\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/uploadLink",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "uploadLink"]
+						},
+						"description": "Upload link media to content page. MediaType can be: WidgetBgLink, WidgetLink"
+					}
+				},
+				{
+					"name": "Get Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": \"Image\",\n  \"selectedKeyword\": \"{{group_tag_id}}\",\n  \"skip\": 0,\n  \"limit\": 20\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getMedia",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getMedia"]
+						},
+						"description": "Get media by type (Image, Video) with optional keyword filtering"
+					}
+				},
+				{
+					"name": "Get All Keywords",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"startsWith\": \"lead\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getallKeywords",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getallKeywords"]
+						},
+						"description": "Get keywords starting with specific text"
+					}
+				}
+			]
+		},
+		{
+			"name": "Search Gallery Page",
+			"item": [
+				{
+					"name": "Get Page Name",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getPageName",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getPageName"]
+						},
+						"description": "Get page name for search gallery page"
+					}
+				},
+				{
+					"name": "Update Page Name",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Title\": \"Updated Page Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/updatePageName",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "updatePageName"]
+						},
+						"description": "Update page name for search gallery page"
+					}
+				},
+				{
+					"name": "Update Header Video Link",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"HeaderVideoLink\": \"https://www.youtube.com/watch?v=example\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/updateHeaderVideoLink",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "updateHeaderVideoLink"]
+						},
+						"description": "Update header video link for search gallery page"
+					}
+				},
+				{
+					"name": "Upload Header",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "myFile",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/uploadHeader",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "uploadHeader"]
+						},
+						"description": "Upload header image for search gallery page"
+					}
+				},
+				{
+					"name": "Upload Gallery Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "myFile",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/uploadGalleryMedia",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "uploadGalleryMedia"]
+						},
+						"description": "Upload media to gallery page"
+					}
+				},
+				{
+					"name": "Save Settings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"SelectionCriteria\": \"media\",\n  \"SelectedMedia\": [],\n  \"SelectedKeywords\": [],\n  \"SelectedFilters\": {},\n  \"SelectedGts\": [],\n  \"AddAnotherGts\": [],\n  \"ExcludedGts\": [],\n  \"mediaTypes\": [],\n  \"PageFilters\": {},\n  \"mediaRange\": 100\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/saveSettings",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "saveSettings"]
+						},
+						"description": "Save search gallery page settings"
+					}
+				},
+				{
+					"name": "Save Question Tip",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"QuestionTip\": \"What is your question?\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/saveQuesTip",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "saveQuesTip"]
+						},
+						"description": "Save question tip for QAW gallery page"
+					}
+				},
+				{
+					"name": "Save Video Data",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"uploadedVideo\": \"video_file_path.mp4\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/saveVideoData",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "saveVideoData"]
+						},
+						"description": "Save video data for page"
+					}
+				},
+				{
+					"name": "Save Theme Data",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Themes\": [\"theme1\", \"theme2\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/saveThemeData",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "saveThemeData"]
+						},
+						"description": "Save theme data for page"
+					}
+				}
+			]
+		},
+		{
+			"name": "Post Management",
+			"item": [
+				{
+					"name": "Move Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"post_id\": \"{{post_id}}\",\n  \"selectedPageId\": \"{{target_page_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/movePost",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "movePost"]
+						},
+						"description": "Move a post from one page to another"
+					}
+				},
+				{
+					"name": "Copy Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"post_id\": \"{{post_id}}\",\n  \"selectedPageId\": \"{{target_page_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/copyPost",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "copyPost"]
+						},
+						"description": "Copy a post to another page"
+					}
+				},
+				{
+					"name": "Update Post Label",
+					"request": {
+						"method": "POST",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"post_id\": \"{{post_id}}\",\n  \"label_id\": \"{{label_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/updatePostLabelId",
+							"host": ["{{base_url}}"],
+							"path": ["journal", "updatePostLabelId"]
+						},
+						"description": "Update post label ID (post_id and label_id required)"
+					}
+				},
+				{
+					"name": "Update Post Link URL",
+					"request": {
+						"method": "POST",
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"{{post_id}}\",\n  \"PostLinkUrl\": \"https://example.com/link\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/journal/updatePostLinkUrl",
+							"host": ["{{base_url}}"],
+							"path": ["journal", "updatePostLinkUrl"]
+						},
+						"description": "Update post link URL (PostId and PostLinkUrl required)"
+					}
+				},
+				{
+					"name": "Delete Gallery Media",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mediaId\": \"{{media_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/deleteGalleryMedia",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "deleteGalleryMedia"]
+						},
+						"description": "Delete media from user gallery"
+					}
+				},
+				{
+					"name": "Delete Uploaded Image",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"imageId\": \"{{image_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/deleteUploadedImage",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "deleteUploadedImage"]
+						},
+						"description": "Delete particular uploaded image"
+					}
+				}
+			]
+		},
+		{
+			"name": "Page Customization",
+			"item": [
+				{
+					"name": "Change Header Blur Value",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"HeaderBlurValue\": 5\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/changeHeaderBlurValue",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "changeHeaderBlurValue"]
+						},
+						"description": "Change header blur value (0-10)"
+					}
+				},
+				{
+					"name": "Change Transparency Value",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"HeaderTransparencyValue\": 4\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/changeTransparencyValue",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "changeTransparencyValue"]
+						},
+						"description": "Change header transparency value (0-10)"
+					}
+				},
+				{
+					"name": "Add Page Voice Over",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "myFile",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/addPageVoiceOver",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "addPageVoiceOver"]
+						},
+						"description": "Add voice over file to page"
+					}
+				},
+				{
+					"name": "Edit Statement",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"QuestionTip\": \"Updated question statement\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/editStatement",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "editStatement"]
+						},
+						"description": "Edit question statement for QAW gallery page"
+					}
+				}
+			]
+		},
+		{
+			"name": "Community & Platform",
+			"item": [
+				{
+					"name": "Get Community Posts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"page\": 1,\n  \"per_page\": 20\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getCommunityPosts",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getCommunityPosts"]
+						},
+						"description": "Get community posts for a page"
+					}
+				},
+				{
+					"name": "Get Platform Posts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"page\": 1,\n  \"per_page\": 20\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getPlateformPosts",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getPlateformPosts"]
+						},
+						"description": "Get platform posts for a page"
+					}
+				},
+				{
+					"name": "Get Meta Themes from Available Posts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "page_id",
+								"value": "{{page_id}}",
+								"type": "text"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/pages/getMetaThemes_fromAvailablePosts",
+							"host": ["{{base_url}}"],
+							"path": ["pages", "getMetaThemes_fromAvailablePosts"]
+						},
+						"description": "Get meta themes from available posts"
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		},
+		{
+			"key": "chapter_id",
+			"value": "your_chapter_id_here",
+			"type": "string"
+		},
+		{
+			"key": "page_id",
+			"value": "your_page_id_here",
+			"type": "string"
+		},
+		{
+			"key": "post_id",
+			"value": "your_post_id_here",
+			"type": "string"
+		},
+		{
+			"key": "target_page_id",
+			"value": "target_page_id_here",
+			"type": "string"
+		},
+		{
+			"key": "label_id",
+			"value": "your_label_id_here",
+			"type": "string"
+		},
+		{
+			"key": "group_tag_id",
+			"value": "your_group_tag_id_here",
+			"type": "string"
+		},
+		{
+			"key": "media_id",
+			"value": "your_media_id_here",
+			"type": "string"
+		},
+		{
+			"key": "image_id",
+			"value": "your_image_id_here",
+			"type": "string"
+		},
+		{
+			"key": "widget_id",
+			"value": "your_widget_id_here",
+			"type": "string"
+		}
+	]
+}

@@ -1,0 +1,506 @@
+{
+  "info": {
+    "name": "CollabMedia Video Upload API",
+    "description": "API collection for uploading videos with text content to create video posts",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "version": "1.0.0"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3002",
+      "type": "string"
+    },
+    {
+      "key": "session_cookie",
+      "value": "connect.sid=your_session_cookie_here",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "Video Upload with Text Content",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{session_cookie}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/video/file.mp4",
+              "description": "Video file to upload (supports: MP4, AVI, MOV, WMV, FLV, MKV, M4V, WebM)"
+            },
+            {
+              "key": "content",
+              "value": "This is my amazing video post! Check out this cool content I created. #video #awesome #content",
+              "type": "text",
+              "description": "Text content for the video post"
+            },
+            {
+              "key": "title",
+              "value": "My Awesome Video Post",
+              "type": "text",
+              "description": "Title for the video post (optional)"
+            },
+            {
+              "key": "prompt",
+              "value": "A video showcasing amazing content creation",
+              "type": "text",
+              "description": "Prompt/description for the video (optional)"
+            },
+            {
+              "key": "groupTags",
+              "value": "video,content,awesome,creation",
+              "type": "text",
+              "description": "Comma-separated group tags (optional)"
+            },
+            {
+              "key": "postPrivacySetting",
+              "value": "PublicWithName",
+              "type": "text",
+              "description": "Privacy setting: PublicWithName, PublicWithoutName, OnlyForOwner, InvitedFriends"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/media/videoUpload",
+          "host": ["{{base_url}}"],
+          "path": ["media", "videoUpload"]
+        },
+        "description": "Upload a video file with text content to create a video post. The system will automatically convert the video to optimized MP4 format, generate thumbnails, and store everything in S3."
+      },
+      "response": [
+        {
+          "name": "Successful Video Upload",
+          "originalRequest": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Cookie",
+                "value": "{{session_cookie}}"
+              }
+            ],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": "/path/to/video.mp4"
+                },
+                {
+                  "key": "content",
+                  "value": "This is my amazing video post!"
+                }
+              ]
+            },
+            "url": {
+              "raw": "{{base_url}}/media/videoUpload",
+              "host": ["{{base_url}}"],
+              "path": ["media", "videoUpload"]
+            }
+          },
+          "status": "OK",
+          "code": 200,
+          "_postman_previewlanguage": "json",
+          "header": [
+            {
+              "key": "Content-Type",
+              "value": "application/json"
+            }
+          ],
+          "cookie": [],
+          "body": "{\n  \"success\": true,\n  \"message\": \"Video uploaded successfully\",\n  \"data\": {\n    \"_id\": \"507f1f77bcf86cd799439011\",\n    \"Location\": [\n      {\n        \"Size\": \"15728640\",\n        \"URL\": \"https://bucket.s3.region.amazonaws.com/video/original/1703123456_recording_1.avi\",\n        \"Type\": \"original\",\n        \"Index\": 0,\n        \"S3Key\": \"video/original/1703123456_recording_1.avi\"\n      },\n      {\n        \"Size\": \"9437184\",\n        \"URL\": \"https://bucket.s3.region.amazonaws.com/video/original/1703123456_recording_1_converted.mp4\",\n        \"Type\": \"converted\",\n        \"Index\": 1,\n        \"S3Key\": \"video/original/1703123456_recording_1_converted.mp4\",\n        \"Format\": \"mp4\",\n        \"CompressionRatio\": 40.0\n      }\n    ],\n    \"AutoId\": 1,\n    \"UploadedBy\": \"user\",\n    \"UploadedOn\": \"2023-12-21T10:30:45.123Z\",\n    \"UploaderID\": \"507f1f77bcf86cd799439012\",\n    \"Source\": \"User-generated\",\n    \"Status\": 2,\n    \"ContentType\": \"video/webm\",\n    \"MediaType\": \"Video\",\n    \"AddedHow\": \"recording\",\n    \"IsPrivate\": 1,\n    \"Locator\": \"1703123456_recording_1\",\n    \"thumbnail\": \"1703123456_recording_1.png\",\n    \"Content\": \"This is my amazing video post! Check out this cool content I created. #video #awesome #content\",\n    \"Title\": \"My Awesome Video Post\",\n    \"Prompt\": \"A video showcasing amazing content creation\",\n    \"GroupTags\": [\"video\", \"content\", \"awesome\", \"creation\"],\n    \"PostPrivacySetting\": \"PublicWithName\",\n    \"thumbnailS3\": {\n      \"baseFileName\": \"1703123456_recording_1\",\n      \"thumbnails\": [\n        {\n          \"size\": \"100\",\n          \"s3Key\": \"video/thumbnails/100/1703123456_recording_1.png\",\n          \"thumbnailUrl\": \"https://bucket.s3.region.amazonaws.com/video/thumbnails/100/1703123456_recording_1.png\"\n        },\n        {\n          \"size\": \"300\",\n          \"s3Key\": \"video/thumbnails/300/1703123456_recording_1.png\",\n          \"thumbnailUrl\": \"https://bucket.s3.region.amazonaws.com/video/thumbnails/300/1703123456_recording_1.png\"\n        },\n        {\n          \"size\": \"600\",\n          \"s3Key\": \"video/thumbnails/600/1703123456_recording_1.png\",\n          \"thumbnailUrl\": \"https://bucket.s3.region.amazonaws.com/video/thumbnails/600/1703123456_recording_1.png\"\n        },\n        {\n          \"size\": \"aspectfit\",\n          \"s3Key\": \"video/thumbnails/aspectfit/1703123456_recording_1.png\",\n          \"thumbnailUrl\": \"https://bucket.s3.region.amazonaws.com/video/thumbnails/aspectfit/1703123456_recording_1.png\"\n        },\n        {\n          \"size\": \"aspectfit_small\",\n          \"s3Key\": \"video/thumbnails/aspectfit_small/1703123456_recording_1.png\",\n          \"thumbnailUrl\": \"https://bucket.s3.region.amazonaws.com/video/thumbnails/aspectfit_small/1703123456_recording_1.png\"\n        }\n      ]\n    }\n  },\n  \"s3Info\": {\n    \"s3Key\": \"video/original/1703123456_recording_1.avi\",\n    \"url\": \"https://bucket.s3.region.amazonaws.com/video/original/1703123456_recording_1.avi\",\n    \"bucket\": \"bucket-name\",\n    \"region\": \"us-east-1\"\n  },\n  \"conversionInfo\": {\n    \"converted\": true,\n    \"originalFormat\": \"avi\",\n    \"convertedFormat\": \"mp4\",\n    \"compressionRatio\": 40.0,\n    \"conversionTime\": 15.2,\n    \"originalSize\": 15728640,\n    \"convertedSize\": 9437184\n  }\n}"
+        }
+      ]
+    },
+    {
+      "name": "Video Upload - MP4 Format",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{session_cookie}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/video/file.mp4",
+              "description": "MP4 video file"
+            },
+            {
+              "key": "content",
+              "value": "Uploading a high-quality MP4 video with detailed description and hashtags. #mp4 #video #quality #content",
+              "type": "text"
+            },
+            {
+              "key": "title",
+              "value": "High Quality MP4 Video",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/media/videoUpload",
+          "host": ["{{base_url}}"],
+          "path": ["media", "videoUpload"]
+        },
+        "description": "Upload an MP4 video file. The system will analyze the quality and only convert if optimization is needed."
+      }
+    },
+    {
+      "name": "Video Upload - AVI Format (Auto-Convert)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{session_cookie}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/video/file.avi",
+              "description": "AVI video file (will be automatically converted to MP4)"
+            },
+            {
+              "key": "content",
+              "value": "Uploading an AVI video that will be automatically converted to optimized MP4 format for better compatibility and smaller file size. #avi #conversion #optimization",
+              "type": "text"
+            },
+            {
+              "key": "title",
+              "value": "AVI to MP4 Conversion Demo",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/media/videoUpload",
+          "host": ["{{base_url}}"],
+          "path": ["media", "videoUpload"]
+        },
+        "description": "Upload an AVI video file. The system will automatically convert it to optimized MP4 format."
+      }
+    },
+    {
+      "name": "Video Upload - MOV Format (Auto-Convert)",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{session_cookie}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/video/file.mov",
+              "description": "MOV video file (will be automatically converted to MP4)"
+            },
+            {
+              "key": "content",
+              "value": "Uploading a MOV video from iPhone/QuickTime that will be converted to web-optimized MP4 format. #mov #iphone #quicktime #conversion",
+              "type": "text"
+            },
+            {
+              "key": "title",
+              "value": "iPhone MOV Video Upload",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/media/videoUpload",
+          "host": ["{{base_url}}"],
+          "path": ["media", "videoUpload"]
+        },
+        "description": "Upload a MOV video file. The system will automatically convert it to optimized MP4 format."
+      }
+    },
+    {
+      "name": "Video Upload - WebM Format",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{session_cookie}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/video/file.webm",
+              "description": "WebM video file"
+            },
+            {
+              "key": "content",
+              "value": "Uploading a WebM video file. The system will analyze and optimize if needed for better web compatibility. #webm #web #optimization",
+              "type": "text"
+            },
+            {
+              "key": "title",
+              "value": "WebM Video Upload",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/media/videoUpload",
+          "host": ["{{base_url}}"],
+          "path": ["media", "videoUpload"]
+        },
+        "description": "Upload a WebM video file. The system will analyze the quality and convert if optimization is needed."
+      }
+    },
+    {
+      "name": "Video Upload - Private Post",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{session_cookie}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/video/file.mp4",
+              "description": "Video file for private post"
+            },
+            {
+              "key": "content",
+              "value": "This is a private video post that only I can see. #private #personal #video",
+              "type": "text"
+            },
+            {
+              "key": "title",
+              "value": "Private Video Post",
+              "type": "text"
+            },
+            {
+              "key": "postPrivacySetting",
+              "value": "OnlyForOwner",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/media/videoUpload",
+          "host": ["{{base_url}}"],
+          "path": ["media", "videoUpload"]
+        },
+        "description": "Upload a video for a private post that only the owner can see."
+      }
+    },
+    {
+      "name": "Video Upload - Public Post with Name",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{session_cookie}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/video/file.mp4",
+              "description": "Video file for public post"
+            },
+            {
+              "key": "content",
+              "value": "This is a public video post that everyone can see with my name attached. #public #video #community #sharing",
+              "type": "text"
+            },
+            {
+              "key": "title",
+              "value": "Public Video Post with Name",
+              "type": "text"
+            },
+            {
+              "key": "postPrivacySetting",
+              "value": "PublicWithName",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/media/videoUpload",
+          "host": ["{{base_url}}"],
+          "path": ["media", "videoUpload"]
+        },
+        "description": "Upload a video for a public post that everyone can see with the uploader's name."
+      }
+    },
+    {
+      "name": "Video Upload - Public Post without Name",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{session_cookie}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/video/file.mp4",
+              "description": "Video file for anonymous public post"
+            },
+            {
+              "key": "content",
+              "value": "This is a public video post that everyone can see but my name will be hidden. #public #anonymous #video #privacy",
+              "type": "text"
+            },
+            {
+              "key": "title",
+              "value": "Anonymous Public Video Post",
+              "type": "text"
+            },
+            {
+              "key": "postPrivacySetting",
+              "value": "PublicWithoutName",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/media/videoUpload",
+          "host": ["{{base_url}}"],
+          "path": ["media", "videoUpload"]
+        },
+        "description": "Upload a video for a public post that everyone can see but without showing the uploader's name."
+      }
+    },
+    {
+      "name": "Video Upload - With Group Tags",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{session_cookie}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/video/file.mp4",
+              "description": "Video file with group tags"
+            },
+            {
+              "key": "content",
+              "value": "Uploading a video with specific group tags for better categorization and discovery. #video #tags #categorization #discovery",
+              "type": "text"
+            },
+            {
+              "key": "title",
+              "value": "Video with Group Tags",
+              "type": "text"
+            },
+            {
+              "key": "groupTags",
+              "value": "technology,programming,tutorial,education,web-development",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/media/videoUpload",
+          "host": ["{{base_url}}"],
+          "path": ["media", "videoUpload"]
+        },
+        "description": "Upload a video with specific group tags for better categorization and discovery."
+      }
+    },
+    {
+      "name": "Video Upload - Large File Test",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Cookie",
+            "value": "{{session_cookie}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "formdata",
+          "formdata": [
+            {
+              "key": "file",
+              "type": "file",
+              "src": "/path/to/your/large/video/file.mp4",
+              "description": "Large video file (up to 100MB limit)"
+            },
+            {
+              "key": "content",
+              "value": "Testing upload of a large video file to see how the system handles compression and optimization. #large #file #test #compression #optimization",
+              "type": "text"
+            },
+            {
+              "key": "title",
+              "value": "Large Video File Test",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "{{base_url}}/media/videoUpload",
+          "host": ["{{base_url}}"],
+          "path": ["media", "videoUpload"]
+        },
+        "description": "Test upload of a large video file to see compression and optimization results."
+      }
+    }
+  ]
+}
