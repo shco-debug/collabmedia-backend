@@ -96,10 +96,18 @@ process.env.TMPDIR = path.join(__dirname, "server", "temp");
 const dbURI_local =
   process.env.MONGODB_URI || "mongodb://127.0.0.1:27017/collabmedia";
 
+console.log(`Attempting to connect to MongoDB: ${dbURI_local}`);
+
 // Modern Mongoose connection options
 mongoose.connect(dbURI_local, {
   // Note: useNewUrlParser and useUnifiedTopology are no longer needed in Mongoose 6+
   // They are now the default behavior
+}).catch((err) => {
+  console.error(`Failed to connect to MongoDB:`, err);
+  // Don't exit the process on Vercel - let it continue
+  if (process.env.VERCEL !== '1') {
+    process.exit(1);
+  }
 });
 
 mongoose.connection.on("connected", () => {
@@ -457,13 +465,23 @@ try {
 
   // Health check endpoint
   app.get("/health", (req, res) => {
-    res.json({ 
-      status: 'OK', 
-      timestamp: new Date().toISOString(),
-      environment: process.env.NODE_ENV,
-      platform: process.env.VERCEL ? 'Vercel' : 'Local',
-      uptime: process.uptime()
-    });
+    try {
+      res.json({ 
+        status: 'OK', 
+        timestamp: new Date().toISOString(),
+        environment: process.env.NODE_ENV,
+        platform: process.env.VERCEL ? 'Vercel' : 'Local',
+        uptime: process.uptime(),
+        mongoStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+      });
+    } catch (error) {
+      console.error('Health check error:', error);
+      res.status(500).json({ 
+        status: 'ERROR', 
+        error: error.message,
+        timestamp: new Date().toISOString()
+      });
+    }
   });
 }
 
@@ -481,3 +499,18 @@ if (process.env.VERCEL !== '1') {
   // Export app for Vercel
   module.exports = app;
 }
+
+// Global error handler for uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  if (process.env.VERCEL !== '1') {
+    process.exit(1);
+  }
+});
+
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  if (process.env.VERCEL !== '1') {
+    process.exit(1);
+  }
+});
