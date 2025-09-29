@@ -1,0 +1,839 @@
+{
+	"info": {
+		"_postman_id": "birthday-stream-api",
+		"name": "CollabMedia Birthday Stream API",
+		"description": "Complete API collection for Birthday Stream functionality including member management, questions, answers, and delivery system",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "1. Stream Setup & Publishing",
+			"item": [
+				{
+					"name": "Publish Birthday Stream",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}",
+								"description": "ID of the existing capsule to publish"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"makingFor\": \"OTHERS\",\n  \"CapsuleFor\": \"Stream\",\n  \"StreamType\": \"Group\",\n  \"StreamFlow\": \"Birthday\",\n  \"LaunchSettings\": {\n    \"OwnerBirthday\": \"1990-05-15\",\n    \"Audience\": \"OTHERS\",\n    \"ShareMode\": \"friend-group\"\n  },\n  \"Frequency\": \"medium\",\n  \"MonthFor\": \"M12\",\n  \"price\": 29.99,\n  \"DiscountPrice\": 0\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/publish",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "publish"]
+						},
+						"description": "Publishes and launches your existing capsule as a birthday stream with group settings"
+					}
+				},
+				{
+					"name": "Check Capsule Completeness",
+					"request": {
+						"method": "GET",
+						"header": [
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"url": {
+							"raw": "{{base_url}}/capsules/capsule__checkCompleteness",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "capsule__checkCompleteness"]
+						},
+						"description": "Checks if capsule is ready for publishing"
+					}
+				}
+			]
+		},
+		{
+			"name": "2. Member Management",
+			"item": [
+				{
+					"name": "Add Members to Stream",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamId\": \"{{stream_id}}\",\n  \"OwnerId\": \"{{owner_id}}\",\n  \"members\": [\n    {\n      \"Email\": \"friend1@example.com\",\n      \"Name\": \"Alice Johnson\"\n    },\n    {\n      \"Email\": \"friend2@example.com\",\n      \"Name\": \"Bob Smith\"\n    },\n    {\n      \"Email\": \"friend3@example.com\",\n      \"Name\": \"Carol Davis\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/stream__addMembers",
+							"host": ["{{base_url}}"],
+							"path": ["stream__addMembers"]
+						},
+						"description": "Adds members to the birthday stream and sends invitation emails"
+					}
+				},
+				{
+					"name": "Get Stream Members List",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamId\": \"{{stream_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/stream__getMembersList",
+							"host": ["{{base_url}}"],
+							"path": ["stream__getMembersList"]
+						},
+						"description": "Retrieves list of all members in the stream"
+					}
+				},
+				{
+					"name": "Update Stream Members",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamId\": \"{{stream_id}}\",\n  \"members\": [\n    {\n      \"Email\": \"newfriend@example.com\",\n      \"Name\": \"New Friend\"\n    }\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/stream__updateMembers",
+							"host": ["{{base_url}}"],
+							"path": ["stream__updateMembers"]
+						},
+						"description": "Updates or adds new members to existing stream"
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Question & Answer System",
+			"item": [
+				{
+					"name": "Create Question Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Notes\",\n  \"PostType\": \"QuestionPost\",\n  \"Content\": \"What's your favorite memory with John?\",\n  \"PostStatement\": \"What's your favorite memory with John?\",\n  \"IsOnetimeStream\": false,\n  \"IsPrivateQuestionPost\": false,\n  \"SurpriseSelectedWords\": \"memory, favorite, John\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates a question post for members to answer"
+					}
+				},
+				{
+					"name": "Create Answer Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Notes\",\n  \"PostType\": \"AnswerPost\",\n  \"Content\": \"My favorite memory is when we went hiking together last summer. John was so encouraging when I was struggling with the steep trail!\",\n  \"PostStatement\": \"My favorite memory is when we went hiking together last summer. John was so encouraging when I was struggling with the steep trail!\",\n  \"QuestionPostId\": \"{{question_post_id}}\",\n  \"IsOnetimeStream\": false,\n  \"SurpriseSelectedWords\": \"hiking, summer, encouraging, trail\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates an answer post responding to a question"
+					}
+				},
+				{
+					"name": "Create Video Answer Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Video\",\n  \"PostType\": \"AnswerPost\",\n  \"Content\": \"Happy Birthday John! Here's my video message for you.\",\n  \"PostStatement\": \"Happy Birthday John! Here's my video message for you.\",\n  \"QuestionPostId\": \"{{question_post_id}}\",\n  \"IsOnetimeStream\": true,\n  \"MediaURL\": \"path/to/video/file.mp4\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates a video answer post for birthday wishes"
+					}
+				},
+				{
+					"name": "Mark Answer as Complete",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamId\": \"{{stream_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/addAnswerFinishStatus",
+							"host": ["{{base_url}}"],
+							"path": ["addAnswerFinishStatus"]
+						},
+						"description": "Marks that a member has completed answering all questions"
+					}
+				},
+				{
+					"name": "Get Answer Stage Status",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamId\": \"{{stream_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/getAnswerStageStatus",
+							"host": ["{{base_url}}"],
+							"path": ["getAnswerStageStatus"]
+						},
+						"description": "Checks the completion status of answers for a stream"
+					}
+				}
+			]
+		},
+		{
+			"name": "4. Additional Content Types",
+			"description": "Additional content types for birthday streams including images, audio, and regular posts",
+			"item": [
+				{
+					"name": "Create Image Question Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Image\",\n  \"PostType\": \"QuestionPost\",\n  \"Content\": \"<p>What's your favorite memory with John?</p><img src='https://example.com/question-image.jpg' alt='Question Image'>\",\n  \"PostStatement\": \"What's your favorite memory with John?\",\n  \"IsOnetimeStream\": false,\n  \"IsPrivateQuestionPost\": false,\n  \"MediaURL\": \"https://example.com/question-image.jpg\",\n  \"SurpriseSelectedWords\": \"memory, favorite, John\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates a question post with an image for visual context"
+					}
+				},
+				{
+					"name": "Create Audio Question Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Audio\",\n  \"PostType\": \"QuestionPost\",\n  \"Content\": \"<p>What's your favorite memory with John?</p><audio controls><source src='https://example.com/question-audio.mp3' type='audio/mp3'></audio>\",\n  \"PostStatement\": \"What's your favorite memory with John?\",\n  \"IsOnetimeStream\": false,\n  \"IsPrivateQuestionPost\": false,\n  \"MediaURL\": \"https://example.com/question-audio.mp3\",\n  \"SurpriseSelectedWords\": \"memory, favorite, John\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates a question post with audio for voice questions"
+					}
+				},
+				{
+					"name": "Create Image Answer Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Image\",\n  \"PostType\": \"AnswerPost\",\n  \"Content\": \"<p>My favorite memory is when we went hiking together!</p><img src='https://example.com/hiking-memory.jpg' alt='Hiking Memory'>\",\n  \"PostStatement\": \"My favorite memory is when we went hiking together!\",\n  \"QuestionPostId\": \"{{question_post_id}}\",\n  \"IsOnetimeStream\": false,\n  \"MediaURL\": \"https://example.com/hiking-memory.jpg\",\n  \"SurpriseSelectedWords\": \"hiking, memory, together\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates an answer post with an image showing the memory"
+					}
+				},
+				{
+					"name": "Create Audio Answer Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Audio\",\n  \"PostType\": \"AnswerPost\",\n  \"Content\": \"<p>My favorite memory is when we went hiking together!</p><audio controls><source src='https://example.com/voice-memory.mp3' type='audio/mp3'></audio>\",\n  \"PostStatement\": \"My favorite memory is when we went hiking together!\",\n  \"QuestionPostId\": \"{{question_post_id}}\",\n  \"IsOnetimeStream\": false,\n  \"MediaURL\": \"https://example.com/voice-memory.mp3\",\n  \"SurpriseSelectedWords\": \"hiking, memory, together\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates an answer post with audio voice message"
+					}
+				},
+				{
+					"name": "Create Regular Birthday Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Image\",\n  \"PostType\": \"Post\",\n  \"Content\": \"<p>Happy Birthday John! 🎉🎂</p><img src='https://example.com/birthday-wish.jpg' alt='Birthday Wish'>\",\n  \"PostStatement\": \"Happy Birthday John! 🎉🎂\",\n  \"IsOnetimeStream\": false,\n  \"MediaURL\": \"https://example.com/birthday-wish.jpg\",\n  \"SurpriseSelectedWords\": \"birthday, happy, John\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates a regular birthday post (not Q&A related)"
+					}
+				},
+				{
+					"name": "Create Video Birthday Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Video\",\n  \"PostType\": \"Post\",\n  \"Content\": \"<p>Happy Birthday John! Here's my video message for you! 🎉</p><video controls><source src='https://example.com/birthday-video.mp4' type='video/mp4'></video>\",\n  \"PostStatement\": \"Happy Birthday John! Here's my video message for you! 🎉\",\n  \"IsOnetimeStream\": true,\n  \"MediaURL\": \"https://example.com/birthday-video.mp4\",\n  \"SurpriseSelectedWords\": \"birthday, video, message\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates a regular birthday video post (not Q&A related)"
+					}
+				},
+				{
+					"name": "Create Audio Birthday Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Audio\",\n  \"PostType\": \"Post\",\n  \"Content\": \"<p>Happy Birthday John! Here's my voice message for you! 🎉</p><audio controls><source src='https://example.com/birthday-audio.mp3' type='audio/mp3'></audio>\",\n  \"PostStatement\": \"Happy Birthday John! Here's my voice message for you! 🎉\",\n  \"IsOnetimeStream\": true,\n  \"MediaURL\": \"https://example.com/birthday-audio.mp3\",\n  \"SurpriseSelectedWords\": \"birthday, voice, message\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates a regular birthday audio post (not Q&A related)"
+					}
+				},
+				{
+					"name": "Create Link Birthday Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "page_id",
+								"value": "{{page_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"MediaType\": \"Link\",\n  \"PostType\": \"Post\",\n  \"Content\": \"<p>Happy Birthday John! Check out this amazing birthday playlist I made for you! 🎵</p><a href='https://spotify.com/playlist/birthday-john' target='_blank'>Birthday Playlist</a>\",\n  \"PostStatement\": \"Happy Birthday John! Check out this amazing birthday playlist I made for you! 🎵\",\n  \"IsOnetimeStream\": false,\n  \"MediaURL\": \"https://spotify.com/playlist/birthday-john\",\n  \"SurpriseSelectedWords\": \"birthday, playlist, music\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/media/addMedia",
+							"host": ["{{base_url}}"],
+							"path": ["media", "addMedia"]
+						},
+						"description": "Creates a birthday post with a link (e.g., playlist, article, etc.)"
+					}
+				}
+			]
+		},
+		{
+			"name": "5. Stream Configuration",
+			"item": [
+				{
+					"name": "Finalize Launch Date",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamId\": \"{{stream_id}}\",\n  \"LaunchDate\": \"05/15/2024\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/finalizeLaunchDate",
+							"host": ["{{base_url}}"],
+							"path": ["finalizeLaunchDate"]
+						},
+						"description": "Finalizes the launch date for the birthday stream"
+					}
+				},
+				{
+					"name": "Update Stream Settings - Active Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Frequency\": \"high\",\n  \"MonthFor\": \"M12\",\n  \"EmailTemplate\": \"PracticalThinker\",\n  \"IsStreamPaused\": false,\n  \"EmailSubject\": \"Your Birthday Surprise is Here!\",\n  \"IsOnetimeStream\": false,\n  \"IsOnlyPostImage\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateStreamSettings_ActiveCapsule",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateStreamSettings_ActiveCapsule"]
+						},
+						"description": "Updates stream settings for an active capsule"
+					}
+				},
+				{
+					"name": "Update Stream Settings - Group Stream",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Frequency\": \"medium\",\n  \"MonthFor\": \"M12\",\n  \"EmailTemplate\": \"ImaginativeThinker\",\n  \"IsStreamPaused\": false,\n  \"EmailSubject\": \"Birthday Wishes from Your Friends!\",\n  \"IsOnetimeStream\": false,\n  \"IsOnlyPostImage\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/updateStreamSettings_ActiveCapsule_GroupStream",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "updateStreamSettings_ActiveCapsule_GroupStream"]
+						},
+						"description": "Updates stream settings specifically for group streams"
+					}
+				},
+				{
+					"name": "Toggle Stream Pause/Resume",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"IsStreamPaused\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/toggleStream",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "toggleStream"]
+						},
+						"description": "Pauses or resumes the stream delivery"
+					}
+				}
+			]
+		},
+		{
+			"name": "5. Birthday Delivery System",
+			"item": [
+				{
+					"name": "Create Posts on Event Day (Internal API)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"capsuleId\": \"{{capsule_id}}\",\n  \"SessionUser\": {\n    \"_id\": \"{{birthday_person_id}}\",\n    \"Name\": \"John Doe\",\n    \"Email\": \"john@example.com\",\n    \"Birthdate\": \"1990-05-15\",\n    \"AllFoldersId\": \"{{folder_id}}\",\n    \"AllPagesId\": \"{{page_id}}\"\n  },\n  \"MonthFor\": \"M12\",\n  \"Frequency\": \"medium\",\n  \"EmailTemplate\": \"PracticalThinker\",\n  \"IsStreamPaused\": false,\n  \"EmailSubject\": \"Your Birthday Surprise is Here!\",\n  \"IsOnetimeStream\": false,\n  \"IsOnlyPostImage\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/createPostsOnEventDay_INTERNAL_API",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "createPostsOnEventDay_INTERNAL_API"]
+						},
+						"description": "Triggers the birthday delivery system to schedule posts for the birthday person"
+					}
+				},
+				{
+					"name": "Check Post Streams",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamId\": \"{{stream_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/checkPostStreams",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "checkPostStreams"]
+						},
+						"description": "Checks the status of scheduled posts in the stream"
+					}
+				}
+			]
+		},
+		{
+			"name": "6. Stream Viewing & Access",
+			"item": [
+				{
+					"name": "Get Capsule Posts (Stream View)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{capsule_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"type\": \"All\",\n  \"skip\": 0,\n  \"limit\": 10,\n  \"selectedKeyword\": null\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getCapsulePosts",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getCapsulePosts"]
+						},
+						"description": "Retrieves posts from the stream for viewing"
+					}
+				},
+				{
+					"name": "Get Stream Price Map",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamType\": \"Group\",\n  \"StreamFlow\": \"Birthday\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/getStreamPriceMap",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "getStreamPriceMap"]
+						},
+						"description": "Gets pricing information for different stream types"
+					}
+				}
+			]
+		},
+		{
+			"name": "7. Awards & Recognition",
+			"item": [
+				{
+					"name": "Get My Stream Award Details",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamId\": \"{{stream_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/getMyStreamAwardDetails",
+							"host": ["{{base_url}}"],
+							"path": ["getMyStreamAwardDetails"]
+						},
+						"description": "Gets award details for a stream member"
+					}
+				},
+				{
+					"name": "Mark Award",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamId\": \"{{stream_id}}\",\n  \"PostId\": \"{{post_id}}\",\n  \"AwardType\": \"appreciation\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/markAward",
+							"host": ["{{base_url}}"],
+							"path": ["markAward"]
+						},
+						"description": "Awards points or recognition to a stream post"
+					}
+				}
+			]
+		},
+		{
+			"name": "8. Utility & Management",
+			"item": [
+				{
+					"name": "Get Previous Answers Logs",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"StreamId\": \"{{stream_id}}\",\n  \"MemberId\": \"{{member_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/getPreviousAnswersLogs",
+							"host": ["{{base_url}}"],
+							"path": ["getPreviousAnswersLogs"]
+						},
+						"description": "Gets previous answer logs for a member"
+					}
+				},
+				{
+					"name": "Unsubscribe from Emails",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Email\": \"user@example.com\",\n  \"StreamId\": \"{{stream_id}}\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/unsubscribeEmails",
+							"host": ["{{base_url}}"],
+							"path": ["unsubscribeEmails"]
+						},
+						"description": "Unsubscribes a user from stream emails"
+					}
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		},
+		{
+			"key": "capsule_id",
+			"value": "your_capsule_id_here",
+			"type": "string"
+		},
+		{
+			"key": "stream_id",
+			"value": "your_stream_id_here",
+			"type": "string"
+		},
+		{
+			"key": "page_id",
+			"value": "your_page_id_here",
+			"type": "string"
+		},
+		{
+			"key": "owner_id",
+			"value": "your_owner_id_here",
+			"type": "string"
+		},
+		{
+			"key": "birthday_person_id",
+			"value": "birthday_person_user_id",
+			"type": "string"
+		},
+		{
+			"key": "question_post_id",
+			"value": "question_post_id_here",
+			"type": "string"
+		},
+		{
+			"key": "folder_id",
+			"value": "user_folder_id",
+			"type": "string"
+		}
+	]
+}

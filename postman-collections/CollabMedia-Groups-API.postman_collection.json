@@ -1,0 +1,961 @@
+{
+	"info": {
+		"_postman_id": "groups-api-collection",
+		"name": "CollabMedia Groups API",
+		"description": "Comprehensive API collection for Group management endpoints in CollabMedia backend",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "Get All Groups",
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/groups/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"groups",
+						""
+					]
+				},
+				"description": "Get all groups for the authenticated user. No pagination, returns all groups."
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/groups/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								""
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 200,\n    \"groups\": [\n        {\n            \"_id\": \"507f1f77bcf86cd799439011\",\n            \"Title\": \"My Family Group\",\n            \"OwnerID\": \"507f1f77bcf86cd799439012\",\n            \"Status\": true,\n            \"IsDeleted\": false,\n            \"Icon\": \"/assets/groups/100/group_icon.jpg\",\n            \"CreatedOn\": \"2023-01-15T10:30:00.000Z\",\n            \"ModifiedOn\": \"2023-01-15T10:30:00.000Z\",\n            \"Members\": [\n                {\n                    \"MemberID\": \"507f1f77bcf86cd799439013\",\n                    \"MemberEmail\": \"john@example.com\",\n                    \"MemberName\": \"John Doe\",\n                    \"MemberNickName\": \"Johnny\",\n                    \"MemberPic\": \"/assets/users/john.jpg\",\n                    \"MemberRelation\": \"Brother\",\n                    \"MemberRelationID\": \"brother_001\",\n                    \"IsRegistered\": true\n                }\n            ]\n        }\n    ]\n}"
+				}
+			]
+		},
+		{
+			"name": "Get All Groups (Paginated)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"perPage\": 10,\n    \"pageNo\": 1\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/groups/",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"groups",
+						""
+					]
+				},
+				"description": "Get paginated list of groups for the authenticated user. Supports pagination with perPage and pageNo parameters."
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"perPage\": 10,\n    \"pageNo\": 1\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								""
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 200,\n    \"groups\": [\n        {\n            \"_id\": \"507f1f77bcf86cd799439011\",\n            \"Title\": \"My Family Group\",\n            \"OwnerID\": \"507f1f77bcf86cd799439012\",\n            \"Status\": true,\n            \"IsDeleted\": false,\n            \"Icon\": \"/assets/groups/100/group_icon.jpg\",\n            \"CreatedOn\": \"2023-01-15T10:30:00.000Z\",\n            \"ModifiedOn\": \"2023-01-15T10:30:00.000Z\",\n            \"Members\": []\n        }\n    ],\n    \"total\": 1\n}"
+				}
+			]
+		},
+		{
+			"name": "Create New Group",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"My New Group\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/groups/addGroup",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"groups",
+						"addGroup"
+					]
+				},
+				"description": "Create a new group. Requires a unique title. The group will be owned by the authenticated user."
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"My New Group\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/addGroup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"addGroup"
+							]
+						}
+					},
+					"status": "Created",
+					"code": 201,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 200,\n    \"message\": \"Group created successfully\",\n    \"data\": {\n        \"_id\": \"507f1f77bcf86cd799439011\",\n        \"Title\": \"My New Group\",\n        \"OwnerID\": \"507f1f77bcf86cd799439012\",\n        \"Status\": 1,\n        \"IsDeleted\": 0,\n        \"CreatedOn\": \"2023-01-15T10:30:00.000Z\",\n        \"ModifiedOn\": \"2023-01-15T10:30:00.000Z\",\n        \"Members\": []\n    }\n}"
+				},
+				{
+					"name": "Duplicate Group Name",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"title\": \"Existing Group Name\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/addGroup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"addGroup"
+							]
+						}
+					},
+					"status": "Conflict",
+					"code": 409,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 409,\n    \"message\": \"A group with the same name already exists\"\n}"
+				},
+				{
+					"name": "Missing Title",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/addGroup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"addGroup"
+							]
+						}
+					},
+					"status": "Bad Request",
+					"code": 400,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 400,\n    \"message\": \"Group title is required\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Get Group Details",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id\": \"507f1f77bcf86cd799439011\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/groups/current",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"groups",
+						"current"
+					]
+				},
+				"description": "Get detailed information about a specific group by its ID."
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"507f1f77bcf86cd799439011\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/current",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"current"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 200,\n    \"group\": {\n        \"_id\": \"507f1f77bcf86cd799439011\",\n        \"Title\": \"My Family Group\",\n        \"OwnerID\": \"507f1f77bcf86cd799439012\",\n        \"Status\": true,\n        \"IsDeleted\": false,\n        \"Icon\": \"/assets/groups/100/group_icon.jpg\",\n        \"CreatedOn\": \"2023-01-15T10:30:00.000Z\",\n        \"ModifiedOn\": \"2023-01-15T10:30:00.000Z\",\n        \"Members\": [\n            {\n                \"MemberID\": \"507f1f77bcf86cd799439013\",\n                \"MemberEmail\": \"john@example.com\",\n                \"MemberName\": \"John Doe\",\n                \"MemberNickName\": \"Johnny\",\n                \"MemberPic\": \"/assets/users/john.jpg\",\n                \"MemberRelation\": \"Brother\",\n                \"MemberRelationID\": \"brother_001\",\n                \"IsRegistered\": true\n            }\n        ]\n    }\n}"
+				}
+			]
+		},
+		{
+			"name": "Add Member to Group",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id\": \"507f1f77bcf86cd799439011\",\n    \"email\": \"newmember@example.com\",\n    \"name\": \"New Member Name\",\n    \"relation\": \"Friend~friend_001\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/groups/addMember",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"groups",
+						"addMember"
+					]
+				},
+				"description": "Add a new member to an existing group. The relation field should be in format 'RelationName~RelationID'. If the email belongs to a registered user, their profile data will be automatically populated."
+			},
+			"response": [
+				{
+					"name": "Success Response (Registered User)",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"507f1f77bcf86cd799439011\",\n    \"email\": \"registered@example.com\",\n    \"name\": \"Registered User\",\n    \"relation\": \"Friend~friend_001\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/addMember",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"addMember"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 200,\n    \"data\": {\n        \"n\": 1,\n        \"nModified\": 1,\n        \"ok\": 1\n    },\n    \"member\": {\n        \"IsRegistered\": true,\n        \"MemberID\": \"507f1f77bcf86cd799439013\",\n        \"MemberNickName\": \"Johnny\",\n        \"MemberPic\": \"/assets/users/john.jpg\",\n        \"MemberEmail\": \"registered@example.com\",\n        \"MemberName\": \"John Doe\",\n        \"MemberRelation\": \"Friend\",\n        \"MemberRelationID\": \"friend_001\"\n    }\n}"
+				},
+				{
+					"name": "Success Response (Non-Registered User)",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"507f1f77bcf86cd799439011\",\n    \"email\": \"nonregistered@example.com\",\n    \"name\": \"Non-Registered User\",\n    \"relation\": \"Colleague~colleague_001\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/addMember",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"addMember"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 200,\n    \"data\": {\n        \"n\": 1,\n        \"nModified\": 1,\n        \"ok\": 1\n    },\n    \"member\": {\n        \"IsRegistered\": false,\n        \"MemberEmail\": \"nonregistered@example.com\",\n        \"MemberName\": \"Non-Registered User\",\n        \"MemberRelation\": \"Colleague\",\n        \"MemberRelationID\": \"colleague_001\"\n    }\n}"
+				},
+				{
+					"name": "Already a Member",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"507f1f77bcf86cd799439011\",\n    \"email\": \"existing@example.com\",\n    \"name\": \"Existing Member\",\n    \"relation\": \"Friend~friend_001\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/addMember",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"addMember"
+							]
+						}
+					},
+					"status": "Unauthorized",
+					"code": 401,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 401,\n    \"error\": \"Already a member\"\n}"
+				},
+				{
+					"name": "Group Not Found",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"507f1f77bcf86cd799439999\",\n    \"email\": \"newmember@example.com\",\n    \"name\": \"New Member\",\n    \"relation\": \"Friend~friend_001\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/addMember",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"addMember"
+							]
+						}
+					},
+					"status": "Payment Required",
+					"code": 402,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 402,\n    \"error\": \"group not found\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Remove Member from Group",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id\": \"507f1f77bcf86cd799439011\",\n    \"email\": \"member@example.com\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/groups/removeMember",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"groups",
+						"removeMember"
+					]
+				},
+				"description": "Remove a member from a group by their email address. The email search is case-insensitive."
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"507f1f77bcf86cd799439011\",\n    \"email\": \"member@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/removeMember",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"removeMember"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 200,\n    \"data\": {\n        \"n\": 1,\n        \"nModified\": 1,\n        \"ok\": 1\n    }\n}"
+				},
+				{
+					"name": "Group Not Found",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"507f1f77bcf86cd799439999\",\n    \"email\": \"member@example.com\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/removeMember",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"removeMember"
+							]
+						}
+					},
+					"status": "Unauthorized",
+					"code": 401,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 401,\n    \"error\": \"group not found\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Delete Group",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"id\": \"507f1f77bcf86cd799439011\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/groups/removeGroup",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"groups",
+						"removeGroup"
+					]
+				},
+				"description": "Soft delete a group by setting IsDeleted flag to 1. The group will not be physically removed from the database."
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"507f1f77bcf86cd799439011\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/removeGroup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"removeGroup"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 200,\n    \"msg\": \"group deleted .\"\n}"
+				},
+				{
+					"name": "Group Not Found",
+					"originalRequest": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n    \"id\": \"507f1f77bcf86cd799439999\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/removeGroup",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"removeGroup"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 200,\n    \"msg\": \"group deleted .\"\n}"
+				}
+			]
+		},
+		{
+			"name": "Upload Group Icon",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "formdata",
+					"formdata": [
+						{
+							"key": "groupID",
+							"value": "507f1f77bcf86cd799439011",
+							"type": "text"
+						},
+						{
+							"key": "file",
+							"type": "file",
+							"src": "/path/to/icon/image.jpg"
+						}
+					]
+				},
+				"url": {
+					"raw": "{{base_url}}/groups/iconUpload",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"groups",
+						"iconUpload"
+					]
+				},
+				"description": "Upload an icon for a group. The file will be processed and resized to different dimensions (100x100, 600x600). The group's Icon field will be updated with the path to the 100x100 version."
+			},
+			"response": [
+				{
+					"name": "Success Response",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "groupID",
+									"value": "507f1f77bcf86cd799439011",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/path/to/icon/image.jpg"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/iconUpload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"iconUpload"
+							]
+						}
+					},
+					"status": "OK",
+					"code": 200,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 200,\n    \"msg\": \"file uploaded successfully\"\n}"
+				},
+				{
+					"name": "Group Not Found",
+					"originalRequest": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "groupID",
+									"value": "507f1f77bcf86cd799439999",
+									"type": "text"
+								},
+								{
+									"key": "file",
+									"type": "file",
+									"src": "/path/to/icon/image.jpg"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/groups/iconUpload",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"groups",
+								"iconUpload"
+							]
+						}
+					},
+					"status": "Bad Request",
+					"code": 400,
+					"_postman_previewlanguage": "json",
+					"header": [
+						{
+							"key": "Content-Type",
+							"value": "application/json"
+						}
+					],
+					"cookie": [],
+					"body": "{\n    \"code\": 400,\n    \"msg\": \"Group not found\"\n}"
+				}
+			]
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		},
+		{
+			"listen": "test",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					""
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string"
+		}
+	]
+}

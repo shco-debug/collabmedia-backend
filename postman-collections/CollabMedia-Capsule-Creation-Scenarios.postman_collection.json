@@ -1,0 +1,687 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-capsule-creation-scenarios",
+		"name": "CollabMedia - Capsule Creation Test Scenarios",
+		"description": "Comprehensive test collection for all capsule creation types and scenarios. Tests all combinations of audience types, capsule types, stream types, purchase types, and user scenarios. Includes error cases and edge cases.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-capsule-creation-scenarios"
+	},
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string",
+			"description": "Base URL for the CollabMedia API"
+		},
+		{
+			"key": "user_session_id",
+			"value": "",
+			"type": "string",
+			"description": "User session cookie for authentication"
+		},
+		{
+			"key": "user_email",
+			"value": "test@example.com",
+			"type": "string",
+			"description": "Test user email"
+		},
+		{
+			"key": "test_capsule_id",
+			"value": "",
+			"type": "string",
+			"description": "Test capsule ID for scenarios"
+		}
+	],
+	"item": [
+		{
+			"name": "Authentication",
+			"item": [
+				{
+					"name": "Login User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Email\": \"{{user_email}}\",\n  \"Password\": \"password123\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/login",
+							"host": ["{{base_url}}"],
+							"path": ["login"]
+						},
+						"description": "Login user and get session cookie for authentication"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.user && response.user._id) {",
+									"        pm.collectionVariables.set('user_email', response.user.Email);",
+									"        console.log('User logged in:', response.user.Email);",
+									"    }",
+									"    // Extract session cookie from response headers",
+									"    const setCookieHeader = pm.response.headers.get('Set-Cookie');",
+									"    if (setCookieHeader) {",
+									"        const sessionMatch = setCookieHeader.match(/connect\\.sid=([^;]+)/);",
+									"        if (sessionMatch) {",
+									"            pm.collectionVariables.set('user_session_id', sessionMatch[1]);",
+									"            console.log('Session cookie set:', sessionMatch[1]);",
+									"        }",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Test Data Setup",
+			"item": [
+				{
+					"name": "Create Test Capsule",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Title\": \"Test Capsule for Creation Scenarios\",\n  \"Description\": \"This capsule is used for testing all creation scenarios\",\n  \"CoverArt\": \"test-cover.jpg\",\n  \"LaunchSettings\": {\n    \"Audience\": \"OTHERS\",\n    \"CapsuleFor\": \"Stream\",\n    \"ShareMode\": \"public\"\n  },\n  \"Price\": 29.99,\n  \"IsPublished\": false,\n  \"IsLaunched\": false\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/create",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "create"]
+						},
+						"description": "Create a test capsule for all creation scenarios"
+					},
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.capsule && response.capsule._id) {",
+									"        pm.collectionVariables.set('test_capsule_id', response.capsule._id);",
+									"        console.log('Test capsule created:', response.capsule._id);",
+									"    }",
+									"}"
+								]
+							}
+						}
+					],
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "Capsule Creation Scenarios",
+			"item": [
+				{
+					"name": "1. Birthday Capsule - ME Audience",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Birthday Celebration for John\",\n  \"makingFor\": \"ME\",\n  \"CapsuleFor\": \"Birthday\",\n  \"LaunchSettings\": {\n    \"Audience\": \"ME\",\n    \"CapsuleFor\": \"Birthday\",\n    \"ShareMode\": \"private\",\n    \"OwnerBirthday\": \"1990-05-15\"\n  },\n  \"price\": 0,\n  \"DiscountPrice\": 0,\n  \"owners\": [\n    {\n      \"UserName\": \"John Doe\",\n      \"UserEmail\": \"john@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"unique123\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Birthday capsule creation with ME audience (self-published)"
+					},
+					"response": []
+				},
+				{
+					"name": "2. Theme Capsule - OTHERS Audience",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Wedding Theme Collection\",\n  \"makingFor\": \"OTHERS\",\n  \"CapsuleFor\": \"Theme\",\n  \"LaunchSettings\": {\n    \"Audience\": \"OTHERS\",\n    \"CapsuleFor\": \"Theme\",\n    \"ShareMode\": \"friend-group\"\n  },\n  \"price\": 29.99,\n  \"DiscountPrice\": 5.00,\n  \"owners\": [\n    {\n      \"UserName\": \"Jane Smith\",\n      \"UserEmail\": \"jane@example.com\"\n    },\n    {\n      \"UserName\": \"Bob Wilson\",\n      \"UserEmail\": \"bob@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"unique456\", \"unique789\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Theme capsule creation with OTHERS audience (collaborative)"
+					},
+					"response": []
+				},
+				{
+					"name": "3. Individual Stream - BUYERS Audience",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Personal Fitness Journey\",\n  \"makingFor\": \"BUYERS\",\n  \"CapsuleFor\": \"Stream\",\n  \"StreamType\": \"Individual\",\n  \"LaunchSettings\": {\n    \"Audience\": \"BUYERS\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"Individual\",\n    \"ShareMode\": \"public\"\n  },\n  \"MonthFor\": \"M6\",\n  \"Frequency\": \"high\",\n  \"EmailTemplate\": \"FitnessEnthusiast\",\n  \"price\": 49.99,\n  \"DiscountPrice\": 10.00,\n  \"owners\": [\n    {\n      \"UserName\": \"Mike Johnson\",\n      \"UserEmail\": \"mike@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"unique101\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Individual Stream capsule creation with BUYERS audience (purchased)"
+					},
+					"response": []
+				},
+				{
+					"name": "4. Group Stream - Birthday Flow",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Birthday Stream for Sarah\",\n  \"makingFor\": \"OTHERS\",\n  \"CapsuleFor\": \"Stream\",\n  \"StreamType\": \"Group\",\n  \"StreamFlow\": \"Birthday\",\n  \"LaunchSettings\": {\n    \"Audience\": \"OTHERS\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"Group\",\n    \"StreamFlow\": \"Birthday\",\n    \"ShareMode\": \"friend-group\",\n    \"OwnerBirthday\": \"1985-12-25\"\n  },\n  \"MonthFor\": \"M12\",\n  \"Frequency\": \"medium\",\n  \"EmailTemplate\": \"BirthdayCelebration\",\n  \"IsSurpriseGift\": false,\n  \"price\": 39.99,\n  \"DiscountPrice\": 0,\n  \"owners\": [\n    {\n      \"UserName\": \"Sarah Davis\",\n      \"UserEmail\": \"sarah@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"unique202\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Group Stream capsule with Birthday flow"
+					},
+					"response": []
+				},
+				{
+					"name": "5. Group Stream - Custom Flow",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Custom Event Stream\",\n  \"makingFor\": \"OTHERS\",\n  \"CapsuleFor\": \"Stream\",\n  \"StreamType\": \"Group\",\n  \"StreamFlow\": \"Custom\",\n  \"LaunchSettings\": {\n    \"Audience\": \"OTHERS\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"Group\",\n    \"StreamFlow\": \"Custom\",\n    \"ShareMode\": \"public\"\n  },\n  \"MonthFor\": \"M3\",\n  \"Frequency\": \"low\",\n  \"EmailTemplate\": \"EventOrganizer\",\n  \"IsSurpriseGift\": false,\n  \"price\": 25.99,\n  \"DiscountPrice\": 5.00,\n  \"owners\": [\n    {\n      \"UserName\": \"Alex Brown\",\n      \"UserEmail\": \"alex@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"unique303\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Group Stream capsule with Custom flow"
+					},
+					"response": []
+				},
+				{
+					"name": "6. Surprise Gift Stream",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Surprise Birthday Gift\",\n  \"makingFor\": \"OTHERS\",\n  \"CapsuleFor\": \"Stream\",\n  \"StreamType\": \"Group\",\n  \"StreamFlow\": \"Birthday\",\n  \"LaunchSettings\": {\n    \"Audience\": \"OTHERS\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"Group\",\n    \"StreamFlow\": \"Birthday\",\n    \"ShareMode\": \"private\",\n    \"OwnerBirthday\": \"1992-08-10\"\n  },\n  \"MonthFor\": \"M12\",\n  \"Frequency\": \"high\",\n  \"EmailTemplate\": \"SurpriseGift\",\n  \"IsSurpriseGift\": true,\n  \"price\": 59.99,\n  \"DiscountPrice\": 0,\n  \"owners\": [\n    {\n      \"UserName\": \"Emma Wilson\",\n      \"UserEmail\": \"emma@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"unique404\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Surprise Gift Stream (no instant email sent)"
+					},
+					"response": []
+				},
+				{
+					"name": "7. Gift Purchase - Multiple Recipients",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Holiday Gift Collection\",\n  \"makingFor\": \"OTHERS\",\n  \"CapsuleFor\": \"Theme\",\n  \"LaunchSettings\": {\n    \"Audience\": \"OTHERS\",\n    \"CapsuleFor\": \"Theme\",\n    \"ShareMode\": \"friend-group\"\n  },\n  \"price\": 35.99,\n  \"DiscountPrice\": 8.00,\n  \"purchaseFor\": [\"Gift\", \"Gift\", \"Gift\"],\n  \"owners\": [\n    {\n      \"UserName\": \"Tom Anderson\",\n      \"UserEmail\": \"tom@example.com\"\n    },\n    {\n      \"UserName\": \"Lisa Garcia\",\n      \"UserEmail\": \"lisa@example.com\"\n    },\n    {\n      \"UserName\": \"David Lee\",\n      \"UserEmail\": \"david@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"unique505\", \"unique606\", \"unique707\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Gift Purchase with multiple recipients"
+					},
+					"response": []
+				},
+				{
+					"name": "8. Self Purchase - Myself",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"My Personal Journey\",\n  \"makingFor\": \"ME\",\n  \"CapsuleFor\": \"Stream\",\n  \"StreamType\": \"Individual\",\n  \"LaunchSettings\": {\n    \"Audience\": \"ME\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"Individual\",\n    \"ShareMode\": \"private\"\n  },\n  \"MonthFor\": \"M12\",\n  \"Frequency\": \"medium\",\n  \"EmailTemplate\": \"PersonalGrowth\",\n  \"price\": 19.99,\n  \"DiscountPrice\": 0,\n  \"purchaseFor\": [\"Myself\"],\n  \"owners\": [\n    {\n      \"UserName\": \"{{user_email}}\",\n      \"UserEmail\": \"{{user_email}}\"\n    }\n  ],\n  \"uniqueIds\": [\"unique808\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Self Purchase (Myself) scenario"
+					},
+					"response": []
+				},
+				{
+					"name": "9. Non-Registered User Creation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Welcome New User\",\n  \"makingFor\": \"OTHERS\",\n  \"CapsuleFor\": \"Birthday\",\n  \"LaunchSettings\": {\n    \"Audience\": \"OTHERS\",\n    \"CapsuleFor\": \"Birthday\",\n    \"ShareMode\": \"private\",\n    \"OwnerBirthday\": \"1995-03-20\"\n  },\n  \"price\": 0,\n  \"DiscountPrice\": 0,\n  \"owners\": [\n    {\n      \"UserName\": \"New User\",\n      \"UserEmail\": \"newuser@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"unique909\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Non-Registered User Creation (creates new user account via API)"
+					},
+					"response": []
+				},
+				{
+					"name": "10. Selective Purchase - Multiple Capsules",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"selectedCapsuleIds\": [\"{{test_capsule_id}}\", \"another_capsule_id\"],\n  \"owners\": [\n    {\n      \"UserName\": \"Selective Buyer\",\n      \"UserEmail\": \"selective@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"unique1010\"],\n  \"purchaseFor\": [\"Gift\"]\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Selective Purchase (multiple capsules from cart)"
+					},
+					"response": []
+				},
+				{
+					"name": "11. Error Case - Invalid Audience",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Invalid Test\",\n  \"makingFor\": \"INVALID\",\n  \"CapsuleFor\": \"Birthday\",\n  \"LaunchSettings\": {\n    \"Audience\": \"INVALID\",\n    \"CapsuleFor\": \"Birthday\",\n    \"ShareMode\": \"private\"\n  },\n  \"price\": 0,\n  \"DiscountPrice\": 0,\n  \"owners\": [\n    {\n      \"UserName\": \"Test User\",\n      \"UserEmail\": \"test@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"unique1111\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Error Case - Invalid Audience (should return error)"
+					},
+					"response": []
+				},
+				{
+					"name": "12. Edge Case - Empty Owners Array",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Empty Owners Test\",\n  \"makingFor\": \"OTHERS\",\n  \"CapsuleFor\": \"Birthday\",\n  \"LaunchSettings\": {\n    \"Audience\": \"OTHERS\",\n    \"CapsuleFor\": \"Birthday\",\n    \"ShareMode\": \"private\"\n  },\n  \"price\": 0,\n  \"DiscountPrice\": 0,\n  \"owners\": [],\n  \"uniqueIds\": [],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/buyNow",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "buyNow"]
+						},
+						"description": "Test Edge Case - Empty Owners Array (should return error)"
+					},
+					"response": []
+				}
+			]
+		},
+		{
+			"name": "PublishV2 Scenarios",
+			"item": [
+				{
+					"name": "1. PublishV2 - OTHERS with OthersData",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Collaborative Birthday Stream\",\n  \"makingFor\": \"OTHERS\",\n  \"OrderInitiatedFrom\": \"CREATE_Others\",\n  \"CapsuleFor\": \"Stream\",\n  \"token\": \"trial\",\n  \"StreamType\": \"Group\",\n  \"StreamFlow\": \"Birthday\",\n  \"LaunchSettings\": {\n    \"OwnerBirthday\": \"1990-05-15\",\n    \"Audience\": \"OTHERS\",\n    \"ShareMode\": \"friend-group\",\n    \"OthersData\": [\n      {\n        \"UserName\": \"Collaborator1\",\n        \"UserEmail\": \"collab1@example.com\"\n      },\n      {\n        \"UserName\": \"Collaborator2\",\n        \"UserEmail\": \"collab2@example.com\"\n      }\n    ]\n  },\n  \"Frequency\": \"medium\",\n  \"MonthFor\": \"M12\",\n  \"price\": 29.99,\n  \"DiscountPrice\": 0,\n  \"TotalPayment\": 9.99,\n  \"owners\": [\n    {\n      \"UserName\": \"Collaborator1\",\n      \"UserEmail\": \"collab1@example.com\"\n    },\n    {\n      \"UserName\": \"Collaborator2\",\n      \"UserEmail\": \"collab2@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"collab123\", \"collab456\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/publishV2",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "publishV2"]
+						},
+						"description": "Test PublishV2 with OTHERS audience and OthersData"
+					},
+					"response": []
+				},
+				{
+					"name": "2. PublishV2 - BUYERS with Payment",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}",
+								"description": "User session cookie"
+							},
+							{
+								"key": "capsule_id",
+								"value": "{{test_capsule_id}}",
+								"description": "Test capsule ID"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Premium Content Stream\",\n  \"makingFor\": \"BUYERS\",\n  \"OrderInitiatedFrom\": \"CREATE_Others\",\n  \"CapsuleFor\": \"Stream\",\n  \"token\": \"trial\",\n  \"StreamType\": \"Individual\",\n  \"LaunchSettings\": {\n    \"Audience\": \"BUYERS\",\n    \"ShareMode\": \"public\"\n  },\n  \"price\": 99.99,\n  \"DiscountPrice\": 20.00,\n  \"TotalPayment\": 79.99,\n  \"owners\": [\n    {\n      \"UserName\": \"Premium User\",\n      \"UserEmail\": \"premium@example.com\"\n    }\n  ],\n  \"uniqueIds\": [\"premium123\"],\n  \"capsule_id\": \"{{test_capsule_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/capsules/publishV2",
+							"host": ["{{base_url}}"],
+							"path": ["capsules", "publishV2"]
+						},
+						"description": "Test PublishV2 with BUYERS audience and payment processing"
+					},
+					"response": []
+				}
+			]
+		}
+	]
+}
+

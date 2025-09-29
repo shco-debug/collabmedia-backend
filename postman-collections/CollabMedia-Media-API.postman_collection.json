@@ -1105,6 +1105,172 @@
 					]
 				}
 			]
+		},
+		{
+			"name": "Advanced Post Types",
+			"description": "Advanced post types including question posts, answer posts, and different media types",
+			"item": [
+				{
+					"name": "Create Question Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"What's your favorite memory?\",\n  \"content\": \"<p>What's your favorite memory with me?</p>\",\n  \"postType\": \"QuestionPost\",\n  \"postStatement\": \"What's your favorite memory with me?\",\n  \"mediaArray\": [],\n  \"keywords\": [\n    {\n      \"id\": \"{{group_tag_id_1}}\",\n      \"title\": \"memory\"\n    }\n  ],\n  \"pageId\": \"{{page_id}}\",\n  \"metadata\": {\n    \"IsPrivateQuestionPost\": false,\n    \"IsOnetimeStream\": false\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/createSinglePost",
+							"host": ["{{base_url}}"],
+							"path": ["media", "createSinglePost"]
+						},
+						"description": "Create a question post for others to answer"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Answer Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"My favorite memory\",\n  \"content\": \"<p>My favorite memory is when we went hiking together!</p>\",\n  \"postType\": \"AnswerPost\",\n  \"postStatement\": \"My favorite memory is when we went hiking together!\",\n  \"mediaArray\": [\n    {\n      \"url\": \"https://example.com/hiking-memory.jpg\",\n      \"type\": \"image\",\n      \"title\": \"Hiking Memory\"\n    }\n  ],\n  \"keywords\": [\n    {\n      \"id\": \"{{group_tag_id_1}}\",\n      \"title\": \"hiking\"\n    }\n  ],\n  \"pageId\": \"{{page_id}}\",\n  \"metadata\": {\n    \"QuestionPostId\": \"{{question_post_id}}\",\n    \"IsOnetimeStream\": false\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/createSinglePost",
+							"host": ["{{base_url}}"],
+							"path": ["media", "createSinglePost"]
+						},
+						"description": "Create an answer post responding to a question"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Video Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"My Video Message\",\n  \"content\": \"<p>Here's my video message for you!</p>\",\n  \"postType\": \"Post\",\n  \"postStatement\": \"Here's my video message for you!\",\n  \"mediaArray\": [\n    {\n      \"url\": \"https://example.com/video-message.mp4\",\n      \"type\": \"video\",\n      \"title\": \"Video Message\"\n    }\n  ],\n  \"keywords\": [\n    {\n      \"id\": \"{{group_tag_id_1}}\",\n      \"title\": \"video\"\n    }\n  ],\n  \"pageId\": \"{{page_id}}\",\n  \"metadata\": {\n    \"IsOnetimeStream\": true\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/createSinglePost",
+							"host": ["{{base_url}}"],
+							"path": ["media", "createSinglePost"]
+						},
+						"description": "Create a video post with video content"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Audio Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"My Voice Message\",\n  \"content\": \"<p>Here's my voice message for you!</p>\",\n  \"postType\": \"Post\",\n  \"postStatement\": \"Here's my voice message for you!\",\n  \"mediaArray\": [\n    {\n      \"url\": \"https://example.com/voice-message.mp3\",\n      \"type\": \"audio\",\n      \"title\": \"Voice Message\"\n    }\n  ],\n  \"keywords\": [\n    {\n      \"id\": \"{{group_tag_id_1}}\",\n      \"title\": \"audio\"\n    }\n  ],\n  \"pageId\": \"{{page_id}}\",\n  \"metadata\": {\n    \"IsOnetimeStream\": true\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/createSinglePost",
+							"host": ["{{base_url}}"],
+							"path": ["media", "createSinglePost"]
+						},
+						"description": "Create an audio post with voice content"
+					},
+					"response": []
+				},
+				{
+					"name": "Create Link Post",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							},
+							{
+								"key": "Cookie",
+								"value": "connect.sid={{user_session_id}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"Check out this link!\",\n  \"content\": \"<p>Check out this amazing article I found!</p><a href='https://example.com/article' target='_blank'>Read Article</a>\",\n  \"postType\": \"Post\",\n  \"postStatement\": \"Check out this amazing article I found!\",\n  \"mediaArray\": [],\n  \"keywords\": [\n    {\n      \"id\": \"{{group_tag_id_1}}\",\n      \"title\": \"article\"\n    }\n  ],\n  \"pageId\": \"{{page_id}}\",\n  \"metadata\": {\n    \"IsOnetimeStream\": false\n  }\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/createSinglePost",
+							"host": ["{{base_url}}"],
+							"path": ["media", "createSinglePost"]
+						},
+						"description": "Create a post with a link to external content"
+					},
+					"response": []
+				}
+			]
 		}
 	],
 	"event": [
@@ -1201,6 +1367,21 @@
 		{
 			"key": "comment_id",
 			"value": "your_comment_id_here",
+			"type": "string"
+		},
+		{
+			"key": "page_id",
+			"value": "your_page_id_here",
+			"type": "string"
+		},
+		{
+			"key": "question_post_id",
+			"value": "your_question_post_id_here",
+			"type": "string"
+		},
+		{
+			"key": "user_session_id",
+			"value": "your_user_session_id_here",
 			"type": "string"
 		}
 	]
