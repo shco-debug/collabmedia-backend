@@ -5096,7 +5096,7 @@ var savedOrder = function (charge, orderInit, payFrom, rdm_credit, result, order
 }
 exports.savedOrder = savedOrder;
 
-function __checkNcreateChapterIntroPage(data, shareWithName, CapsuleData) {
+async function __checkNcreateChapterIntroPage(data, shareWithName, CapsuleData) {
 	console.log("@@@@@@@@@@@----------__checkNcreateChapterIntroPage --------------- shareWithName ============ ",shareWithName);
 
 	var OwnerName = shareWithName ? shareWithName : "Owner Name";

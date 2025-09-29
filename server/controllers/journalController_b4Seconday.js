@@ -35,7 +35,8 @@ var fs = require('fs');
 var im = require('imagemagick');
 const { htmlToText } = require('html-to-text');
 
-const { GoogleSpreadsheet } = require('google-spreadsheet');
+// Google Spreadsheet - dynamic import to avoid ESM issues on Vercel
+let GoogleSpreadsheet = null;
 const creds = require('../../config/google/creds.json');
 
 async function isFileExists (path) {

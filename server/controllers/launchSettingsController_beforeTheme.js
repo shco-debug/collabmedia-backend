@@ -24,7 +24,8 @@ var smtpTransport = require('nodemailer-smtp-transport');
 //var Page = require('./../models/pageModel.js');
 
 var fsextra = require('fs-extra');
-var replaceInFile = require('replace-in-file');
+// replace-in-file - dynamic import to avoid ESM issues on Vercel
+let replaceInFile = null;
 
 
 
