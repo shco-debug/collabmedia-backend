@@ -25,7 +25,8 @@ var smtpTransport = require('nodemailer-smtp-transport');
 //var Page = require('./../models/pageModel.js');
 
 var fsextra = require('fs-extra');
-var replaceInFile = require('replace-in-file');
+// replace-in-file - dynamic import to avoid ESM issues on Vercel
+let replaceInFile = null;
 const axios = require('axios');
 var PageStream = require('./../models/pageStreamModel.js');
 
@@ -5132,6 +5133,16 @@ function __checkNcreateChapterIntroPage(data, shareWithName, CapsuleData) {
 					to: [OwnerName, OwnerNameCapital, ChapterTitle, CapsuleTitle, ChapterId, PageId]
 				};
 
+				// Dynamic import to avoid ESM issues
+				if (!replaceInFile) {
+					try {
+						const { default: replaceInFileModule } = await import('replace-in-file');
+						replaceInFile = replaceInFileModule;
+					} catch (error) {
+						console.log('replace-in-file not available, skipping file replacement:', error.message);
+						return;
+					}
+				}
 				replaceInFile(options, function(error, results){
 				  if (error) {
 					console.log('@@@@@@@@@@@@@@---------Error occurred:', error);
@@ -5168,6 +5179,16 @@ function __checkNcreateChapterIntroPage(data, shareWithName, CapsuleData) {
 					to: [OwnerName, OwnerNameCapital, ChapterTitle, CapsuleTitle, ChapterId, PageId]
 				};
 
+				// Dynamic import to avoid ESM issues
+				if (!replaceInFile) {
+					try {
+						const { default: replaceInFileModule } = await import('replace-in-file');
+						replaceInFile = replaceInFileModule;
+					} catch (error) {
+						console.log('replace-in-file not available, skipping file replacement:', error.message);
+						return;
+					}
+				}
 				replaceInFile(options, function(error, results){
 				  if (error) {
 					console.log('@@@@@@@@@@@@@@---------Error occurred:', error);
