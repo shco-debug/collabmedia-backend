@@ -72,7 +72,6 @@
     "open-graph": "^0.2.6",
     "openai": "^5.12.2",
     "pagination": "~0.4.2",
-    "phantomjs": "^2.1.7",
     "prerender-node": "^3.2.1",
     "redis": "^5.8.0",
     "replace-in-file": "^8.3.0",
