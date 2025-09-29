@@ -1,0 +1,5 @@
+/*
+	Declare global variable here
+	
+*/
+

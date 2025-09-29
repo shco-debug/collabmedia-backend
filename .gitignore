@@ -130,25 +130,3 @@ start-local.js
 # Swagger temporary files
 openapi-tmp.json
 swagger-api-documentation-*.json
-
-# Frontend directories (exclude completely)
-public/
-bower_components/
-dest/
-screen-guides/
-_gsdata_/
-
-# Frontend assets
-*.css
-*.js
-*.html
-*.png
-*.jpg
-*.jpeg
-*.gif
-*.svg
-*.ico
-*.woff
-*.woff2
-*.ttf
-*.eot
