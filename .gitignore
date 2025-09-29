@@ -130,5 +130,3 @@ start-local.js
 # Swagger temporary files
 openapi-tmp.json
 swagger-api-documentation-*.json
-
-
