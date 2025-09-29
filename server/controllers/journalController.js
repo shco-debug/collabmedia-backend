@@ -35,7 +35,8 @@ var fs = require('fs');
 var im = require('imagemagick');
 const { htmlToText } = require('html-to-text');
 
-const { GoogleSpreadsheet } = require('google-spreadsheet');
+// Google Spreadsheet - dynamic import to avoid ESM issues on Vercel
+let GoogleSpreadsheet = null;
 // Google credentials commented out for local development
 // // Google credentials commented out for local development
 // const creds = require('../../config/google/creds.json');
@@ -14981,6 +14982,16 @@ var addCompiledStatementsToGoogleSheet = async function (req, res) {
 				const rowsArray = PostArr || [];
 				// Google Sheets functionality commented out for local development
 				/*
+				// Dynamic import to avoid ESM issues
+				if (!GoogleSpreadsheet) {
+					try {
+						const { GoogleSpreadsheet: GS } = await import("google-spreadsheet");
+						GoogleSpreadsheet = GS;
+					} catch (error) {
+						console.log("Google Spreadsheet not available, skipping spreadsheet update:", error.message);
+						return;
+					}
+				}
 				const doc = new GoogleSpreadsheet(doc_id);
 				// await doc.useServiceAccountAuth(creds);
 				await doc.loadInfo();
@@ -15082,6 +15093,16 @@ var addPostToGSheetByPostIds = async function (req, res) {
 			try {
 				var doc_id = '1xo1pPdUhZsM-ScDQasyaplNycysGV7dhrlJr4Vdl1mo';
 				const rowsArray = PostArr || [];
+				// Dynamic import to avoid ESM issues
+				if (!GoogleSpreadsheet) {
+					try {
+						const { GoogleSpreadsheet: GS } = await import("google-spreadsheet");
+						GoogleSpreadsheet = GS;
+					} catch (error) {
+						console.log("Google Spreadsheet not available, skipping spreadsheet update:", error.message);
+						return;
+					}
+				}
 				const doc = new GoogleSpreadsheet(doc_id);
 				// await doc.useServiceAccountAuth(creds);
 				await doc.loadInfo();
@@ -15165,6 +15186,16 @@ var addKeywordsToGSheet = async function (req, res) {
 				/*
 				var doc_id = '1UBfUP0KEX3ItBW1SzepSyad1qHR4qLJPsM3oZw4USSM';
 				const rowsArray = PostArr || [];
+				// Dynamic import to avoid ESM issues
+				if (!GoogleSpreadsheet) {
+					try {
+						const { GoogleSpreadsheet: GS } = await import("google-spreadsheet");
+						GoogleSpreadsheet = GS;
+					} catch (error) {
+						console.log("Google Spreadsheet not available, skipping spreadsheet update:", error.message);
+						return;
+					}
+				}
 				const doc = new GoogleSpreadsheet(doc_id);
 				// await doc.useServiceAccountAuth(creds);
 				await doc.loadInfo();
@@ -15260,6 +15291,16 @@ var addKeywordsToGSheetGroupStream = async function (req, res) {
 				/*
 				var doc_id = '1UBfUP0KEX3ItBW1SzepSyad1qHR4qLJPsM3oZw4USSM';
 				const rowsArray = PostArr || [];
+				// Dynamic import to avoid ESM issues
+				if (!GoogleSpreadsheet) {
+					try {
+						const { GoogleSpreadsheet: GS } = await import("google-spreadsheet");
+						GoogleSpreadsheet = GS;
+					} catch (error) {
+						console.log("Google Spreadsheet not available, skipping spreadsheet update:", error.message);
+						return;
+					}
+				}
 				const doc = new GoogleSpreadsheet(doc_id);
 				// await doc.useServiceAccountAuth(creds);
 				await doc.loadInfo();
