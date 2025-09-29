@@ -17,11 +17,6 @@
     "NODE_ENV": "development",
     "PORT": "3002"
   },
-  "functions": {
-    "server.js": {
-      "maxDuration": 30
-    }
-  },
   "regions": ["iad1"],
   "framework": null
 }
