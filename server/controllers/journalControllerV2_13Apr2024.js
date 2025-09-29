@@ -38,7 +38,8 @@ var im = require('imagemagick');
 var easyimg = require('easyimage');
 const { htmlToText } = require('html-to-text');
 
-const { GoogleSpreadsheet } = require('google-spreadsheet');
+// Google Spreadsheet - dynamic import to avoid ESM issues on Vercel
+let GoogleSpreadsheet = null;
 const creds = require('../../config/google/creds.json');
 var keywordModel_allTags = require('../models/allTagsModel.js');
 
