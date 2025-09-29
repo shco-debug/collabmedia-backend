@@ -462,28 +462,28 @@ try {
   app.get("/openapi.json", (req, res) =>
     res.status(404).send("OpenAPI specification not found.")
   );
-
-  // Health check endpoint
-  app.get("/health", (req, res) => {
-    try {
-      res.json({ 
-        status: 'OK', 
-        timestamp: new Date().toISOString(),
-        environment: process.env.NODE_ENV,
-        platform: process.env.VERCEL ? 'Vercel' : 'Local',
-        uptime: process.uptime(),
-        mongoStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
-      });
-    } catch (error) {
-      console.error('Health check error:', error);
-      res.status(500).json({ 
-        status: 'ERROR', 
-        error: error.message,
-        timestamp: new Date().toISOString()
-      });
-    }
-  });
 }
+
+// Health check endpoint - moved outside try/catch to ensure it's always available
+app.get("/health", (req, res) => {
+  try {
+    res.json({ 
+      status: 'OK', 
+      timestamp: new Date().toISOString(),
+      environment: process.env.NODE_ENV,
+      platform: process.env.VERCEL ? 'Vercel' : 'Local',
+      uptime: process.uptime(),
+      mongoStatus: mongoose.connection.readyState === 1 ? 'connected' : 'disconnected'
+    });
+  } catch (error) {
+    console.error('Health check error:', error);
+    res.status(500).json({ 
+      status: 'ERROR', 
+      error: error.message,
+      timestamp: new Date().toISOString()
+    });
+  }
+});
 
 
 // Start server for Local Development (skip for Vercel)
