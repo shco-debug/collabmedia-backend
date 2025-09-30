@@ -311,7 +311,7 @@ require("./server/middlewares.js")(router.chapterRoutes);
 require("./server/middlewares.js")(router.groupRoutes);
 require("./server/middlewares.js")(router.memberRoutes);
 require("./server/middlewares.js")(router.pageRoutes);
-// require("./server/middlewares.js")(router.capsuleRoutes); // TEMPORARILY DISABLED FOR CAPSULE ROUTES
+require("./server/middlewares.js")(router.capsuleRoutes);
 require("./server/middlewares.js")(router.referralRoutes);
 require("./server/middlewares.js")(router.journalRoutes);
 
