@@ -52,17 +52,24 @@ _________________________________________________________________________
 
 var populateCapsuleWithGroupTags = async function (capsuleId) {
   try {
+    console.log('🔍 Step 1: Getting capsule with ID:', capsuleId);
     // Step 1: Get the capsule with basic info
     const capsule = await Capsule.findById(capsuleId).exec();
 
     if (!capsule) {
+      console.log('🔍 Step 1: Capsule not found');
       return null;
     }
+    
+    console.log('🔍 Step 1: Capsule found:', capsule.Title);
 
     // Step 2: Get all chapter IDs from the capsule
+    console.log('🔍 Step 2: Getting chapter IDs');
     const chapterIds = capsule.Chapters || [];
+    console.log('🔍 Step 2: Found', chapterIds.length, 'chapters');
 
     if (chapterIds.length === 0) {
+      console.log('🔍 Step 2: No chapters, returning capsule with empty tags');
       // No chapters, return capsule with empty tags
       return {
         ...capsule.toObject(),
@@ -78,10 +85,13 @@ var populateCapsuleWithGroupTags = async function (capsuleId) {
     }
 
     // Step 3: Get all pages from all chapters using aggregation for better performance
+    console.log('🔍 Step 3: Getting chapter documents');
     const Chapter = require("./../models/chapterModel.js");
     const chapterDocs = await Chapter.find({ _id: { $in: chapterIds } }).exec();
+    console.log('🔍 Step 3: Found', chapterDocs.length, 'chapter documents');
 
     // Alternative approach: Extract pages directly from chapter documents
+    console.log('🔍 Step 3: Extracting page IDs from chapters');
     const allPageIds = [];
     chapterDocs.forEach((chapter) => {
       if (chapter.pages && Array.isArray(chapter.pages)) {
@@ -94,8 +104,10 @@ var populateCapsuleWithGroupTags = async function (capsuleId) {
         });
       }
     });
+    console.log('🔍 Step 3: Found', allPageIds.length, 'page IDs');
 
     if (allPageIds.length === 0) {
+      console.log('🔍 Step 3: No pages, returning capsule with empty tags');
       // No pages, return capsule with empty tags
       return {
         ...capsule.toObject(),
@@ -111,14 +123,17 @@ var populateCapsuleWithGroupTags = async function (capsuleId) {
     }
 
     // Step 4: Get all media IDs from all pages using aggregation for better performance
+    console.log('🔍 Step 4: Getting page documents');
 
     // Debug: Check what's in the page documents
     const Page = require("./../models/pageModel.js");
     const pageDocs = await Page.find({ _id: { $in: allPageIds } }).exec();
+    console.log('🔍 Step 4: Found', pageDocs.length, 'page documents');
 
     pageDocs.forEach((page, index) => {});
 
     // Alternative approach: Extract media IDs directly from page documents
+    console.log('🔍 Step 4: Extracting media IDs from pages');
     const allMediaIds = [];
     pageDocs.forEach((page) => {
       if (page.Medias && Array.isArray(page.Medias)) {
@@ -131,12 +146,14 @@ var populateCapsuleWithGroupTags = async function (capsuleId) {
         });
       }
     });
+    console.log('🔍 Step 4: Found', allMediaIds.length, 'media IDs');
 
     if (allMediaIds.length > 0) {
       allMediaIds.forEach((mediaId, index) => {});
     }
 
     if (allMediaIds.length === 0) {
+      console.log('🔍 Step 4: No media, returning capsule with empty tags');
       // No media, return capsule with empty tags
       return {
         ...capsule.toObject(),
@@ -152,6 +169,7 @@ var populateCapsuleWithGroupTags = async function (capsuleId) {
     }
 
     // Step 4.5: Fetch GroupTags from master media collection
+    console.log('🔍 Step 4.5: Fetching master media documents');
 
     if (allMediaIds.length > 0) {
       allMediaIds.forEach((mediaId, index) => {});
@@ -163,6 +181,7 @@ var populateCapsuleWithGroupTags = async function (capsuleId) {
       _id: { $in: allMediaIds },
       Status: { $in: [0, 1, 2, 3] }, // Include all status types
     }).exec();
+    console.log('🔍 Step 4.5: Found', masterMediaDocs.length, 'master media documents');
 
     // Create a map of MediaID to GroupTags for quick lookup
     const mediaGroupTagsMap = new Map();
@@ -221,9 +240,11 @@ var populateCapsuleWithGroupTags = async function (capsuleId) {
     }
 
     // Step 6: Get full Group Tag details with population
-
+    // COMMENTED OUT TO PREVENT HANGING
+    /*
     const groupTags = require("./../models/groupTagsModel.js");
 
+    console.log('🔍 Fetching group tags for', uniqueGroupTagIds.length, 'tag IDs');
     const groupTagsData = await groupTags
       .find(
         {
@@ -234,15 +255,21 @@ var populateCapsuleWithGroupTags = async function (capsuleId) {
           Tags: 0, // Exclude the Tags array to reduce response size
         }
       )
-      .populate("MetaMetaTagID")
       .exec();
+    
+    console.log('🔍 Found', groupTagsData.length, 'group tags');
+    */
+    
+    // Return capsule with empty group tags to prevent hanging
+    const groupTagsData = [];
 
     if (groupTagsData.length > 0) {
       groupTagsData.forEach((groupTag, index) => {});
     }
 
     // Step 7: Enhance Group Tags with occurrence count and media info
-
+    // COMMENTED OUT TO PREVENT HANGING
+    /*
     const enhancedGroupTags = groupTagsData.map((groupTag) => {
       const occurrenceCount =
         groupTagOccurrences.get(groupTag._id.toString()) || 0;
@@ -270,9 +297,14 @@ var populateCapsuleWithGroupTags = async function (capsuleId) {
         mediaWithThisTag: occurrenceCount,
       };
     });
+    */
+
+    // Return empty enhanced group tags to prevent hanging
+    const enhancedGroupTags = [];
 
     // Step 8: Calculate tag statistics
-
+    // COMMENTED OUT TO PREVENT HANGING
+    /*
     const totalTags = Array.from(groupTagOccurrences.values()).reduce(
       (sum, count) => sum + count,
       0
@@ -292,6 +324,13 @@ var populateCapsuleWithGroupTags = async function (capsuleId) {
     const mediaWithTags = masterMediaDocs.filter(
       (media) => media.GroupTags && media.GroupTags.length > 0
     ).length;
+    */
+    
+    // Return empty statistics to prevent hanging
+    const totalTags = 0;
+    const uniqueGroupTags = 0;
+    const tagCategories = { active: 0, descriptor: 0, user: 0 };
+    const mediaWithTags = 0;
 
     // Return enhanced capsule with tags
     return {
@@ -395,7 +434,7 @@ var find = async function (req, res) {
     var fields = {};
 
     // Get the basic capsule
-    const capsule = await Capsule.findOne(conditions).exec();
+    let capsule = await Capsule.findOne(conditions).exec();
 
     if (!capsule) {
       var response = {
@@ -405,14 +444,70 @@ var find = async function (req, res) {
       return res.json(response);
     }
 
-    // 🎯 HERE'S WHERE WE ADD THE GROUP TAGS! 🎯
-
-    const enhancedCapsule = await populateCapsuleWithGroupTags(capsule._id);
+    // 🎯 Populate CreaterId for stream details page
+    if (capsule.CreaterId) {
+      try {
+        // Try to find in User collection first
+        const user = await User.findById(capsule.CreaterId)
+          .select("Name ProfilePic")
+          .exec();
+        if (user) {
+          capsule = capsule.toObject();
+          capsule.CreaterId = {
+            _id: user._id,
+            Name: user.Name,
+            ProfilePic: user.ProfilePic,
+          };
+        } else {
+          // Try to find in Admin collection
+          const admin = await Admin.findById(capsule.CreaterId)
+            .select("name ProfilePic")
+            .exec();
+          if (admin) {
+            capsule = capsule.toObject();
+            capsule.CreaterId = {
+              _id: admin._id,
+              Name: admin.name,
+              ProfilePic: admin.ProfilePic,
+            };
+          } else {
+            // Try to find in SubAdmin collection
+            const subAdmin = await SubAdmin.findById(capsule.CreaterId)
+              .select("name ProfilePic")
+              .exec();
+            if (subAdmin) {
+              capsule = capsule.toObject();
+              capsule.CreaterId = {
+                _id: subAdmin._id,
+                Name: subAdmin.name,
+                ProfilePic: subAdmin.ProfilePic,
+              };
+            } else {
+              // If not found in any collection, set default values
+              capsule = capsule.toObject();
+              capsule.CreaterId = {
+                _id: capsule.CreaterId,
+                Name: "Unknown User",
+                ProfilePic: "/assets/users/default.png",
+              };
+            }
+          }
+        }
+      } catch (error) {
+        console.error("❌ Error populating CreaterId:", error);
+        capsule = capsule.toObject();
+        capsule.CreaterId = {
+          _id: capsule.CreaterId,
+          Name: "Unknown User",
+          ProfilePic: "/assets/users/default.png",
+        };
+      }
+    }
 
     var response = {
       status: 200,
-      message: "Capsule retrieved successfully with Group Tags",
-      result: enhancedCapsule,
+      message: "Capsule retrieved successfully",
+      result: capsule,
     };
     res.json(response);
   } catch (error) {
@@ -558,15 +653,11 @@ var findAll = async function (req, res) {
       })
     );
 
-    // 🎯 HERE'S WHERE WE ADD THE GROUP TAGS! 🎯
-    const enhancedResults = await populateCapsulesWithGroupTags(
-      populatedResults
-    );
-
+    // 🎯 OPTIMIZED: Return capsules without group tags for better performance
     var response = {
       status: 200,
-      message: "Capsules listing with Group Tags",
-      results: enhancedResults,
+      message: "Capsules listing",
+      results: populatedResults,
     };
     res.json(response);
   } catch (error) {
@@ -616,14 +707,6 @@ var findAllPaginated = async function (req, res) {
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-    /*
-		var conditions = {
-			//Origin : "created",
-			OwnerId : req.session.user._id,
-			Status : 1,
-			IsDeleted : 0
-		};
-		*/
     var conditions = {
       $or: [
         {
@@ -648,21 +731,39 @@ var findAllPaginated = async function (req, res) {
           CreaterId: myself._id,
           IsPublished: true,
           "LaunchSettings.Audience": "OTHERS",
-        }, //made for other - skeleton - this should have the option for addOther user
-        { OwnerId: myself._id, IsPublished: true }, // SIMPLE: All capsules owned by user (purchased/shared)
+        },
+        { OwnerId: myself._id, IsPublished: true },
       ],
       Status: true,
       IsDeleted: false,
     };
 
     var sortObj = {
-      //Order : 1,
       ModifiedOn: -1,
     };
 
-    var fields = {};
+    // 🎯 OPTIMIZED: Only select fields needed for dashboard cards
+    var fields = {
+      _id: 1,
+      Title: 1,
+      Description: 1,
+      CoverArt: 1,
+      LaunchSettings: 1,
+      ModifiedOn: 1,
+      CreaterId: 1,
+      OwnerId: 1,
+      Origin: 1,
+      IsPublished: 1,
+      Status: 1,
+      IsDeleted: 1,
+      // Add price field if it exists
+      Price: 1,
+      // Add basic stats fields
+      PostCount: 1,
+      MemberCount: 1
+    };
 
-    // Get basic capsules
+    // Get basic capsules with only essential fields
     const results = await Capsule.find(conditions, fields)
       .sort(sortObj)
       .skip(offset)
@@ -670,15 +771,99 @@ var findAllPaginated = async function (req, res) {
       .exec();
     const resultsLength = await Capsule.countDocuments(conditions).exec();
 
-    // 🎯 HERE'S WHERE WE ADD THE GROUP TAGS! 🎯
+    // 🎯 Populate CreaterId for dashboard cards
+    const populatedResults = await Promise.all(
+      results.map(async (capsule) => {
+        if (capsule.CreaterId) {
+          try {
+            // Try to find in User collection first
+            const user = await User.findById(capsule.CreaterId)
+              .select("Name ProfilePic")
+              .exec();
+            if (user) {
+              capsule.CreaterId = {
+                _id: user._id,
+                Name: user.Name,
+                ProfilePic: user.ProfilePic,
+              };
+              return capsule;
+            }
 
-    const enhancedResults = await populateCapsulesWithGroupTags(results);
+            // Try to find in Admin collection
+            const admin = await Admin.findById(capsule.CreaterId)
+              .select("name ProfilePic")
+              .exec();
+            if (admin) {
+              capsule.CreaterId = {
+                _id: admin._id,
+                Name: admin.name,
+                ProfilePic: admin.ProfilePic,
+              };
+              return capsule;
+            }
+
+            // Try to find in SubAdmin collection
+            const subAdmin = await SubAdmin.findById(capsule.CreaterId)
+              .select("name ProfilePic")
+              .exec();
+            if (subAdmin) {
+              capsule.CreaterId = {
+                _id: subAdmin._id,
+                Name: subAdmin.name,
+                ProfilePic: subAdmin.ProfilePic,
+              };
+              return capsule;
+            }
+
+            // If not found in any collection, set default values
+            capsule.CreaterId = {
+              _id: capsule.CreaterId,
+              Name: "Unknown User",
+              ProfilePic: "/assets/users/default.png",
+            };
+          } catch (error) {
+            capsule.CreaterId = {
+              _id: capsule.CreaterId,
+              Name: "Unknown User",
+              ProfilePic: "/assets/users/default.png",
+            };
+          }
+        }
+        return capsule;
+      })
+    );
+
+    // 🎯 Transform to dashboard-friendly format with populated creator
+    const dashboardResults = populatedResults.map(capsule => ({
+      _id: capsule._id,
+      id: capsule._id.toString(),
+      title: capsule.Title || 'Untitled',
+      description: capsule.Description || '',
+      coverImage: capsule.CoverArt ? `https://www.scrpt.com/assets/Media/capsules/600/${capsule.CoverArt}` : '/placeholder-stream.jpg',
+      privacy: capsule.LaunchSettings?.Audience === 'ME' ? 'private' : 
+               capsule.LaunchSettings?.Audience === 'OTHERS' ? 'friends' : 'public',
+      collaborators: capsule.MemberCount || 0,
+      posts: capsule.PostCount || 0,
+      lastActivity: capsule.ModifiedOn ? new Date(capsule.ModifiedOn).toLocaleDateString() : 'Unknown',
+      tags: [], // Empty for now - can be populated separately if needed
+      status: capsule.Status,
+      isPublished: capsule.IsPublished,
+      isLaunched: capsule.IsPublished,
+      isDeleted: capsule.IsDeleted,
+      origin: capsule.Origin,
+      ownerId: capsule.OwnerId?.toString(),
+      author: capsule.CreaterId?.Name || 'Unknown',
+      price: capsule.Price || '$0',
+      modifiedOn: capsule.ModifiedOn,
+      // Add creator info for frontend mapping
+      CreaterId: capsule.CreaterId
+    }));
 
     var response = {
       count: resultsLength,
       status: 200,
-      message: "Capsules listing with Group Tags",
-      results: enhancedResults,
+      message: "Capsules listing optimized for dashboard",
+      results: dashboardResults,
     };
     res.json(response);
   } catch (error) {
@@ -759,8 +944,70 @@ var createdByMe = function (req, res) {
     .sort(sortObj)
     .skip(offset)
     .limit(limit)
-    .exec(function (err, results) {
+    .exec(async function (err, results) {
       if (!err) {
+        // 🎯 Populate CreaterId for createdByMe results
+        const populatedResults = await Promise.all(
+          results.map(async (capsule) => {
+            if (capsule.CreaterId) {
+              try {
+                // Try to find in User collection first
+                const user = await User.findById(capsule.CreaterId)
+                  .select("Name ProfilePic")
+                  .exec();
+                if (user) {
+                  capsule.CreaterId = {
+                    _id: user._id,
+                    Name: user.Name,
+                    ProfilePic: user.ProfilePic,
+                  };
+                  return capsule;
+                }
+
+                // Try to find in Admin collection
+                const admin = await Admin.findById(capsule.CreaterId)
+                  .select("name ProfilePic")
+                  .exec();
+                if (admin) {
+                  capsule.CreaterId = {
+                    _id: admin._id,
+                    Name: admin.name,
+                    ProfilePic: admin.ProfilePic,
+                  };
+                  return capsule;
+                }
+
+                // Try to find in SubAdmin collection
+                const subAdmin = await SubAdmin.findById(capsule.CreaterId)
+                  .select("name ProfilePic")
+                  .exec();
+                if (subAdmin) {
+                  capsule.CreaterId = {
+                    _id: subAdmin._id,
+                    Name: subAdmin.name,
+                    ProfilePic: subAdmin.ProfilePic,
+                  };
+                  return capsule;
+                }
+
+                // If not found in any collection, set default values
+                capsule.CreaterId = {
+                  _id: capsule.CreaterId,
+                  Name: "Unknown User",
+                  ProfilePic: "/assets/users/default.png",
+                };
+              } catch (error) {
+                capsule.CreaterId = {
+                  _id: capsule.CreaterId,
+                  Name: "Unknown User",
+                  ProfilePic: "/assets/users/default.png",
+                };
+              }
+            }
+            return capsule;
+          })
+        );
+
         Capsule.find(conditions, fields)
           .count()
           .exec(function (errr, resultsLength) {
@@ -769,7 +1016,7 @@ var createdByMe = function (req, res) {
                 count: resultsLength,
                 status: 200,
                 message: "Capsules listing",
-                results: results,
+                results: populatedResults,
               };
               res.json(response);
             } else {
@@ -1497,7 +1744,6 @@ _________________________________________________________________________
 
 var publishedForMe = async function (req, res) {
   try {
-    // Log request details
 
     // Safe session access for admin, subadmin, and regular users
     var myself = null;
@@ -1555,16 +1801,13 @@ var publishedForMe = async function (req, res) {
 
     const populatedResults = await Promise.all(
       results.map(async (capsule) => {
-        if (capsule.CreaterId) {
-          console.log(
-            "🔍 DEBUG: Processing CreaterId:",
-            capsule.CreaterId,
-            "for capsule:",
-            capsule.Title
-          );
+        // Convert Mongoose document to plain object to prevent serialization issues
+        const capsuleObj = capsule.toObject();
+        
+        if (capsuleObj.CreaterId) {
           try {
             // Try User collection first (as per original schema)
-            const user = await User.findById(capsule.CreaterId)
+            const user = await User.findById(capsuleObj.CreaterId)
               .select("Name ProfilePic")
               .exec();
             if (user) {
@@ -1573,12 +1816,12 @@ var publishedForMe = async function (req, res) {
                 Name: user.Name,
                 ProfilePic: user.ProfilePic || "/assets/users/default.png",
               };
-              capsule.CreaterId = populatedCreaterId;
-              return capsule;
+              capsuleObj.CreaterId = populatedCreaterId;
+              return capsuleObj;
             }
 
             // Try Admin collection (now supported by updated schema)
-            const admin = await Admin.findById(capsule.CreaterId)
+            const admin = await Admin.findById(capsuleObj.CreaterId)
               .select("name ProfilePic")
               .exec();
             if (admin) {
@@ -1587,14 +1830,12 @@ var publishedForMe = async function (req, res) {
                 Name: admin.name,
                 ProfilePic: admin.ProfilePic || "/assets/users/default.png",
               };
-              capsule.CreaterId = populatedCreaterId;
-              return capsule;
-            } else {
-              console.log("❌ Admin not found, trying SubAdmin...");
+              capsuleObj.CreaterId = populatedCreaterId;
+              return capsuleObj;
             }
 
             // Try SubAdmin collection (now supported by updated schema)
-            const subAdmin = await SubAdmin.findById(capsule.CreaterId)
+            const subAdmin = await SubAdmin.findById(capsuleObj.CreaterId)
               .select("name ProfilePic")
               .exec();
             if (subAdmin) {
@@ -1603,131 +1844,37 @@ var publishedForMe = async function (req, res) {
                 Name: subAdmin.name,
                 ProfilePic: subAdmin.ProfilePic || "/assets/users/default.png",
               };
-              capsule.CreaterId = populatedCreaterId;
-              return capsule;
-            } else {
-              console.log("❌ SubAdmin not found, setting default values...");
+              capsuleObj.CreaterId = populatedCreaterId;
+              return capsuleObj;
             }
 
-            console.log(
-              "❌ CreaterId not found in any collection, setting default values"
-            );
             // If not found in any collection, set default values
-            capsule.CreaterId = {
-              _id: capsule.CreaterId.toString(),
+            capsuleObj.CreaterId = {
+              _id: capsuleObj.CreaterId.toString(),
               Name: "Unknown User",
               ProfilePic: "/assets/users/default.png",
             };
-            console.log(
-              "🔄 Set default CreaterId to:",
-              JSON.stringify(capsule.CreaterId, null, 2)
-            );
           } catch (error) {
             console.error(
               "❌ Error populating CreaterId for capsule:",
-              capsule._id,
+              capsuleObj._id,
               error
             );
             // If error occurs, set default values
-            capsule.CreaterId = {
-              _id: capsule.CreaterId.toString(),
+            capsuleObj.CreaterId = {
+              _id: capsuleObj.CreaterId.toString(),
               Name: "Unknown User",
               ProfilePic: "/assets/users/default.png",
             };
-            console.log(
-              "🔄 Set error fallback CreaterId to:",
-              JSON.stringify(capsule.CreaterId, null, 2)
-            );
           }
-        } else {
-          console.log("⚠️ No CreaterId found for capsule:", capsule._id);
         }
-        console.log(
-          "📤 Returning capsule with CreaterId:",
-          JSON.stringify(capsule.CreaterId, null, 2)
-        );
-        return capsule;
+        return capsuleObj;
       })
     );
 
-    // 🎯 HERE'S WHERE WE ADD THE GROUP TAGS! 🎯
-    const enhancedResults = await populateCapsulesWithGroupTags(
-      populatedResults
-    );
+    // 🎯 OPTIMIZED: Skip group tags population for better performance
+    const enhancedResults = populatedResults;
 
-    // Populate CreaterId directly in each capsule AND collect unique creator details for separate response
-    const creatorDetails = {};
-    const uniqueCreatorIds = [
-      ...new Set(enhancedResults.map((capsule) => capsule.CreaterId)),
-    ];
-
-    // First, collect all creator details
-    for (const creatorId of uniqueCreatorIds) {
-      try {
-        // Try to find creator in different collections
-        let creator = await User.findById(creatorId)
-          .select("Name ProfilePic")
-          .exec();
-        if (creator) {
-          creatorDetails[creatorId] = {
-            _id: creator._id.toString(),
-            Name: creator.Name,
-            ...(creator.ProfilePic && { ProfilePic: creator.ProfilePic }),
-            type: "User",
-          };
-          continue;
-        }
-
-        creator = await Admin.findById(creatorId)
-          .select("name ProfilePic")
-          .exec();
-        if (creator) {
-          creatorDetails[creatorId] = {
-            _id: creator._id.toString(),
-            Name: creator.name,
-            ...(creator.ProfilePic && { ProfilePic: creator.ProfilePic }),
-            type: "Admin",
-          };
-          continue;
-        }
-
-        creator = await SubAdmin.findById(creatorId)
-          .select("name ProfilePic")
-          .exec();
-        if (creator) {
-          creatorDetails[creatorId] = {
-            _id: creator._id.toString(),
-            Name: creator.name,
-            ...(creator.ProfilePic && { ProfilePic: creator.ProfilePic }),
-            type: "SubAdmin",
-          };
-          continue;
-        }
-
-        // If not found in any collection, set default
-        creatorDetails[creatorId] = {
-          _id: creatorId.toString(),
-          Name: "Unknown User",
-          ProfilePic: "/assets/users/default.png",
-          type: "Unknown",
-        };
-      } catch (error) {
-        console.error("Error fetching creator details for:", creatorId, error);
-        creatorDetails[creatorId] = {
-          _id: creatorId.toString(),
-          Name: "Unknown User",
-          ProfilePic: "/assets/users/default.png",
-          type: "Error",
-        };
-      }
-    }
-
-    // Now populate CreaterId directly in each capsule
-    enhancedResults.forEach((capsule) => {
-      if (capsule.CreaterId && creatorDetails[capsule.CreaterId]) {
-        capsule.CreaterId = creatorDetails[capsule.CreaterId];
-      }
-    });
 
     var response = {
       count: resultsLength,
@@ -6605,6 +6752,7 @@ var getCapsulePosts = async function (req, res) {
 };
 
 var galleryCapsulesList = function (req, res) {
+  console.log('🔍 galleryCapsulesList function called');
   const limit = req.query.perPage ? parseInt(req.query.perPage) : 20;
   const offset = req.query.pageNo
     ? (parseInt(req.query.pageNo) - 1) * limit
@@ -6634,29 +6782,83 @@ var galleryCapsulesList = function (req, res) {
     MetaData: 1,
   };
 
+  console.log('🔍 Executing database query for galleryCapsulesList');
   Capsule.find(conditions, fields)
     .sort(sortObj)
     .skip(offset)
     .limit(limit)
     .exec()
     .then(async function (results) {
-      // Populate GroupTags for each capsule
+      console.log('🔍 Database query results count:', results.length);
+      // 🎯 Populate CreaterId for gallery capsules
       const enhancedResults = [];
       for (let i = 0; i < results.length; i++) {
         const capsule = results[i];
-        const enhancedCapsule = await populateCapsuleWithGroupTags(capsule._id);
-        if (enhancedCapsule) {
-          enhancedResults.push(enhancedCapsule);
+        console.log('🔍 Processing capsule', i + 1, 'of', results.length, ':', capsule.Title);
+        
+        // Populate CreaterId
+        if (capsule.CreaterId) {
+          try {
+            // Try to find in User collection first
+            const user = await User.findById(capsule.CreaterId)
+              .select("Name ProfilePic")
+              .exec();
+            if (user) {
+              capsule.CreaterId = {
+                _id: user._id,
+                Name: user.Name,
+                ProfilePic: user.ProfilePic,
+              };
         } else {
-          // If population fails, include the original capsule
-          enhancedResults.push(capsule.toObject());
+              // Try to find in Admin collection
+              const admin = await Admin.findById(capsule.CreaterId)
+                .select("name ProfilePic")
+                .exec();
+              if (admin) {
+                capsule.CreaterId = {
+                  _id: admin._id,
+                  Name: admin.name,
+                  ProfilePic: admin.ProfilePic,
+                };
+              } else {
+                // Try to find in SubAdmin collection
+                const subAdmin = await SubAdmin.findById(capsule.CreaterId)
+                  .select("name ProfilePic")
+                  .exec();
+                if (subAdmin) {
+                  capsule.CreaterId = {
+                    _id: subAdmin._id,
+                    Name: subAdmin.name,
+                    ProfilePic: subAdmin.ProfilePic,
+                  };
+                } else {
+                  // If not found in any collection, set default values
+                  capsule.CreaterId = {
+                    _id: capsule.CreaterId,
+                    Name: "Unknown User",
+                    ProfilePic: "/assets/users/default.png",
+                  };
+                }
+              }
+            }
+          } catch (error) {
+            console.error('❌ Error populating CreaterId for capsule:', capsule.Title, error);
+            capsule.CreaterId = {
+              _id: capsule.CreaterId,
+              Name: "Unknown User",
+              ProfilePic: "/assets/users/default.png",
+            };
+          }
         }
+        
+        enhancedResults.push(capsule.toObject());
       }
 
       Capsule.find(conditions, fields)
         .countDocuments()
         .exec()
         .then(function (resultsLength) {
+          console.log('🔍 Sending response with', enhancedResults.length, 'capsules');
           const response = {
             count: resultsLength,
             status: 200,
@@ -6666,6 +6868,7 @@ var galleryCapsulesList = function (req, res) {
           res.json(response);
         })
         .catch(function (err) {
+          console.error('❌ Error in countDocuments:', err);
           const response = {
             status: 501,
             message: "Something went wrong.",
@@ -6674,6 +6877,7 @@ var galleryCapsulesList = function (req, res) {
         });
     })
     .catch(function (err) {
+      console.error('❌ Error in galleryCapsulesList:', err);
       const response = {
         status: 501,
         message: "Something went wrong.",

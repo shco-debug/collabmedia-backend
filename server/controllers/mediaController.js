@@ -3038,8 +3038,14 @@ const createSinglePost = async (req, res) => {
     // Generate unique locator
     const locator = `post_${Date.now()}_${incNum}`;
 
-    // Extract keywords for group tags
-    const groupTagIds = keywords.map((k) => k.id).filter((id) => id);
+    // Extract keywords for group tags and transform to embedded document format
+    const groupTagIds = keywords.map((k) => ({
+      GroupTagID: k.id,
+      GroupTagTitle: k.title,
+      MetaMetaTagID: "",
+      MetaTagID: "",
+      _id: new ObjectId()
+    })).filter((gt) => gt.GroupTagID);
     const promptText = keywords.map((k) => k.title).join(",");
 
     // Prepare Location array with all images (original + blended)

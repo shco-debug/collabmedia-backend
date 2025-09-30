@@ -49,6 +49,10 @@ module.exports = function(router){
 		user.view(req,res);
 	});
 	
+	router.get('/user/get_by_id/:id', function(req, res){
+		user.getUserById(req,res);
+	});
+	
 	router.post('/user/register', function(req, res){
 		user.register(req,res);
 	});
