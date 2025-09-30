@@ -24,7 +24,8 @@ const corsOptions = {
       'https://journale.co',
       'https://www.journale.co',
       'https://collabmedia.com',
-      'https://www.collabmedia.com'
+      'https://www.collabmedia.com',
+      'https://www.ahaday.com'
     ];
     
     if (allowedOrigins.includes(origin)) {
