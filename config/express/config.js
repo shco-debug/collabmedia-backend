@@ -6,8 +6,8 @@
 
 const express = require('express');
 const fs = require('fs');
-const cookieParser = require('cookie-parser');
-const expressSession = require('express-session');
+// Cookie parser removed - using JWT authentication instead
+// Session dependencies removed - using JWT authentication instead
 const bp = require('body-parser');
 const url = require('url');
 
@@ -15,7 +15,7 @@ const url = require('url');
 const compress = require('compression');
 
 const mongoose = require("mongoose");
-const MongoStore = require('connect-mongo');
+// MongoStore removed - using JWT authentication instead
 
 const user = require('../../server/models/userModel.js');
 const Capsule = require('../../server/models/capsuleModel.js');
@@ -84,43 +84,11 @@ module.exports = (app) => {
 	// Move compression AFTER session middleware to prevent cookie header interference
 	// app.use(compress()); 
 	
-	app.use(cookieParser());
+	// Cookie parser removed - using JWT authentication instead
 	// GLOBAL SESSION MIDDLEWARE - ENABLED WITH 7-DAY TIMEOUT
-	app.use(
-		expressSession({
-			secret : process.env.SESSION_SECRET || '3q8753248o5_mnasxvda@!#$@%@#$iwqer6y39',
-			store : MongoStore.create({
-				mongoUrl: process.env.MONGODB_URI || 'mongodb://127.0.0.1:27017/collabmedia',
-				collectionName: 'my_app_sessions', //default - sessions
-				ttl: 7 * 24 * 60 * 60, // 7 days in seconds
-				autoRemove: 'native', // Use MongoDB's TTL index
-				// Add error handling
-				onError: function(error) {
-					console.error('❌ Session store error:', error);
-				},
-				// Add connection success callback
-				onConnect: function() {
-					console.log('✅ Session store connected to MongoDB');
-				},
-				// Add session events
-				onSession: function(session) {
-					console.log('📝 Session created/updated:', session.id);
-				}
-			}),
-			cookie: {
-				maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days in milliseconds
-				httpOnly: true, // Secure: prevent JavaScript access
-				secure: process.env.NODE_ENV === 'production', // HTTPS only in production
-				sameSite: 'lax',
-				path: '/'
-			},
-			resave: false, // Don't save session if unmodified
-			saveUninitialized: false, // Don't create session until something stored
-			name: 'connect.sid',
-			// Add better error handling
-			unset: 'destroy'
-		})
-	);
+	// Session middleware removed - using JWT authentication instead
+	
+	// Session compatibility middleware will be added after JWT authentication
 	
 	// Apply compression AFTER session middleware to prevent cookie header interference
 	app.use(compress({
