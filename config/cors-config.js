@@ -11,9 +11,21 @@ const corsOptions = {
       return callback(null, true);
     }
     
+    // For development/local, allow ALL origins (wildcard behavior)
+    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'local') {
+      console.log('CORS: Development/Local mode - allowing ALL origins:', origin);
+      return callback(null, true);
+    }
+    
     // Allow localhost for development (all ports)
     if (origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) {
       console.log('CORS: Allowing localhost origin:', origin);
+      return callback(null, true);
+    }
+    
+    // Allow 127.0.0.1 for development
+    if (origin.startsWith('http://127.0.0.1:') || origin.startsWith('https://127.0.0.1:')) {
+      console.log('CORS: Allowing 127.0.0.1 origin:', origin);
       return callback(null, true);
     }
     
@@ -39,16 +51,10 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    // For development, allow all origins
-    if (process.env.NODE_ENV === 'development') {
-      console.log('CORS: Development mode - allowing all origins:', origin);
-      return callback(null, true);
-    }
-    
     console.log('CORS: Blocking origin:', origin);
     callback(new Error('Not allowed by CORS'));
   },
-  credentials: true, // Allow cookies and authentication headers
+  credentials: false, // No cookies needed with JWT
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
     'Origin',
@@ -56,18 +62,15 @@ const corsOptions = {
     'Content-Type',
     'Accept',
     'Authorization',
-    'Cookie',
-    'Set-Cookie',
+    'X-Session-ID',
     'capsule_id',
     'chapter_id'
   ],
-  exposedHeaders: ['Set-Cookie'],
+  exposedHeaders: [],
   optionsSuccessStatus: 200, // Some legacy browsers choke on 204
   preflightContinue: false,
   // Add more permissive settings for development
-  maxAge: 86400, // Cache preflight for 24 hours
-  // Ensure cookies work properly
-  credentials: true
+  maxAge: 86400 // Cache preflight for 24 hours
 };
 
 module.exports = corsOptions;

@@ -10,6 +10,7 @@ var nodemailer = require('nodemailer');
 var smtpTransport = require('nodemailer-smtp-transport');
 var crypto = require('crypto');
 var request = require('request');
+var jwt = require('jsonwebtoken');
 
 var mediaController = require('./../controllers/mediaController.js');
 var EmailTemplate = require('./../models/emailTemplateModel.js');
@@ -300,17 +301,35 @@ const login = async (req, res) => {
             });
         }
 
-        // Set session
+        // Create JWT token with all user data
         const userId = userData._id;
         const username = userData.Name;
-        req.session.user = userData;
         
-        // Save session to ensure it's persisted
-        req.session.save((err) => {
-            if (err) {
-                console.error('Session save error:', err);
-            }
+        // Create JWT payload with all necessary user data
+        const jwtPayload = {
+            userId: userId,
+            email: userData.Email,
+            name: userData.Name,
+            role: userData.Role || "user",
+            status: userData.Status,
+            emailConfirmationStatus: userData.EmailConfirmationStatus,
+            allowCreate: userData.AllowCreate,
+            profilePic: userData.ProfilePic,
+            gender: userData.Gender,
+            createdOn: userData.CreatedOn,
+            modifiedOn: userData.ModifiedOn,
+            lastActiveTime: userData.LastActiveTime,
+            iat: Math.floor(Date.now() / 1000)
+        };
+
+        // Generate JWT token
+        const jwtSecret = process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production';
+        const token = jwt.sign(jwtPayload, jwtSecret, { 
+            expiresIn: '7d' 
         });
+
+        console.log('🔑 JWT token generated for user:', userData.Email);
+        console.log('🔑 Token expires in 7 days');
 
         // Get complete user data from database (excluding password)
         const completeUserData = userData.toObject();
@@ -337,12 +356,11 @@ const login = async (req, res) => {
                             "code": "200", 
                             "msg": "Success", 
                             "url": req.body.board, 
-                            usersession: req.session.user,
+                            usersession: jwtPayload, // JWT payload as usersession
                             userData: completeUserData, // Complete user data from database
                             role: userData.Role || "user", // Explicitly include user role
-                            sessionId: req.sessionID,
-                            sessionExpires: new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(),
-                            message: "Login successful. Session will expire in 7 days."
+                            token: token, // JWT token
+                            message: "Login successful. Token will expire in 7 days."
                         });
                     }
                 }
@@ -351,12 +369,11 @@ const login = async (req, res) => {
                 return res.status(200).json({ 
                     "code": "200", 
                     "msg": "Success", 
-                    usersession: req.session.user,
+                    usersession: jwtPayload, // JWT payload as usersession
                     userData: completeUserData, // Complete user data from database
                     role: userData.Role || "user", // Explicitly include user role
-                    sessionId: req.sessionID,
-                    sessionExpires: new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(),
-                    message: "Login successful. Session will expire in 7 days."
+                    token: token, // JWT token
+                    message: "Login successful. Token will expire in 7 days."
                 });
 
             } catch (boardError) {
@@ -365,12 +382,11 @@ const login = async (req, res) => {
                 return res.status(200).json({ 
                     "code": "200", 
                     "msg": "Success", 
-                    usersession: req.session.user,
+                    usersession: jwtPayload, // JWT payload as usersession
                     userData: completeUserData, // Complete user data from database
                     role: userData.Role || "user", // Explicitly include user role
-                    sessionId: req.sessionID,
-                    sessionExpires: new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(),
-                    message: "Login successful. Session will expire in 7 days."
+                    token: token, // JWT token
+                    message: "Login successful. Token will expire in 7 days."
                 });
             }
                 } else {
@@ -378,12 +394,11 @@ const login = async (req, res) => {
             return res.status(200).json({ 
                 "code": "200", 
                 "msg": "Success", 
-                usersession: req.session.user,
+                usersession: jwtPayload, // JWT payload as usersession
                 userData: completeUserData, // Complete user data from database
                 role: userData.Role || "user", // Explicitly include user role
-                sessionId: req.sessionID,
-                sessionExpires: new Date(Date.now() + (7 * 24 * 60 * 60 * 1000)).toISOString(),
-                message: "Login successful. Session will expire in 7 days."
+                token: token, // JWT token
+                message: "Login successful. Token will expire in 7 days."
             });
         }
 
@@ -787,17 +802,16 @@ var __updateReferralCollacton = async function (referralData) {
 exports.__updateReferralCollacton = __updateReferralCollacton;
 
 var chklogin = async function (req, res) {
-    if (req.session.user) {
+    if (req.user) {
         try {
 		//update user's LastActiveTime
 		var dataToUpdate = { LastActiveTime: Date.now() };
-		var query = { _id: ObjectId(String(req.session.user._id)) };
+		var query = { _id: ObjectId(String(req.user.userId)) };
         var options = { multi: false };
 
             await user.update(query, { $set: dataToUpdate }, options).exec();
 
-		req.session.user.LastActiveTime = dataToUpdate.LastActiveTime;
-        res.json({ "code": "200", "msg": "Success", "usersession": req.session.user });
+        res.json({ "code": "200", "msg": "Success", "usersession": req.user });
         } catch (error) {
             console.error('Check login error:', error);
             res.status(500).json({ "code": "500", "msg": "Internal server error" });

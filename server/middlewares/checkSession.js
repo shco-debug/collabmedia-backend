@@ -1,9 +1,11 @@
 /*
-Comments - Defines a custom middle-ware to check for session for every route, with exceptions routes listed in unprotectedRoutes[]
+Comments - Defines a custom middle-ware to check for JWT authentication for every route, with exceptions routes listed in unprotectedRoutes[]
 */
 
 //var mongoose = require('mongoose');
 //var tokenModel = mongoose.model('Token');
+
+const { authenticateJWT } = require('./jwtAuth');
 
 module.exports = function(req, res, next){
 	//define api prefix
@@ -301,37 +303,24 @@ function checkSubAdminSession(req , res , next){
 }
 
 function checkSession(req , res , next , frontendApiPrefix , reqUrl){
+	// Use JWT authentication instead of session-based authentication
+	authenticateJWT(req, res, next);
+}
 
-	if (req.session.user) {
-		//req.session.user.onlyunsplash = true;
-		//req.session.user.onlyenablers = true;
-		if(req.session.user.Status == false || req.session.user.EmailConfirmationStatus == false){
-			//console.log("IF 401 return case--------req.session.user = ",req.session.user);
-			//console.log("session has expired... -- Your account has been blocked/deactivated.");
-			res.send(401, 'Your account has been blocked/deactivated.');
-		}
-		else{
-			//console.log("ELSE--------req.session.user = ",req.session.user);
-			//if( frontendApiPrefix == '/boards' && reqUrl == frontendApiPrefix+'/' ){
-			if( frontendApiPrefix == '/capsule' && reqUrl == frontendApiPrefix+'/chapter-view' ){
-				checkAcl(req , res , next);
-
-			}else{
-				next();
-			}
-		}
-
-		//next();
-	}else{
-		//console.log("session has expired... -- session not found for this request");
-		res.send(401, 'Your session has been expired');
-		//res.render('layouts/frontend/frontLayout.html');
+function validateUserSession(req, res, next, frontendApiPrefix, reqUrl) {
+	// JWT validation is already done in authenticateJWT middleware
+	// This function is kept for backward compatibility but is no longer needed
+	console.log('✅ JWT authentication successful for user:', req.user.email);
+	if( frontendApiPrefix == '/capsule' && reqUrl == frontendApiPrefix+'/chapter-view' ){
+		checkAcl(req , res , next);
+	} else {
+		next();
 	}
 }
 
 function checkAcl(req , res , next){
 	//console.log("------checking ACL-----");
-	if (req.session.user) {
+	if (req.user) {
 		//fetchUserBoards();
 		if( req.body.id ){
 			//var board = require('../models/boardModel.js');
@@ -339,8 +328,8 @@ function checkAcl(req , res , next){
 			var condition = {};
 			var IsAuthorized = false;
 
-			//condition = {IsDeleted:0,IsLaunched:1,Status:1,$or:[{"OwnerID":req.session.user._id} , {"LaunchSettings.Invitees.UserEmail":req.session.user.Email}]};//{$or:{"OwnerID":req.session.user._id , "Invitees.UserID":req.session.user._id}};
-			condition = {IsDeleted:0,IsLaunched:1,Status:1,$or:[{"OwnerId":req.session.user._id} , {"LaunchSettings.Invitees.UserEmail":req.session.user.Email}]};//{$or:{"OwnerID":req.session.user._id , "Invitees.UserID":req.session.user._id}};
+			//condition = {IsDeleted:0,IsLaunched:1,Status:1,$or:[{"OwnerID":req.user.userId} , {"LaunchSettings.Invitees.UserEmail":req.user.email}]};//{$or:{"OwnerID":req.user.userId , "Invitees.UserID":req.user.userId}};
+			condition = {IsDeleted:0,IsLaunched:1,Status:1,$or:[{"OwnerId":req.user.userId} , {"LaunchSettings.Invitees.UserEmail":req.user.email}]};//{$or:{"OwnerID":req.user.userId , "Invitees.UserID":req.user.userId}};
 			board.find(condition,{"_id":1}, function(err,result){
 				if( !err ){
 					//console.log("My Board = ",result);
@@ -372,7 +361,7 @@ function checkAcl(req , res , next){
 
 	}else{
 		//console.log("Access Denied...");
-		res.send(401, 'Your session has expired');
+		res.status(401).send('Your authentication has expired');
 		//res.render('layouts/frontend/frontLayout.html');
 	}
 }
