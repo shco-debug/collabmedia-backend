@@ -3023,15 +3023,19 @@ exports.logUserFeedback = logUserFeedback;
 
 var view = async function(req, res) {
     try {
-        // Check if user is logged in
-        if (!req.session.user || !req.session.user._id) {
+        // Check if user is logged in (support both JWT and session)
+        const userFromSession = req.session?.user;
+        const userFromJWT = req.user;
+        
+        if (!userFromSession && !userFromJWT) {
             return res.status(401).json({ 
                 code: 401, 
                 msg: "User not authenticated" 
             });
         }
 
-        const userId = req.session.user._id;
+        // Get user ID from session or JWT
+        const userId = userFromSession?._id || userFromJWT?.userId;
         
         // Find user data with essential profile fields
         const userData = await user.findOne({ 
@@ -3080,6 +3084,78 @@ var view = async function(req, res) {
 };
 
 exports.view = view;
+
+// Get user by ID
+var getUserById = async function(req, res) {
+    try {
+        // Check if user is logged in (support both JWT and session)
+        const userFromSession = req.session?.user;
+        const userFromJWT = req.user;
+        
+        if (!userFromSession && !userFromJWT) {
+            return res.status(401).json({ 
+                code: 401, 
+                msg: "User not authenticated" 
+            });
+        }
+
+        const userId = req.params.id;
+        
+        // Validate user ID format
+        if (!userId || !ObjectId.isValid(userId)) {
+            return res.status(400).json({ 
+                code: 400, 
+                msg: "Invalid user ID" 
+            });
+        }
+        
+        // Find user data with essential profile fields
+        const userData = await user.findOne({ 
+            _id: userId,
+            IsDeleted: false 
+        }).select({
+            _id: 1,
+            Name: 1,
+            Email: 1,
+            UserName: 1,
+            Gender: 1,
+            NickName: 1,
+            ProfileStatus: 1,
+            EmailConfirmationStatus: 1,
+            Status: 1,
+            CreatedOn: 1,
+            ProfilePicture: 1,
+            Bio: 1,
+            Location: 1,
+            Website: 1,
+            JournalId: 1,
+            referralCode: 1
+        }).exec();
+
+        if (!userData) {
+            return res.status(404).json({ 
+                code: 404, 
+                msg: "User not found" 
+            });
+        }
+
+        // Return user profile data
+        res.json({
+            code: 200,
+            msg: "Success",
+            user: userData
+        });
+
+    } catch (error) {
+        console.error('Get user by ID error:', error);
+        res.status(500).json({ 
+            code: 500, 
+            msg: "Internal server error" 
+        });
+    }
+};
+
+exports.getUserById = getUserById;
 
 // Create Admin User
 var createAdmin = async function(req, res) {

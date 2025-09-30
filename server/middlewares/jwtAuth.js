@@ -23,7 +23,6 @@ const authenticateJWT = (req, res, next) => {
     }
     
     if (!token) {
-        console.log('❌ No JWT token found in request');
         return res.status(401).json({ 
             "code": "401", 
             "msg": "Access token required" 
@@ -40,11 +39,8 @@ const authenticateJWT = (req, res, next) => {
         req.userId = decoded.userId;
         req.userEmail = decoded.email;
         
-        console.log('✅ JWT token verified for user:', decoded.email);
-        
         // Check if user account is still active
         if (!decoded.status) {
-            console.log('❌ User account is blocked:', decoded.email);
             return res.status(403).json({ 
                 "code": "403", 
                 "msg": "Your account has been blocked by site admin. Please contact at info@scrpt.com." 
@@ -53,7 +49,6 @@ const authenticateJWT = (req, res, next) => {
         
         // Check email confirmation
         if (!decoded.emailConfirmationStatus) {
-            console.log('❌ Email not confirmed:', decoded.email);
             return res.status(403).json({ 
                 "code": "403", 
                 "msg": "Please verify your e-mail address to continue" 

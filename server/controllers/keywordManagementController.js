@@ -978,7 +978,7 @@ var keywordParsar_aggregate = function( req , res ){
 	//console.log("okok.....keywordParsar_v1_3--------------------------------------------------------");
 	//return;
 	var login_user_id = "";
-	if(req.session.user){
+	if(req.session && req.session.user){
 		console.log("Session is set!");
 		console.log(JSON.stringify(req.session.user));
 		if( req.session.user._id != undefined ){

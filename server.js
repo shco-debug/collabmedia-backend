@@ -361,6 +361,7 @@ const gptActivationRoutes = require("./server/routes/gpt/GPTactivationRoutes.js"
 app.use("/api/gpt", gptActivationRoutes);
 
 // Main API Routes (includes /media/createSinglePost)
+require("./server/middlewares.js")(router.mainRoutes);
 require("./server/routes/routes.js")(router.mainRoutes);
 
 // Video upload endpoint (replaces complex recorder system)

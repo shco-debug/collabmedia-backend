@@ -12,7 +12,7 @@ module.exports = function(req, res, next){
 	//var frontendApiPrefix = '/api';
 	//console.log('Something is happening.');
 	reqUrl = req.baseUrl + req.path;
-	//console.log("request url : ",reqUrl);
+	console.log('🔍 checkSession middleware:', reqUrl);
 
 	/*
 	if(reqUrl.substring(0,1) == '/'){		//this will prevent layout htmls....
@@ -97,7 +97,7 @@ module.exports = function(req, res, next){
 			'/syncGdTwoMjImage_INTERNAL_API',
 			'/addMjImageToMedia__INTERNAL_API',
 			'/addUnsplashImageToMedia__INTERNAL_API',
-			'/createSinglePost',
+			// '/createSinglePost' - removed to require authentication
 			'/updatePostPrivacy',
 			'/createBlend'
 		];
@@ -139,7 +139,7 @@ module.exports = function(req, res, next){
 		//console.log("keywords---parse");
 		var frontendApiPrefix = '/keywords';
 		var unprotectedRoutes = [
-			'/parse'
+			// '/parse' - removed to require authentication
 		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}
@@ -180,6 +180,13 @@ module.exports = function(req, res, next){
 		var frontendApiPrefix = '/members';
 		var unprotectedRoutes = [
 			'/addFriend_INTERNAL_API'
+		];
+		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
+	}
+	else if(reqUrl.substring(0,6) == '/users'){
+		//console.log("users--- in checkSession.js");
+		var frontendApiPrefix = '/users';
+		var unprotectedRoutes = [
 		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}

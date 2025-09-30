@@ -11,6 +11,7 @@ module.exports = function(router){
 
 	//findAll user Capsules paginated for Capsule library
 	router.post('/',function(req,res){
+		console.log('🔍 POST /capsules - Request received');
 		switch(req.body.qc){
 			//Capsule library Apis
 			case 'all':
@@ -39,6 +40,7 @@ module.exports = function(router){
 				break;
 
 			case 'publishedForMe' :
+				console.log('🔍 Calling Capsule.publishedForMe');
 				Capsule.publishedForMe(req,res);
 				break;
 
@@ -171,8 +173,10 @@ module.exports = function(router){
 
 	//get current Capsules data for launch settings
     router.get('/getAllIds', function(req, res) {
+		console.log('🔍 GET /capsules/getAllIds - Request received');
 		req.query = req.query ? req.query : {};
 		var qc = req.query.qc ? req.query.qc : 'all';
+		console.log('🔍 QC parameter:', qc);
         switch (req.query.qc) {
             //Capsule library Apis
 			case 'all':
@@ -215,6 +219,7 @@ module.exports = function(router){
 			//Verify Dashboard Apis
 			//Public Gallery Capsules Apis
 			case 'galleryCapsulesList' :
+				console.log('🔍 Calling Capsule.galleryCapsulesList');
 				Capsule.galleryCapsulesList(req,res);
 				break;
 			//Public Gallery Capsules Apis
