@@ -5620,7 +5620,7 @@ var getMediaFromSet = async function (req, callback) {
 
   var page = 1;
   //var per_page = 48;
-  var per_page = 2500;
+  var per_page = 250;
   var limit = page * per_page; //48
 
   var aggregateStages = [];
@@ -6334,7 +6334,7 @@ var getMediaFromSet2 = async function (req, callback) {
 
   var page = 1;
   //var per_page = 48;
-  var per_page = 2500;
+  var per_page = 250;
   var limit = page * per_page; //48
 
   var aggregateStages = [];
@@ -8699,14 +8699,33 @@ var getBlendImages = async function (req, res) {
       var selectedLengthForLoop =
         set1.length > set2.length ? set2.length : set1.length;
       for (var loop = 0; loop < selectedLengthForLoop; loop++) {
-        var blendImage1 = set1[loop].MediaURL
-          ? set1[loop].MediaURL
-          : "https://www.scrpt.com/assets/Media/img/300/" +
-            set1[loop].MediaURL2[0].URL;
-        var blendImage2 = set2[loop].MediaURL
-          ? set2[loop].MediaURL
-          : "https://www.scrpt.com/assets/Media/img/300/" +
-            set2[loop].MediaURL2[0].URL;
+        // Get blendImage1 URL - use existing URL or placeholder
+        var blendImage1;
+        if (set1[loop].MediaURL) {
+          blendImage1 = set1[loop].MediaURL;
+        } else if (set1[loop].MediaURL2 && set1[loop].MediaURL2[0] && set1[loop].MediaURL2[0].URL) {
+          var url1 = set1[loop].MediaURL2[0].URL;
+          // If URL already starts with http/https, use it as-is; otherwise use placeholder
+          blendImage1 = (url1.startsWith('http://') || url1.startsWith('https://')) 
+            ? url1 
+            : '/placeholder.svg?height=300&width=300';
+        } else {
+          blendImage1 = '/placeholder.svg?height=300&width=300';
+        }
+
+        // Get blendImage2 URL - use existing URL or placeholder
+        var blendImage2;
+        if (set2[loop].MediaURL) {
+          blendImage2 = set2[loop].MediaURL;
+        } else if (set2[loop].MediaURL2 && set2[loop].MediaURL2[0] && set2[loop].MediaURL2[0].URL) {
+          var url2 = set2[loop].MediaURL2[0].URL;
+          // If URL already starts with http/https, use it as-is; otherwise use placeholder
+          blendImage2 = (url2.startsWith('http://') || url2.startsWith('https://')) 
+            ? url2 
+            : '/placeholder.svg?height=300&width=300';
+        } else {
+          blendImage2 = '/placeholder.svg?height=300&width=300';
+        }
 
         finalMediaArr[0].Medias[loop].isSelected = false;
         finalMediaArr[1].Medias[loop].isSelected = false;
