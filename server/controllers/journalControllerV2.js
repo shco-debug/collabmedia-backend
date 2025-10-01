@@ -5620,7 +5620,7 @@ var getMediaFromSet = async function (req, callback) {
 
   var page = 1;
   //var per_page = 48;
-  var per_page = 2500;
+  var per_page = 250;
   var limit = page * per_page; //48
 
   var aggregateStages = [];
@@ -6334,7 +6334,7 @@ var getMediaFromSet2 = async function (req, callback) {
 
   var page = 1;
   //var per_page = 48;
-  var per_page = 2500;
+  var per_page = 250;
   var limit = page * per_page; //48
 
   var aggregateStages = [];
