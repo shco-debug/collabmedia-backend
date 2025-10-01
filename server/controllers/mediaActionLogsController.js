@@ -77,8 +77,10 @@ var logMediaAction = function(req,res){
 			UserId : req.session.user._id,
 			UserFsg: req.session.user.FSGsArr2,  // ✅ Fixed: Changed from FSGs to FSGsArr2
 			BoardId : req.body.board_id || req.body.BoardId,
+			StreamId : req.body.stream_id || req.body.StreamId || req.body.capsuleId,  // Capsule/Stream ID
 			OwnerId : req.body.owner_id || req.body.OwnerId,
 			Action: req.body.action || req.body.Action,
+			ActionLevel: 'post',  // Default to post-level action (has MediaId)
 			Title: req.body.title || req.body.Title,
 			Prompt: req.body.prompt || req.body.Prompt,
 			Locator: req.body.locator || req.body.Locator,
@@ -1728,3 +1730,490 @@ var getPostsWithInteractions = function(req, res) {
 	}
 };
 exports.getPostsWithInteractions = getPostsWithInteractions;
+
+/*________________________________________________________________________
+   * @Date:      		October 1, 2025
+   * @Method :   		getPageLikes
+   * Created By: 		AI Assistant
+   * @Purpose:   		Get likes for a page/board from MediaActionLogs
+   * @Param:     		BoardId (page_id), mode ('count' or 'all')
+   * @Return:    	 	Likes count or full like data
+   * @Access Category:	Public
+_________________________________________________________________________
+*/
+var getPageLikes = async function(req, res) {
+    try {
+        console.log('🔍 getPageLikes called');
+        console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
+        
+        const boardId = req.body.BoardId || req.body.boardId || req.body.PageId;
+        const mode = req.body.mode || req.query.mode || 'all';
+        
+        if (!boardId) {
+            return res.json({
+                status: "error",
+                message: "BoardId/PageId is required",
+                count: 0,
+                results: []
+            });
+        }
+        
+        const conditions = {
+            BoardId: new ObjectId(boardId),
+            Action: "Vote",  // Vote = Like
+            IsDeleted: 0
+        };
+        
+        console.log('🔍 Query conditions:', conditions);
+        
+        // Count-only mode (FAST - no populate, no data)
+        if (mode === 'count') {
+            const count = await mediaActionLog.countDocuments(conditions);
+            console.log('✅ Like count:', count);
+            
+            // Check if current user has liked (without populate for speed)
+            let userLiked = false;
+            if (req.session && req.session.user && req.session.user._id) {
+                const userLikeCount = await mediaActionLog.countDocuments({
+                    ...conditions,
+                    UserId: new ObjectId(req.session.user._id)
+                });
+                userLiked = userLikeCount > 0;
+            }
+            
+            return res.json({
+                status: "success",
+                message: "Like count retrieved",
+                count: count,
+                userLiked: userLiked,
+                results: []
+            });
+        }
+        
+        // Full mode (with user details)
+        const results = await mediaActionLog.find(conditions)
+            .populate("UserId", "_id Name Email ProfilePic NickName")
+            .sort({ CreatedOn: -1 });
+        
+        const count = results.length;
+        console.log('✅ Likes fetched:', count);
+        
+        // Check if current user has liked
+        let userLiked = false;
+        if (req.session && req.session.user && req.session.user._id) {
+            userLiked = results.some(like => 
+                like.UserId && like.UserId._id.toString() === req.session.user._id.toString()
+            );
+        }
+        
+        return res.json({
+            status: "success",
+            message: "Likes retrieved successfully",
+            count: count,
+            userLiked: userLiked,
+            results: results
+        });
+        
+    } catch (error) {
+        console.error('❌ Error in getPageLikes:', error);
+        return res.json({
+            status: "error",
+            message: "Error fetching likes: " + error.message,
+            count: 0,
+            userLiked: false,
+            results: []
+        });
+    }
+};
+exports.getPageLikes = getPageLikes;
+
+/*________________________________________________________________________
+   * @Date:      		October 1, 2025
+   * @Method :   		getStreamLikes
+   * Created By: 		AI Assistant
+   * @Purpose:   		Get likes for a stream (SocialPage) from MediaActionLogs
+   * @Param:     		SocialPageId, mode ('count' or 'all')
+   * @Return:    	 	Likes count or full like data
+   * @Access Category:	Public
+_________________________________________________________________________
+*/
+var getStreamLikes = async function(req, res) {
+    try {
+        var StreamId = req.body.StreamId || req.body.stream_id || req.body.SocialPageId || null;
+        var mode = req.body.mode || req.query.mode || 'all';
+
+
+        if (!StreamId) {
+            return res.json({
+                status: "error",
+                message: "StreamId is required",
+                count: 0,
+                likeCount: 0,
+                dislikeCount: 0,
+                userLiked: false,
+                userDisliked: false,
+                results: []
+            });
+        }
+
+        // Use MediaActionLogs collection - Query by StreamId (Capsule ID) for stream-level likes only
+        var baseConditions = {
+            StreamId: new ObjectId(StreamId),
+            Action: "Vote",  // Vote action for both likes and dislikes
+            ActionLevel: "stream",  // Only stream-level actions (no MediaId)
+            IsDeleted: 0,
+        };
+
+        // Count-only mode (FAST - no populate, no data)
+        if (mode === 'count') {
+            // Count likes (LikeType = "1")
+            const likeCount = await mediaActionLog.countDocuments({
+                ...baseConditions,
+                LikeType: "1"
+            });
+            
+            // Count dislikes (LikeType = "2")
+            const dislikeCount = await mediaActionLog.countDocuments({
+                ...baseConditions,
+                LikeType: "2"
+            });
+            
+            // Check if current user has liked or disliked (without populate for speed)
+            let userLiked = false;
+            let userDisliked = false;
+            if (req.session && req.session.user && req.session.user._id) {
+                const userLike = await mediaActionLog.findOne({
+                    ...baseConditions,
+                    UserId: new ObjectId(req.session.user._id),
+                    LikeType: "1"
+                });
+                userLiked = !!userLike;
+                
+                const userDislike = await mediaActionLog.findOne({
+                    ...baseConditions,
+                    UserId: new ObjectId(req.session.user._id),
+                    LikeType: "2"
+                });
+                userDisliked = !!userDislike;
+            }
+            
+
+            return res.json({
+                status: "success",
+                message: "Like count retrieved",
+                streamId: StreamId, // Return streamId so frontend can map to correct stream
+                userId: req.session?.user?._id || null, // Return current user ID
+                count: likeCount, // Total likes for backward compatibility
+                likeCount: likeCount,
+                dislikeCount: dislikeCount,
+                userLiked: userLiked,
+                userDisliked: userDisliked,
+                results: []
+            });
+        }
+
+        // Full mode (with user details)
+        var results = await mediaActionLog.find(baseConditions)
+            .populate("UserId", "_id Name Email ProfilePic NickName")
+            .sort({ CreatedOn: -1 });
+        
+        results = Array.isArray(results) ? results : [];
+        
+        // Separate likes and dislikes
+        const likes = results.filter(r => r.LikeType === "1");
+        const dislikes = results.filter(r => r.LikeType === "2");
+
+        // Check if current user has liked or disliked
+        let userLiked = false;
+        let userDisliked = false;
+        if (req.session && req.session.user && req.session.user._id) {
+            userLiked = likes.some(like => 
+                like.UserId && like.UserId._id.toString() === req.session.user._id.toString()
+            );
+            userDisliked = dislikes.some(dislike => 
+                dislike.UserId && dislike.UserId._id.toString() === req.session.user._id.toString()
+            );
+        }
+
+        return res.json({
+            status: "success",
+            message: "Stream likes retrieved.",
+            streamId: StreamId, // Return streamId so frontend can map to correct stream
+            userId: req.session?.user?._id || null, // Return current user ID
+            count: likes.length, // Total likes for backward compatibility
+            likeCount: likes.length,
+            dislikeCount: dislikes.length,
+            userLiked: userLiked,
+            userDisliked: userDisliked,
+            results: results, // All votes (likes and dislikes)
+            likes: likes, // Just likes
+            dislikes: dislikes // Just dislikes
+        });
+    } catch (error) {
+        console.error('❌ Error in getStreamLikes:', error);
+        return res.json({
+            status: "error",
+            message: "Error fetching likes: " + error.message,
+            streamId: StreamId,
+            count: 0,
+            likeCount: 0,
+            dislikeCount: 0,
+            userLiked: false,
+            userDisliked: false,
+            results: []
+        });
+    }
+};
+exports.getStreamLikes = getStreamLikes;
+
+/*________________________________________________________________________
+   * @Date:      		October 1, 2025
+   * @Method :   		addCommentLike
+   * Created By: 		AI Assistant
+   * @Purpose:   		Add like to a comment using MediaActionLogs
+   * @Param:     		CommentId, SocialPageId, MediaId
+   * @Return:    	 	Success/failure status
+   * @Access Category:	Public
+_________________________________________________________________________
+*/
+var addCommentLike = async function(req, res) {
+    try {
+        const CommentId = req.body.CommentId ? req.body.CommentId : null;
+        const SocialPageId = req.body.SocialPageId ? req.body.SocialPageId : null;
+        const MediaId = req.body.MediaId ? req.body.MediaId : null;
+        const StreamId = req.body.StreamId || req.body.stream_id || req.body.capsuleId || null;
+
+        if (!CommentId || !SocialPageId) {
+            return res.json({
+                status: "error",
+                message: "CommentId and SocialPageId are required"
+            });
+        }
+
+        // Check if already liked
+        const existingLike = await mediaActionLog.findOne({
+            BoardId: new ObjectId(SocialPageId),
+            MediaId: MediaId ? new ObjectId(MediaId) : null,
+            UserId: new ObjectId(req.session.user._id),
+            Action: "CommentLike",
+            Comment: CommentId, // Store CommentId in Comment field
+            IsDeleted: 0
+        });
+
+        if (existingLike) {
+            return res.json({
+                status: "error",
+                message: "You have already liked this comment"
+            });
+        }
+
+        // Add like
+        const likeData = {
+            UserId: new ObjectId(req.session.user._id),
+            BoardId: new ObjectId(SocialPageId),
+            StreamId: StreamId ? new ObjectId(StreamId) : null,
+            MediaId: MediaId ? new ObjectId(MediaId) : null,
+            Action: "CommentLike",
+            Comment: CommentId, // Store CommentId in Comment field
+            CreatedOn: new Date(),
+            IsDeleted: 0
+        };
+
+        await mediaActionLog(likeData).save();
+
+        // Get updated count
+        const count = await mediaActionLog.countDocuments({
+            BoardId: new ObjectId(SocialPageId),
+            Comment: CommentId,
+            Action: "CommentLike",
+            IsDeleted: 0
+        });
+
+        return res.json({
+            status: "success",
+            message: "Comment liked successfully",
+            count: count,
+            commentId: CommentId
+        });
+
+    } catch (error) {
+        console.error('❌ Error in addCommentLike:', error);
+        return res.json({
+            status: "error",
+            message: "Error adding like: " + error.message
+        });
+    }
+};
+exports.addCommentLike = addCommentLike;
+
+/*________________________________________________________________________
+   * @Date:      		October 1, 2025
+   * @Method :   		removeCommentLike
+   * Created By: 		AI Assistant
+   * @Purpose:   		Remove like from a comment using MediaActionLogs
+   * @Param:     		CommentId, SocialPageId
+   * @Return:    	 	Success/failure status
+   * @Access Category:	Public
+_________________________________________________________________________
+*/
+var removeCommentLike = async function(req, res) {
+    try {
+        const CommentId = req.body.CommentId ? req.body.CommentId : null;
+        const SocialPageId = req.body.SocialPageId ? req.body.SocialPageId : null;
+
+        if (!CommentId || !SocialPageId) {
+            return res.json({
+                status: "error",
+                message: "CommentId and SocialPageId are required"
+            });
+        }
+
+        // Soft delete the like
+        const result = await mediaActionLog.updateOne(
+            {
+                BoardId: new ObjectId(SocialPageId),
+                UserId: new ObjectId(req.session.user._id),
+                Action: "CommentLike",
+                Comment: CommentId,
+                IsDeleted: 0
+            },
+            {
+                $set: { IsDeleted: 1, UpdatedOn: new Date() }
+            }
+        );
+
+        if (result.modifiedCount === 0) {
+            return res.json({
+                status: "error",
+                message: "Like not found or already removed"
+            });
+        }
+
+        // Get updated count
+        const count = await mediaActionLog.countDocuments({
+            BoardId: new ObjectId(SocialPageId),
+            Comment: CommentId,
+            Action: "CommentLike",
+            IsDeleted: 0
+        });
+
+        return res.json({
+            status: "success",
+            message: "Like removed successfully",
+            count: count,
+            commentId: CommentId
+        });
+
+    } catch (error) {
+        console.error('❌ Error in removeCommentLike:', error);
+        return res.json({
+            status: "error",
+            message: "Error removing like: " + error.message
+        });
+    }
+};
+exports.removeCommentLike = removeCommentLike;
+
+/*________________________________________________________________________
+   * @Date:      		October 1, 2025
+   * @Method :   		getCommentLikes
+   * Created By: 		AI Assistant
+   * @Purpose:   		Get likes for comments using MediaActionLogs
+   * @Param:     		SocialPageId, CommentIds (optional), mode ('count' or 'all')
+   * @Return:    	 	Comment likes data
+   * @Access Category:	Public
+_________________________________________________________________________
+*/
+var getCommentLikes = async function(req, res) {
+    try {
+        const SocialPageId = req.body.SocialPageId ? req.body.SocialPageId : null;
+        const CommentIds = req.body.CommentIds ? req.body.CommentIds : [];
+        const mode = req.body.mode || req.query.mode || 'all';
+
+        if (!SocialPageId) {
+            return res.json({
+                status: "error",
+                message: "SocialPageId is required",
+                results: []
+            });
+        }
+
+        const conditions = {
+            BoardId: new ObjectId(SocialPageId),
+            Action: "CommentLike",
+            IsDeleted: 0
+        };
+
+        // Filter by specific comments if provided
+        if (CommentIds && CommentIds.length > 0) {
+            conditions.Comment = { $in: CommentIds };
+        }
+
+        // Count-only mode (FAST)
+        if (mode === 'count') {
+            const results = await mediaActionLog.aggregate([
+                { $match: conditions },
+                {
+                    $group: {
+                        _id: "$Comment",
+                        count: { $sum: 1 }
+                    }
+                }
+            ]);
+
+            // Convert to object format: { commentId: count }
+            const counts = {};
+            results.forEach(item => {
+                counts[item._id] = item.count;
+            });
+
+            // Check which comments current user has liked
+            const userLiked = await mediaActionLog.find({
+                ...conditions,
+                UserId: new ObjectId(req.session.user._id)
+            }).distinct('Comment');
+
+            return res.json({
+                status: "success",
+                message: "Comment like counts retrieved",
+                counts: counts,
+                userLiked: userLiked,
+                results: []
+            });
+        }
+
+        // Full mode (with user details)
+        const results = await mediaActionLog.find(conditions)
+            .populate("UserId", "_id Name Email ProfilePic NickName")
+            .sort({ CreatedOn: -1 });
+
+        // Group by comment
+        const groupedByComment = {};
+        results.forEach(like => {
+            const commentId = like.Comment;
+            if (!groupedByComment[commentId]) {
+                groupedByComment[commentId] = [];
+            }
+            groupedByComment[commentId].push({
+                _id: like._id,
+                UserId: like.UserId,
+                CreatedOn: like.CreatedOn
+            });
+        });
+
+        return res.json({
+            status: "success",
+            message: "Comment likes retrieved successfully",
+            results: groupedByComment
+        });
+
+    } catch (error) {
+        console.error('❌ Error in getCommentLikes:', error);
+        return res.json({
+            status: "error",
+            message: "Error fetching comment likes: " + error.message,
+            results: []
+        });
+    }
+};
+exports.getCommentLikes = getCommentLikes;

@@ -916,6 +916,11 @@ module.exports = (app) => {
 	app.use('/journal', journalRoutes);
 	router.journalRoutes = journalRoutes;
 	
+	// Media Action Logs routes
+	const mediaActionRoutes = express.Router();
+	app.use('/mediaAction', mediaActionRoutes);
+	router.mediaActionRoutes = mediaActionRoutes;
+	
 	// Relationship management routes
 	const relationshipRoutes = express.Router();
 	app.use('/relationships', relationshipRoutes);

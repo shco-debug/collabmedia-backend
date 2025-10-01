@@ -7,6 +7,18 @@ var mediaController = require('./../controllers/mediaController.js');
 
 
 function checkFriendship(req,email,name,relation,IsRegistered){
+    console.log('🤝 checkFriendship called');
+    console.log('   - Email:', email);
+    console.log('   - Name:', name);
+    console.log('   - Relation:', relation);
+    console.log('   - IsRegistered:', IsRegistered);
+    console.log('   - UserID from session:', req.session?.user?._id || 'undefined');
+    
+    if (!req.session || !req.session.user || !req.session.user._id) {
+        console.error('❌ checkFriendship: req.session.user._id is missing!');
+        return;
+    }
+    
     friend.find({'UserID': req.session.user._id,'Friend.Email':email,Status:1,IsDeleted:0})
         .then((data) => {
             console.log('here');
@@ -249,47 +261,100 @@ _________________________________________________________________________
 */
 
 var addMember = function(req,res){
+    console.log('🔍 addMember called');
+    console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
+    console.log('👤 req.session:', req.session ? 'exists' : 'undefined');
+    console.log('👤 req.session.user:', req.session?.user ? JSON.stringify(req.session.user) : 'undefined');
+    console.log('👤 req.user:', req.user ? JSON.stringify(req.user) : 'undefined');
+    
     let IsRegistered = false;
     let member = {};
+    let responseAlreadySent = false;
     
+    console.log('🔍 Searching for group with ID:', req.body.id);
     group.findOne({_id:req.body.id})
         .then((data) => {
+            console.log('✅ Group found:', data ? 'Yes' : 'No');
             if (data) {
+                console.log('📊 Group details:', { _id: data._id, Title: data.Title, Members: data.Members.length });
+                console.log('🔍 Searching for user with email:', req.body.email);
                 return user.findOne({Email:{ $regex : new RegExp(req.body.email, "i") }});
             } else {
+                console.log('❌ Group not found with ID:', req.body.id);
+                responseAlreadySent = true;
                 res.json({'code':402,'error':"group not found"});
-                return null;
+                throw new Error('GROUP_NOT_FOUND'); // Stop promise chain
             }
         })
         .then((user1) => {
-            if (user1 === null) return; // Group not found case already handled
+            console.log('📥 Received user1:', user1 === null ? 'null' : (user1 === undefined ? 'undefined' : 'exists'));
             
-            console.log('user1');
-            console.log(user1);
+            console.log('✅ User search result:', user1 ? 'Found - User is registered' : 'Not found - User not registered');
             if (user1) {
+                console.log('📊 User details:', { _id: user1._id, Email: user1.Email, Name: user1.Name });
                 IsRegistered = true;
             } else {
+                console.log('⚠️ User not registered in system - will add as unregistered member');
                 IsRegistered = false;
             }
             
+            console.log('🔍 Checking if already a member...');
             return group.find({_id:req.body.id,Members:{$elemMatch:{MemberEmail:{$regex: new RegExp(req.body.email,"i")}}}});
         })
         .then((data) => {
-            if (data === undefined) return; // Group not found case
+            console.log('📥 Received member check data:', data ? `Array with ${data.length} results` : 'undefined');
+            
+            if (data === undefined) {
+                console.log('❌ Member check returned undefined - should not happen');
+                responseAlreadySent = true;
+                res.json({'code':500,'error':"Unexpected error in member check"});
+                throw new Error('MEMBER_CHECK_UNDEFINED');
+            }
+            
+            console.log('📊 Member check result:', data.length === 0 ? 'Not a member' : 'Already a member');
             
             if (data.length == 0) {
-                checkFriendship(req,req.body.email,req.body.name,req.body.relation, IsRegistered);
+                console.log('✅ User is not a member, proceeding to add...');
+                
+                // Build relation string for checkFriendship
+                var relationForFriend = req.body.relationshipId 
+                    ? `Friend~${req.body.relationshipId}`
+                    : (req.body.relation || 'Friend~default');
+                
+                console.log('🤝 Calling checkFriendship with relation:', relationForFriend);
+                
+                // Call checkFriendship asynchronously (don't block)
+                checkFriendship(req, req.body.email, req.body.name, relationForFriend, IsRegistered);
+                
+                console.log('🔍 Fetching user data again for member creation...');
                 return user.findOne({Email:{ $regex : new RegExp(req.body.email, "i") }});
             } else {
+                console.log('❌ User is already a member of this group');
+                responseAlreadySent = true;
                 res.json({'code':401,'error':"Already a member"});
-                return null;
+                throw new Error('ALREADY_MEMBER');
             }
         })
         .then((frndData) => {
-            if (frndData === undefined || frndData === null) return; // Already handled cases
+            console.log('📥 Received frndData for member creation:', frndData ? 'exists' : (frndData === null ? 'null' : 'undefined'));
             
-            var rel = req.body.relation;
-            rel = rel.split('~');
+            // Handle both old format (relation: "Name~ID") and new format (relationshipId)
+            var relationName = "Friend";
+            var relationID = "default";
+            
+            if (req.body.relationshipId) {
+                // New format: use relationshipId directly
+                relationID = req.body.relationshipId;
+                relationName = req.body.relationshipTitle || "Friend";
+                console.log('📋 Using new format - relationshipId:', relationID, 'title:', relationName);
+            } else if (req.body.relation) {
+                // Old format: parse "Name~ID"
+                var rel = req.body.relation.split('~');
+                relationName = rel[0].trim();
+                relationID = rel[1].trim();
+                console.log('📋 Using old format - relation:', relationName, 'ID:', relationID);
+            }
+            
             member.IsRegistered = IsRegistered;
             if (IsRegistered && frndData) {
                 member.MemberID = frndData._id;
@@ -298,20 +363,39 @@ var addMember = function(req,res){
             }
             member.MemberEmail = IsRegistered && frndData ? frndData.Email : req.body.email;
             member.MemberName = IsRegistered && frndData ? frndData.Name : req.body.name;
-            member.MemberRelation = rel[0].trim();
-            member.MemberRelationID = rel[1].trim();
+            member.MemberRelation = relationName;
+            member.MemberRelationID = relationID;
+            
+            console.log('👥 Member object to add:', JSON.stringify(member, null, 2));
+            console.log('🚀 Updating group with new member...');
             
             return group.updateOne({_id:req.body.id},{$push:{Members:member}});
         })
         .then((data) => {
             if (data !== undefined && data !== null) {
+                console.log('✅ Member added successfully:', data);
                 data.member = member;
                 res.json({'code':200,'data':data});
+            } else {
+                console.log('⚠️ Update result was null or undefined');
+                if (!responseAlreadySent) {
+                    res.json({'code':500,'error':"Failed to update group"});
+                }
             }
         })
         .catch((err) => {
-            console.error('Error in addMember:', err);
-            res.json({'code':400,'error':"mongo error"});
+            console.error('❌ Error in addMember:', err);
+            console.error('Error stack:', err.stack);
+            
+            // Only send response if not already sent
+            if (!responseAlreadySent) {
+                // Check for specific error types
+                if (err.message === 'GROUP_NOT_FOUND' || err.message === 'ALREADY_MEMBER' || err.message === 'MEMBER_CHECK_UNDEFINED') {
+                    // Response already sent in .then() blocks
+                    return;
+                }
+                res.json({'code':400,'error':"mongo error", 'details': err.message});
+            }
         });
 }
 /*
@@ -501,3 +585,93 @@ var iconUpload = function(req,res){
     });
 }
 exports.iconUpload = iconUpload;
+
+/*________________________________________________________________________
+   * @Date:      		October 1, 2025
+   * @Method :   		updateGroup
+   * Created By: 		AI Assistant
+   * Modified On:		-
+   * @Purpose:   		Update group title and icon
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR + CR"
+_________________________________________________________________________
+*/
+
+const updateGroup = async function(req, res) {
+    try {
+        console.log('🔍 updateGroup called');
+        console.log('📋 Request body:', JSON.stringify(req.body, null, 2));
+        
+        const { id, title, icon } = req.body;
+        
+        if (!id) {
+            return res.json({'code': 400, 'error': 'Group ID is required'});
+        }
+        
+        if (!title || !title.trim()) {
+            return res.json({'code': 400, 'error': 'Group title is required'});
+        }
+        
+        // Check if user is authenticated
+        if (!req.session || !req.session.user || !req.session.user._id) {
+            return res.json({'code': 401, 'error': 'User authentication required'});
+        }
+        
+        // Find the group
+        const existingGroup = await group.findOne({
+            _id: id,
+            OwnerID: req.session.user._id,  // Only owner can edit
+            IsDeleted: 0
+        });
+        
+        if (!existingGroup) {
+            return res.json({'code': 404, 'error': 'Group not found or you do not have permission to edit'});
+        }
+        
+        // Check if another group with same name exists (case-insensitive, excluding current group)
+        const duplicateGroup = await group.findOne({
+            _id: { $ne: id },  // Exclude current group
+            OwnerID: req.session.user._id,
+            Title: { $regex: new RegExp(`^${title.trim()}$`, 'i') },
+            IsDeleted: 0
+        });
+        
+        if (duplicateGroup) {
+            return res.json({'code': 409, 'error': 'A group with the same name already exists'});
+        }
+        
+        // Update the group
+        const updateData = {
+            Title: title.trim(),
+            ModifiedOn: new Date()
+        };
+        
+        if (icon !== undefined) {
+            updateData.Icon = icon;
+        }
+        
+        const updatedGroup = await group.findOneAndUpdate(
+            { _id: id },
+            { $set: updateData },
+            { new: true }  // Return updated document
+        );
+        
+        console.log('✅ Group updated successfully:', updatedGroup.Title);
+        
+        res.json({
+            'code': 200,
+            'message': 'Group updated successfully',
+            'data': updatedGroup
+        });
+        
+    } catch (error) {
+        console.error('❌ Error in updateGroup:', error);
+        res.json({
+            'code': 500,
+            'error': 'Internal server error',
+            'details': error.message
+        });
+    }
+};
+exports.updateGroup = updateGroup;
