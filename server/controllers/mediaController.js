@@ -3231,11 +3231,6 @@ const createSinglePost = async (req, res) => {
 // Get user's own posts with privacy filtering and pagination
 const getUserPosts = async (req, res) => {
   try {
-    console.log("=== getUserPosts START ===");
-    console.log("Request body:", JSON.stringify(req.body));
-    console.log("Session user:", req.session.user ? "EXISTS" : "NOT EXISTS");
-    console.log("Session user ID:", req.session.user ? req.session.user._id : "N/A");
-    
     // Check if user is logged in
     if (!req.session.user || !req.session.user._id) {
       console.log("❌ Authentication failed - no valid session");
@@ -3247,7 +3242,6 @@ const getUserPosts = async (req, res) => {
     }
 
     const userId = req.session.user._id;
-    console.log("✅ User authenticated with ID:", userId);
 
     // Extract query parameters with defaults
     const {
@@ -3269,21 +3263,6 @@ const getUserPosts = async (req, res) => {
     const finalSortBy = filters.sortBy || sortBy;
     const finalSearchQuery = filters.searchQuery || searchQuery;
 
-    console.log("📋 Query parameters:");
-    console.log("  - page:", page);
-    console.log("  - limit:", limit);
-    console.log("  - privacyFilter (original):", privacyFilter);
-    console.log("  - privacyFilter (final):", finalPrivacyFilter);
-    console.log("  - mediaType (original):", mediaType);
-    console.log("  - mediaType (final):", finalMediaType);
-    console.log("  - sortBy (original):", sortBy);
-    console.log("  - sortBy (final):", finalSortBy);
-    console.log("  - searchQuery (original):", searchQuery);
-    console.log("  - searchQuery (final):", finalSearchQuery);
-    console.log("  - dateFrom:", dateFrom);
-    console.log("  - dateTo:", dateTo);
-    console.log("  - includeBlendSettings:", includeBlendSettings);
-
     // Validate pagination parameters
     const pageNum = Math.max(1, parseInt(page));
     const limitNum = Math.min(100, Math.max(1, parseInt(limit))); // Max 100 posts per request
@@ -3295,29 +3274,26 @@ const getUserPosts = async (req, res) => {
       IsDeleted: { $ne: true },
     };
 
-    console.log("🔍 Initial conditions:", JSON.stringify(conditions));
-
     // Privacy filtering
     switch (finalPrivacyFilter) {
       case "public":
         conditions.PostPrivacySetting = {
           $in: ["PublicWithName", "PublicWithoutName"],
         };
-        console.log("🔒 Privacy filter: PUBLIC");
         break;
       case "private":
       case "OnlyForOwner":
-        conditions.PostPrivacySetting = "OnlyForOwner";
-        console.log("🔒 Privacy filter: PRIVATE/OnlyForOwner");
+        // Include both OnlyForOwner AND PublicWithName posts for owner
+        conditions.PostPrivacySetting = {
+          $in: ["OnlyForOwner", "PublicWithName"],
+        };
         break;
       case "friends":
         conditions.PostPrivacySetting = "InvitedFriends";
-        console.log("🔒 Privacy filter: FRIENDS");
         break;
       case "all":
       default:
         // Include all privacy settings
-        console.log("🔒 Privacy filter: ALL");
         break;
     }
 
@@ -3325,7 +3301,6 @@ const getUserPosts = async (req, res) => {
     if (finalMediaType !== "all") {
       conditions.MediaType =
         finalMediaType.charAt(0).toUpperCase() + finalMediaType.slice(1);
-      console.log("📱 Media type filter:", conditions.MediaType);
     }
 
     // Search query filtering
@@ -3336,7 +3311,6 @@ const getUserPosts = async (req, res) => {
         { Prompt: searchRegex },
         { PostStatement: searchRegex },
       ];
-      console.log("🔍 Search query filter:", finalSearchQuery);
     }
 
     // Date range filtering
@@ -3348,7 +3322,6 @@ const getUserPosts = async (req, res) => {
       if (dateTo) {
         conditions.PostedOn.$lte = new Date(dateTo);
       }
-      console.log("📅 Date range filter:", conditions.PostedOn);
     }
 
     // Build sort object
@@ -3368,7 +3341,6 @@ const getUserPosts = async (req, res) => {
         sortObj = { PostedOn: -1 };
         break;
     }
-    console.log("📊 Sort object:", JSON.stringify(sortObj));
 
     // Define fields to include/exclude
     const fields = {
@@ -3415,63 +3387,7 @@ const getUserPosts = async (req, res) => {
       fields.BlendSettings = 1;
     }
 
-    console.log("🔍 Final conditions:", JSON.stringify(conditions));
-    console.log("📄 Pagination - skip:", skip, "limit:", limitNum);
-    
-    // Execute query with pagination and interactions
-    console.log("🚀 Starting aggregation pipeline...");
-    
-    // First, let's test the basic match to see if it finds documents
-    console.log("🔍 Testing basic match...");
-    const basicMatch = await media.find(conditions).limit(5);
-    console.log("🔍 Basic match found:", basicMatch.length, "documents");
-    if (basicMatch.length > 0) {
-      console.log("🔍 First document ID:", basicMatch[0]._id);
-      console.log("🔍 First document PostPrivacySetting:", basicMatch[0].PostPrivacySetting);
-      console.log("🔍 First document PostedBy:", basicMatch[0].PostedBy);
-      console.log("🔍 First document PostedBy type:", typeof basicMatch[0].PostedBy);
-      console.log("🔍 First document IsDeleted:", basicMatch[0].IsDeleted);
-    }
-    
-    // First, let's test a simple aggregation without lookups
-    console.log("🔍 Testing simple aggregation...");
-    const simplePosts = await media.aggregate([
-      { $match: conditions },
-      { $sort: sortObj },
-      { $skip: skip },
-      { $limit: limitNum },
-    ]);
-    console.log("🔍 Simple aggregation found:", simplePosts.length, "posts");
-    
-    if (simplePosts.length > 0) {
-      console.log("🔍 First simple post ID:", simplePosts[0]._id);
-      console.log("🔍 First simple post PostedBy:", simplePosts[0].PostedBy);
-    }
-    
-    // Now test with user lookup only
-    console.log("🔍 Testing with user lookup...");
-    const postsWithUser = await media.aggregate([
-      { $match: conditions },
-      { $sort: sortObj },
-      { $skip: skip },
-      { $limit: limitNum },
-      {
-        $lookup: {
-          from: "users",
-          localField: "PostedBy",
-          foreignField: "_id",
-          as: "PostedBy",
-        },
-      },
-    ]);
-    console.log("🔍 Posts with user lookup found:", postsWithUser.length, "posts");
-    
-    if (postsWithUser.length > 0) {
-      console.log("🔍 First post with user ID:", postsWithUser[0]._id);
-      console.log("🔍 PostedBy array length:", postsWithUser[0].PostedBy.length);
-    }
-    
-    // Now use the full aggregation with interactions
+    // Execute optimized aggregation pipeline
     const posts = await media.aggregate([
       // Match the conditions
       { $match: conditions },
@@ -3714,41 +3630,15 @@ const getUserPosts = async (req, res) => {
       },
     ]);
 
-    console.log("✅ Aggregation completed. Found", posts.length, "posts");
-    
-    // Debug: Log the first few documents from aggregation
-    if (posts.length > 0) {
-      console.log("🔍 First aggregated document ID:", posts[0]._id);
-      console.log("🔍 First aggregated document PostPrivacySetting:", posts[0].PostPrivacySetting);
-      console.log("🔍 First aggregated document interactions count:", posts[0].interactions ? posts[0].interactions.length : 0);
-      if (posts[0].interactions && posts[0].interactions.length > 0) {
-        console.log("🔍 First interaction:", posts[0].interactions[0]);
-        if (posts[0].interactions[0].user && posts[0].interactions[0].user.length > 0) {
-          console.log("🔍 First interaction user:", posts[0].interactions[0].user[0]);
-        }
-      }
-    } else {
-      console.log("🔍 No documents returned from aggregation pipeline");
-    }
-    
     // Get total count for pagination
-    console.log("📊 Getting total count...");
     const totalCount = await media.countDocuments(conditions);
-    console.log("📊 Total count:", totalCount);
 
     // Calculate pagination info
     const totalPages = Math.ceil(totalCount / limitNum);
     const hasNextPage = pageNum < totalPages;
     const hasPrevPage = pageNum > 1;
-    
-    console.log("📄 Pagination info:");
-    console.log("  - Current page:", pageNum);
-    console.log("  - Total pages:", totalPages);
-    console.log("  - Has next page:", hasNextPage);
-    console.log("  - Has prev page:", hasPrevPage);
 
     // Format response data
-    console.log("🔄 Formatting", posts.length, "posts for response...");
     const formattedPosts = posts.map((post) => {
       // Determine media type and content type for proper response formatting
       let mediaType = post.MediaType;
@@ -3847,9 +3737,6 @@ const getUserPosts = async (req, res) => {
         },
       },
     });
-    
-    console.log("📤 Sending response with", formattedPosts.length, "formatted posts");
-    console.log("=== getUserPosts END ===");
   } catch (error) {
     console.error("Error fetching user posts:", error);
     res.status(500).json({
