@@ -17,6 +17,9 @@ module.exports = function(router){
     router.post('/addGroup',function(req,res){
 		group.addGroup(req,res);
 	});
+	router.post('/updateGroup',function(req,res){
+		group.updateGroup(req,res);
+	});
 	router.post('/addMember',function(req,res){
 		group.addMember(req,res);
 	});

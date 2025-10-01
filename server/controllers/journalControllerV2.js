@@ -24,6 +24,7 @@ var StreamConversation = require("./../models/StreamConversationModel.js");
 var StreamComments = require("./../models/StreamCommentsModel.js");
 var StreamLikes = require("./../models/StreamLikes.js");
 var StreamCommentLikes = require("./../models/StreamCommentLikesModel.js");
+var mediaActionLog = require("./../models/mediaActionLogModel.js");
 var StreamMembers = require("./../models/StreamMembersModel.js");
 var Counters = require("./../models/countersModel.js");
 var AnswerFinishLogs = require("./../models/answerFinishLogs.js");
@@ -5620,7 +5621,7 @@ var getMediaFromSet = async function (req, callback) {
 
   var page = 1;
   //var per_page = 48;
-  var per_page = 250;
+  var per_page = 100;  // Reduced for better performance
   var limit = page * per_page; //48
 
   var aggregateStages = [];
@@ -6120,23 +6121,23 @@ var getMediaFromSet = async function (req, callback) {
     console.log("✅ Results count:", results ? results.length : 0);
     
     // Log detailed results with ranks and filters
-    if (results && results.length > 0) {
-      console.log("📊 DETAILED RESULTS WITH RANKS:");
-      results.forEach((media, index) => {
-        console.log(`📊 Media ${index + 1}:`);
-        console.log(`   - Media ID: ${media._id}`);
-        console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
-        console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
-        console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
-        console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
-        console.log(`   - Random Sort ID: ${media.value?.RandomSortId || 'N/A'}`);
-        console.log(`   - Uploaded On: ${media.value?.UploadedOn || 'N/A'}`);
-        console.log(`   - Media Type: ${media.value?.MediaType || 'N/A'}`);
-        console.log(`   - Is Unsplash: ${media.value?.IsUnsplashImage || false}`);
-        console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
-        console.log("   ---");
-      });
-    }
+    // if (results && results.length > 0) {
+    //   console.log("📊 DETAILED RESULTS WITH RANKS:");
+    //   results.forEach((media, index) => {
+    //     console.log(`📊 Media ${index + 1}:`);
+    //     console.log(`   - Media ID: ${media._id}`);
+    //     console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
+    //     console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
+    //     console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
+    //     console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
+    //     console.log(`   - Random Sort ID: ${media.value?.RandomSortId || 'N/A'}`);
+    //     console.log(`   - Uploaded On: ${media.value?.UploadedOn || 'N/A'}`);
+    //     console.log(`   - Media Type: ${media.value?.MediaType || 'N/A'}`);
+    //     console.log(`   - Is Unsplash: ${media.value?.IsUnsplashImage || false}`);
+    //     console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
+    //     console.log("   ---");
+    //   });
+    // }
     
     // CRITICAL FIX: Exit if no results found to prevent infinite loop
     if (!results || results.length === 0) {
@@ -6334,7 +6335,7 @@ var getMediaFromSet2 = async function (req, callback) {
 
   var page = 1;
   //var per_page = 48;
-  var per_page = 250;
+  var per_page = 100;  // Reduced for better performance
   var limit = page * per_page; //48
 
   var aggregateStages = [];
@@ -6780,23 +6781,23 @@ var getMediaFromSet2 = async function (req, callback) {
     console.log("✅ Results count:", results ? results.length : 0);
     
     // Log detailed results with ranks and filters
-    if (results && results.length > 0) {
-      console.log("📊 DETAILED RESULTS WITH RANKS:");
-      results.forEach((media, index) => {
-        console.log(`📊 Media ${index + 1}:`);
-        console.log(`   - Media ID: ${media._id}`);
-        console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
-        console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
-        console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
-        console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
-        console.log(`   - Random Sort ID: ${media.value?.RandomSortId || 'N/A'}`);
-        console.log(`   - Uploaded On: ${media.value?.UploadedOn || 'N/A'}`);
-        console.log(`   - Media Type: ${media.value?.MediaType || 'N/A'}`);
-        console.log(`   - Is Unsplash: ${media.value?.IsUnsplashImage || false}`);
-        console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
-        console.log("   ---");
-      });
-    }
+    // if (results && results.length > 0) {
+    //   console.log("📊 DETAILED RESULTS WITH RANKS:");
+    //   results.forEach((media, index) => {
+    //     console.log(`📊 Media ${index + 1}:`);
+    //     console.log(`   - Media ID: ${media._id}`);
+    //     console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
+    //     console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
+    //     console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
+    //     console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
+    //     console.log(`   - Random Sort ID: ${media.value?.RandomSortId || 'N/A'}`);
+    //     console.log(`   - Uploaded On: ${media.value?.UploadedOn || 'N/A'}`);
+    //     console.log(`   - Media Type: ${media.value?.MediaType || 'N/A'}`);
+    //     console.log(`   - Is Unsplash: ${media.value?.IsUnsplashImage || false}`);
+    //     console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
+    //     console.log("   ---");
+    //   });
+    // }
     
     // CRITICAL FIX: Exit if no results found to prevent infinite loop
     if (!results || results.length === 0) {
@@ -14770,7 +14771,7 @@ var getStreamComments = async function (req, res) {
   });
 };
 
-var addStreamPostLike = async function (req, res) {
+var addStreamAction = async function (req, res) {
   var streamId = req.body.StreamId ? req.body.StreamId : null;
   var ownerId = req.body.OwnerId ? req.body.OwnerId : null;
   var postOwnerId = req.body.PostOwnerId ? req.body.PostOwnerId : null;
@@ -14787,39 +14788,97 @@ var addStreamPostLike = async function (req, res) {
       : null,
   };
 
-  StreamLikes(dataToSave).save(async function (err, result) {
-    var conditions = {
-      SocialPageId: ObjectId(dataToSave.SocialPageId),
-      //SocialPostId: ObjectId(dataToSave.SocialPostId),
-      IsDeleted: 0,
-    };
-    var results = await StreamLikes.find(conditions).populate(
-      "UserId",
-      "_id Name Email ProfilePic"
-    );
-    results = Array.isArray(results) ? results : [];
+  try {
+    var StreamId = req.body.SocialPageId || req.body.StreamId || null;
+    var UserId = req.session.user._id;
 
-    if (!err) {
+
+    if (!StreamId) {
+      return res.json({
+        status: "error",
+        message: "StreamId is required",
+        results: []
+      });
+    }
+
+    // Check if user already liked this stream (stream-level like)
+    const existingLike = await mediaActionLog.findOne({
+      StreamId: new ObjectId(StreamId),
+      UserId: new ObjectId(UserId),
+      Action: "Vote",
+      ActionLevel: "stream",  // Only stream-level likes
+      LikeType: "1",
+      IsDeleted: 0
+    });
+
+    if (existingLike) {
+      return res.json({
+        status: "error",
+        message: "User already liked this stream",
+        results: []
+      });
+    }
+
+    // Save stream-level like to MediaActionLogs (no MediaId)
+    var likeData = {
+      StreamId: new ObjectId(StreamId),
+      UserId: new ObjectId(UserId),
+      Action: "Vote",
+      ActionLevel: "stream",  // Stream-level action
+      LikeType: "1", // Like
+      CreatedOn: new Date(),
+      UpdatedOn: new Date(),
+      IsDeleted: 0
+      // No MediaId - this is a stream-level like
+    };
+
+    const savedLike = await mediaActionLog.create(likeData);
+
+    // Get updated stream-level like counts
+    const likeCount = await mediaActionLog.countDocuments({
+      StreamId: new ObjectId(StreamId),
+      Action: "Vote",
+      ActionLevel: "stream",  // Only stream-level likes
+      LikeType: "1",
+      IsDeleted: 0
+    });
+
+    const dislikeCount = await mediaActionLog.countDocuments({
+      StreamId: new ObjectId(StreamId),
+      Action: "Vote",
+      ActionLevel: "stream",  // Only stream-level likes
+      LikeType: "2",
+      IsDeleted: 0
+    });
+
+    // Send notification if needed
       if (postOwnerId && postOwnerId != loginUserId) {
         notifyMembers([postOwnerId], loginUserName, "liked", streamId);
       }
 
       return res.json({
         status: "success",
-        message: "comment saved successfully.",
-        results: results,
-      });
-    }
-
-    return res.json({
-      status: "failed",
-      message: "Failed.",
-      results: results,
+      message: "Like added successfully",
+      streamId: StreamId,
+      userId: UserId,
+      likeCount: likeCount,
+      dislikeCount: dislikeCount,
+      userLiked: true,
+      userDisliked: false,
+      results: []
     });
-  });
+
+  } catch (error) {
+    console.error('Error adding stream like:', error);
+    return res.json({
+      status: "error",
+      message: "Failed to add like",
+      results: []
+    });
+  }
 };
 
-var removeStreamPostLike = async function (req, res) {
+var removeStreamAction = async function (req, res) {
   var conditions = {
     UserId: req.session.user._id,
     SocialPageId: req.body.SocialPageId ? req.body.SocialPageId : null,
@@ -14833,171 +14892,110 @@ var removeStreamPostLike = async function (req, res) {
     IsDeleted: 1,
   };
 
-  StreamLikes.update(
-    conditions,
-    { $set: dataToUpdate },
-    { multi: true },
-    async function (err, result) {
-      conditions = {
-        SocialPageId: ObjectId(conditions.SocialPageId),
-        //SocialPostId: ObjectId(inputObj.SocialPostId),
-        IsDeleted: 0,
-      };
-      var results = await StreamLikes.find(conditions).populate(
-        "UserId",
-        "_id Name Email ProfilePic"
-      );
-      results = Array.isArray(results) ? results : [];
+  try {
+    var StreamId = req.body.SocialPageId || req.body.StreamId || null;
+    var UserId = req.session.user._id;
 
-      if (!err) {
+
+    if (!StreamId) {
         return res.json({
-          status: "success",
-          message: "comment saved successfully.",
-          results: results,
-        });
-      }
-
-      return res.json({
-        status: "failed",
-        message: "Failed.",
-        results: results,
+        status: "error",
+        message: "StreamId is required",
+        results: []
       });
     }
-  );
-};
 
-var getStreamLikes = async function (req, res) {
-  var SocialPageId = req.body.SocialPageId ? req.body.SocialPageId : null;
-
-  var conditions = {
-    SocialPageId: new ObjectId(SocialPageId),
-    IsDeleted: 0,
-  };
-
-  var results = await StreamLikes.find(conditions).populate(
-    "UserId",
-    "_id Name Email ProfilePic"
-  );
-  results = Array.isArray(results) ? results : [];
-
-  return res.json({
-    status: "success",
-    message: "Post likes.",
-    results: results,
-  });
-};
-
-var addLike = async function (req, res) {
-  var CommentId = req.body.CommentId ? req.body.CommentId : null;
-  var SocialPageId = req.body.SocialPageId ? req.body.SocialPageId : null;
-  var dataToSave = {
-    SocialPageId: new ObjectId(SocialPageId),
-    CommentId: new ObjectId(CommentId),
-    LikedById: req.session.user._id,
-  };
-
-  StreamCommentLikes(dataToSave).save(async function (err, results) {
-    var conditions = {
-      SocialPageId: new ObjectId(SocialPageId),
-      IsDeleted: 0,
-    };
-    var likes = await StreamCommentLikes.find(conditions).populate(
-      "LikedById",
-      "_id Name Email ProfilePic"
+    // Use MediaActionLogs collection - soft delete the stream-level like
+    const existingLike = await mediaActionLog.findOne({
+      StreamId: new ObjectId(StreamId),
+      UserId: new ObjectId(UserId),
+      Action: "Vote",
+      ActionLevel: "stream",  // Only stream-level likes
+      LikeType: "1", // Like
+      IsDeleted: 0
+    });
+    
+    var updateResult = await mediaActionLog.updateMany(
+      {
+        StreamId: new ObjectId(StreamId),
+        UserId: new ObjectId(UserId),
+        Action: "Vote",
+        ActionLevel: "stream",  // Only stream-level likes
+        LikeType: "1", // Like
+        IsDeleted: 0
+      },
+      {
+        $set: {
+          IsDeleted: 1,
+          UpdatedOn: new Date()
+        }
+      }
     );
-    likes = Array.isArray(likes) ? likes : [];
+    
 
-    if (!err) {
-      return res.json({
-        status: "success",
-        message: "Liked successfully.",
-        results: likes,
-      });
-    }
-
-    return res.json({
-      status: "failed",
-      message: "Failed.",
-      results: likes,
+    // Get updated stream-level like counts
+    const likeCount = await mediaActionLog.countDocuments({
+      StreamId: new ObjectId(StreamId),
+      Action: "Vote",
+      ActionLevel: "stream",  // Only stream-level likes
+      LikeType: "1",
+      IsDeleted: 0
     });
-  });
-};
 
-var removeLike = async function (req, res) {
-  var CommentId = req.body.CommentId ? req.body.CommentId : null;
-  var SocialPageId = req.body.SocialPageId ? req.body.SocialPageId : null;
-  var conditions = {
-    SocialPageId: new ObjectId(SocialPageId),
-    CommentId: new ObjectId(CommentId),
-    LikedById: req.session.user._id,
-    IsDeleted: 0,
-  };
+    const dislikeCount = await mediaActionLog.countDocuments({
+      StreamId: new ObjectId(StreamId),
+      Action: "Vote",
+      ActionLevel: "stream",  // Only stream-level likes
+      LikeType: "2",
+      IsDeleted: 0
+    });
 
-  StreamCommentLikes.update(
-    conditions,
-    { $set: { IsDeleted: 1 } },
-    async function (err, results) {
-      var conditions = {
-        SocialPageId: new ObjectId(SocialPageId),
-        IsDeleted: 0,
-      };
-      var likes = await StreamCommentLikes.find(conditions).populate(
-        "LikedById",
-        "_id Name Email ProfilePic"
-      );
-      likes = Array.isArray(likes) ? likes : [];
+    // Check if user still has any stream-level likes/dislikes
+    const userLike = await mediaActionLog.findOne({
+      StreamId: new ObjectId(StreamId),
+      UserId: new ObjectId(UserId),
+      Action: "Vote",
+      ActionLevel: "stream",  // Only stream-level likes
+      LikeType: "1",
+      IsDeleted: 0
+    });
 
-      if (!err) {
+    const userDislike = await mediaActionLog.findOne({
+      StreamId: new ObjectId(StreamId),
+      UserId: new ObjectId(UserId),
+      Action: "Vote",
+      ActionLevel: "stream",  // Only stream-level likes
+      LikeType: "2", 
+      IsDeleted: 0
+    });
+
+
         return res.json({
           status: "success",
-          message: "Like removed successfully.",
-          results: likes,
-        });
-      }
+      message: "Like removed successfully",
+      streamId: StreamId,
+      userId: UserId,
+      likeCount: likeCount,
+      dislikeCount: dislikeCount,
+      userLiked: !!userLike,
+      userDisliked: !!userDislike,
+      results: []
+    });
 
+  } catch (error) {
+    console.error('Error removing stream like:', error);
       return res.json({
-        status: "failed",
-        message: "Failed.",
-        results: likes,
-      });
-    }
-  );
-};
-
-var getStreamCommentsLikes = async function (req, res) {
-  var SocialPageIdArr = req.body.SocialPageId
-    ? req.body.SocialPageId.split(",")
-    : [];
-
-  for (var i = 0; i < SocialPageIdArr.length; i++) {
-    SocialPageIdArr[i] = ObjectId(SocialPageIdArr[i]);
-  }
-
-  if (!SocialPageIdArr.length) {
-    return res.json({
-      status: "success",
-      message: "Likes list.",
-      results: [],
+      status: "error",
+      message: "Failed to remove like",
+      results: []
     });
   }
-
-  var conditions = {
-    SocialPageId: { $in: SocialPageIdArr },
-    IsDeleted: 0,
-  };
-  console.log("conditions - ", conditions);
-  var likes = await StreamCommentLikes.find(conditions).populate(
-    "LikedById",
-    "_id Name Email ProfilePic"
-  );
-  likes = Array.isArray(likes) ? likes : [];
-
-  return res.json({
-    status: "success",
-    message: "Likes list.",
-    results: likes,
-  });
 };
+
+// getStreamLikes has been moved to mediaActionLogsController.js
+// addLike (addCommentLike) has been moved to mediaActionLogsController.js
+// removeLike (removeCommentLike) has been moved to mediaActionLogsController.js
+// getStreamCommentsLikes (getCommentLikes) has been moved to mediaActionLogsController.js
 
 //start stream public page apis
 var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
@@ -19808,33 +19806,33 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       console.log("🔍 DEBUG: MediaSet2 length:", MediaSet2.length);
       
       // Log final selected media with their ranks
-      if (MediaSet1.length > 0) {
-        console.log("🏆 FINAL SELECTED MEDIA SET 1:");
-        MediaSet1.forEach((media, index) => {
-          console.log(`🏆 Media Set 1 - ${index + 1}:`);
-          console.log(`   - Media ID: ${media._id}`);
-          console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
-          console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
-          console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
-          console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
-          console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
-          console.log("   ---");
-        });
-      }
+      // if (MediaSet1.length > 0) {
+      //   console.log("🏆 FINAL SELECTED MEDIA SET 1:");
+      //   MediaSet1.forEach((media, index) => {
+      //     console.log(`🏆 Media Set 1 - ${index + 1}:`);
+      //     console.log(`   - Media ID: ${media._id}`);
+      //     console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
+      //     console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
+      //     console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
+      //     console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
+      //     console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
+      //     console.log("   ---");
+      //   });
+      // }
       
-      if (MediaSet2.length > 0) {
-        console.log("🏆 FINAL SELECTED MEDIA SET 2:");
-        MediaSet2.forEach((media, index) => {
-          console.log(`🏆 Media Set 2 - ${index + 1}:`);
-          console.log(`   - Media ID: ${media._id}`);
-          console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
-          console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
-          console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
-          console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
-          console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
-          console.log("   ---");
-        });
-      }
+      // if (MediaSet2.length > 0) {
+      //   console.log("🏆 FINAL SELECTED MEDIA SET 2:");
+      //   MediaSet2.forEach((media, index) => {
+      //     console.log(`🏆 Media Set 2 - ${index + 1}:`);
+      //     console.log(`   - Media ID: ${media._id}`);
+      //     console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
+      //     console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
+      //     console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
+      //     console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
+      //     console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
+      //     console.log("   ---");
+      //   });
+      // }
 
       // CRITICAL FIX: Exit if no results found to prevent infinite loop
       if (MediaSet1.length === 0 && MediaSet2.length === 0) {
@@ -20014,14 +20012,28 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
 
       var selectedArr = [];
       for (var loop = 0; loop < selectedLengthForLoop; loop++) {
+        // Fix: Check if MediaURL2[0].URL already starts with http:// or https://
+        var mediaUrl2_1 = set1[loop].MediaURL2 && set1[loop].MediaURL2[0] && set1[loop].MediaURL2[0].URL
+          ? set1[loop].MediaURL2[0].URL
+          : "";
         var blendImage1 = set1[loop].MediaURL
           ? set1[loop].MediaURL
-          : "https://www.scrpt.com/assets/Media/img/300/" +
-            set1[loop].MediaURL2[0].URL;
+          : (mediaUrl2_1.startsWith("http://") || mediaUrl2_1.startsWith("https://"))
+            ? mediaUrl2_1
+            : mediaUrl2_1
+              ? "https://www.scrpt.com/assets/Media/img/300/" + mediaUrl2_1
+              : "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
+        
+        var mediaUrl2_2 = set2[loop].MediaURL2 && set2[loop].MediaURL2[0] && set2[loop].MediaURL2[0].URL
+          ? set2[loop].MediaURL2[0].URL
+          : "";
         var blendImage2 = set2[loop].MediaURL
           ? set2[loop].MediaURL
-          : "https://www.scrpt.com/assets/Media/img/300/" +
-            set2[loop].MediaURL2[0].URL;
+          : (mediaUrl2_2.startsWith("http://") || mediaUrl2_2.startsWith("https://"))
+            ? mediaUrl2_2
+            : mediaUrl2_2
+              ? "https://www.scrpt.com/assets/Media/img/300/" + mediaUrl2_2
+              : "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
 
         var selectedKeywords = [];
         if (set1[loop].SelectedGtTitle) {
@@ -22026,15 +22038,38 @@ const addNewPost_INTERNAL_API = async (req, res) => {
             imageBuffer = Buffer.from(imageData.imageData, "base64");
           }
           
-          // Upload to S3
-          const uploadResult = await awsS3Utils.uploadBufferToS3(
+          // Upload to S3 with multiple sizes
+          const resizeResult = await awsS3Utils.resizeAndUploadImageToS3(
             imageBuffer,
-            `scrptMedia/img/aspectfit/${imageData.fileName}`,
-            "image/png"
+            imageData.fileName,
+            [
+              { width: 100, height: 100, folder: '100', fit: 'cover' },
+              { width: 300, height: 300, folder: '300', fit: 'cover' },
+              { width: 600, height: 600, folder: '600', fit: 'cover' },
+              { width: 1200, height: null, folder: 'aspectfit', fit: 'inside' }
+            ],
+            { source: '1mj-post', jpegQuality: 85 }
           );
           
+          if (resizeResult.success) {
+            // Save ALL resized image URLs to location array
+            resizeResult.results.forEach(result => {
+              locationArray.push({ 
+                Size: result.size, 
+                URL: result.httpUrl,
+                Width: result.width,
+                Height: result.height,
+                BufferSize: result.bufferSize
+              });
+            });
+            
+            console.log(`✅ 1MJ image resized to ${resizeResult.successCount} sizes`);
+          } else {
+            // Fallback - save generated URL only
           const imageUrl = generateS3Url(imageData.fileName);
-          locationArray.push({ Size: "", URL: imageUrl });
+            locationArray.push({ Size: "aspectfit", URL: imageUrl });
+            console.log(`❌ 1MJ resize failed, using fallback URL`);
+          }
         } catch (uploadError) {
           // Fallback to just generating URL
           const imageUrl = generateS3Url(imageData.fileName);
@@ -22050,15 +22085,37 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           );
           
           if (imageBuffer && imageBuffer.length > 0) {
-            // Upload to S3
-            const uploadResult = await awsS3Utils.uploadBufferToS3(
+            // Upload to S3 with multiple sizes
+            const resizeResult = await awsS3Utils.resizeAndUploadImageToS3(
               imageBuffer,
-              `scrptMedia/img/aspectfit/${imageData.fileName}`,
-              "image/png"
+              imageData.fileName,
+              [
+                { width: 100, height: 100, folder: '100', fit: 'cover' },
+                { width: 300, height: 300, folder: '300', fit: 'cover' },
+                { width: 600, height: 600, folder: '600', fit: 'cover' },
+                { width: 1200, height: null, folder: 'aspectfit', fit: 'inside' }
+              ],
+              { source: '1mj-gdrive', jpegQuality: 85 }
             );
             
+            if (resizeResult.success) {
+              // Save ALL resized image URLs to location array
+              resizeResult.results.forEach(result => {
+                locationArray.push({ 
+                  Size: result.size, 
+                  URL: result.httpUrl,
+                  Width: result.width,
+                  Height: result.height,
+                  BufferSize: result.bufferSize
+                });
+              });
+              console.log(`✅ 1MJ Google Drive image resized to ${resizeResult.successCount} sizes`);
+            } else {
+              // Fallback - save generated URL only
             const imageUrl = generateS3Url(imageData.fileName);
-            locationArray.push({ Size: "", URL: imageUrl });
+              locationArray.push({ Size: "aspectfit", URL: imageUrl });
+              console.log(`❌ 1MJ Google Drive resize failed, using fallback URL`);
+            }
           } else {
             const imageUrl = generateS3Url(imageData.fileName);
             locationArray.push({ Size: "", URL: imageUrl });
@@ -22116,21 +22173,34 @@ const addNewPost_INTERNAL_API = async (req, res) => {
               imageBuffer = Buffer.from(imageData.imageData, "base64");
             }
 
-            // Upload to S3 using uploadBufferToS3
-            const uploadResult = await awsS3Utils.uploadBufferToS3(
+            // Upload to S3 with multiple sizes
+            const resizeResult = await awsS3Utils.resizeAndUploadImageToS3(
               imageBuffer,
-              `scrptMedia/img/aspectfit/${imageData.fileName}`,
-              "image/png"
+              imageData.fileName,
+              [
+                { width: 100, height: 100, folder: '100', fit: 'cover' },
+                { width: 300, height: 300, folder: '300', fit: 'cover' },
+                { width: 600, height: 600, folder: '600', fit: 'cover' },
+                { width: 1200, height: null, folder: 'aspectfit', fit: 'inside' }
+              ],
+              { source: '2mj-post', jpegQuality: 85 }
             );
             
-            if (uploadResult.success) {
-            const imageUrl = generateS3Url(imageData.fileName);
-            locationArray.push({ Size: "", URL: imageUrl });
-            
-              // console.log(`✅ MJ Image ${i + 1} uploaded to S3 successfully`);
-              // console.log(`MJ Image ${i + 1} S3 URL:`, imageUrl);
+            if (resizeResult.success) {
+              // Save ALL resized image URLs to location array
+              resizeResult.results.forEach(result => {
+                locationArray.push({ 
+                  Size: result.size, 
+                  URL: result.httpUrl,
+                  Width: result.width,
+                  Height: result.height,
+                  BufferSize: result.bufferSize
+                });
+              });
+              
+              console.log(`✅ 2MJ Image ${i + 1} resized to ${resizeResult.successCount} sizes`);
             } else {
-              throw new Error(uploadResult.error || "Upload failed");
+              throw new Error(resizeResult.error || "Resize failed");
             }
           } catch (uploadError) {
             // Fallback to just generating URL
@@ -22151,18 +22221,35 @@ const addNewPost_INTERNAL_API = async (req, res) => {
             );
 
             if (imageBuffer && imageBuffer.length > 0) {
-              // Upload to S3
-              const uploadResult = await awsS3Utils.uploadBufferToS3(
+              // Upload to S3 with multiple sizes
+              const resizeResult = await awsS3Utils.resizeAndUploadImageToS3(
                 imageBuffer,
-                `scrptMedia/img/aspectfit/${imageData.fileName}`,
-                "image/png"
+                imageData.fileName,
+                [
+                  { width: 100, height: 100, folder: '100', fit: 'cover' },
+                  { width: 300, height: 300, folder: '300', fit: 'cover' },
+                  { width: 600, height: 600, folder: '600', fit: 'cover' },
+                  { width: 1200, height: null, folder: 'aspectfit', fit: 'inside' }
+                ],
+                { source: '2mj-gdrive', jpegQuality: 85 }
               );
 
-              const imageUrl = generateS3Url(imageData.fileName);
-              locationArray.push({ Size: "", URL: imageUrl });
-
-              // console.log(`✅ MJ Image ${i + 1} fetched from Google Drive and uploaded to S3`);
-              // console.log(`MJ Image ${i + 1} S3 URL:`, imageUrl);
+              if (resizeResult.success) {
+                // Save ALL resized image URLs to location array
+                resizeResult.results.forEach(result => {
+                  locationArray.push({ 
+                    Size: result.size, 
+                    URL: result.httpUrl,
+                    Width: result.width,
+                    Height: result.height,
+                    BufferSize: result.bufferSize
+                  });
+                });
+                
+                console.log(`✅ 2MJ Image ${i + 1} from Google Drive resized to ${resizeResult.successCount} sizes`);
+              } else {
+                throw new Error(resizeResult.error || "Google Drive image resize failed");
+              }
         } else {
               throw new Error("No image data received from Google Drive");
             }
@@ -23773,17 +23860,16 @@ exports.addCommentOnSocialPost = addCommentOnSocialPost;
 exports.deleteCommentOnSocialPost = deleteCommentOnSocialPost;
 exports.getStreamComments = getStreamComments;
 
-exports.addStreamPostLike = addStreamPostLike;
-exports.removeStreamPostLike = removeStreamPostLike;
-exports.getStreamLikes = getStreamLikes;
+exports.addStreamAction = addStreamAction;
+exports.removeStreamAction = removeStreamAction;
 
-exports.addLike = addLike;
-exports.removeLike = removeLike;
-exports.getStreamCommentsLikes = getStreamCommentsLikes;
-
-exports.userStreamsPostsWithActivities = userStreamsPostsWithActivities;
+// exports.addLike - moved to mediaActionLogsController.js (addCommentLike)
+// exports.removeLike - moved to mediaActionLogsController.js (removeCommentLike)
 exports.addCommentOnComment = addCommentOnComment;
 exports.getPrivateComments = getPrivateComments;
+// exports.getStreamCommentsLikes - moved to mediaActionLogsController.js (getCommentLikes)
+
+exports.userStreamsPostsWithActivities = userStreamsPostsWithActivities;
 //stream public page apis
 
 exports.newPostsReplicaFromExistingStream = newPostsReplicaFromExistingStream;

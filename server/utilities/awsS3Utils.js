@@ -9,6 +9,7 @@ const path = require('path');
 const fs = require('fs');
 const https = require('https');
 const http = require('http');
+const sharp = require('sharp');
 
 // Load environment variables
 require('dotenv').config({ path: require('path').resolve(__dirname, '../../.env') });
@@ -743,6 +744,182 @@ const uploadAudioToS3Folder = async function (file, fileName, contentType, metad
     }
 };
 
+/**
+ * Resize image buffer to multiple sizes using Sharp and upload to S3
+ * @param {Buffer} imageBuffer - Original image buffer
+ * @param {String} fileName - Base filename (with extension)
+ * @param {Array} sizes - Array of size objects with width, height, and folder info
+ * @param {Object} options - Additional options for Sharp and S3
+ * @returns {Promise<Object>} Resize and upload results
+ */
+const resizeAndUploadImageToS3 = async function (
+    imageBuffer, 
+    fileName, 
+    sizes = [
+        { width: 100, height: 100, folder: '100', fit: 'cover' },
+        { width: 300, height: 300, folder: '300', fit: 'cover' },
+        { width: 600, height: 600, folder: '600', fit: 'cover' },
+        { width: 800, height: null, folder: 'aspectfit_small', fit: 'inside' },
+        { width: 1200, height: null, folder: 'aspectfit', fit: 'inside' }
+    ],
+    options = {}
+) {
+    try {
+        console.log("🔄 Starting image resize and upload process...");
+        console.log("📁 Original filename:", fileName);
+        console.log("📐 Sizes to generate:", sizes.length);
+        console.log("📦 Buffer size:", imageBuffer.length, "bytes");
+
+        // Create S3Client
+        const s3Client = createS3Client();
+        
+        // Extract file info
+        const baseName = path.parse(fileName).name;
+        const extension = path.parse(fileName).ext || '.png';
+        const timestamp = options.timestamp || Date.now();
+        const customFolder = options.customFolder || 'scrptMedia/img';
+        
+        const results = [];
+        const errors = [];
+
+        // Process each size
+        for (let i = 0; i < sizes.length; i++) {
+            const sizeConfig = sizes[i];
+            
+            try {
+                console.log(`🔄 Processing size: ${sizeConfig.folder} (${sizeConfig.width}x${sizeConfig.height || 'auto'})`);
+                
+                // Create Sharp instance
+                let sharpInstance = sharp(imageBuffer);
+                
+                // Apply resize based on configuration
+                if (sizeConfig.height) {
+                    // Fixed dimensions
+                    sharpInstance = sharpInstance.resize(sizeConfig.width, sizeConfig.height, {
+                        fit: sizeConfig.fit || 'cover',
+                        position: sizeConfig.position || 'center',
+                        background: sizeConfig.background || { r: 255, g: 255, b: 255, alpha: 1 }
+                    });
+                } else {
+                    // Width only (auto height)
+                    sharpInstance = sharpInstance.resize(sizeConfig.width, null, {
+                        fit: sizeConfig.fit || 'inside',
+                        withoutEnlargement: sizeConfig.withoutEnlargement !== false
+                    });
+                }
+                
+                // Apply format and quality settings
+                if (extension.toLowerCase() === '.jpg' || extension.toLowerCase() === '.jpeg') {
+                    sharpInstance = sharpInstance.jpeg({ 
+                        quality: sizeConfig.quality || options.jpegQuality || 85,
+                        progressive: true
+                    });
+                } else if (extension.toLowerCase() === '.webp') {
+                    sharpInstance = sharpInstance.webp({ 
+                        quality: sizeConfig.quality || options.webpQuality || 85 
+                    });
+                } else {
+                    // Default to PNG
+                    sharpInstance = sharpInstance.png({ 
+                        compressionLevel: sizeConfig.compression || options.pngCompression || 6,
+                        progressive: true
+                    });
+                }
+                
+                // Generate resized buffer
+                const resizedBuffer = await sharpInstance.toBuffer();
+                
+                console.log(`✅ Resized ${sizeConfig.folder}: ${resizedBuffer.length} bytes`);
+                
+                // Generate S3 key
+                const s3Key = `${customFolder}/${sizeConfig.folder}/${timestamp}_${baseName}${extension}`;
+                
+                // Upload to S3
+                const uploadParams = {
+                    Bucket: process.env.AWS_BUCKET_NAME || 'scrpt',
+                    Key: s3Key,
+                    Body: resizedBuffer,
+                    ContentType: `image/${extension.substring(1)}`,
+                    Metadata: {
+                        'original-name': fileName,
+                        'base-name': baseName,
+                        'size-folder': sizeConfig.folder,
+                        'dimensions': `${sizeConfig.width}x${sizeConfig.height || 'auto'}`,
+                        'fit-mode': sizeConfig.fit || 'cover',
+                        'upload-timestamp': timestamp.toString(),
+                        'source': options.source || 'resize-util'
+                    }
+                };
+                
+                console.log(`🚀 Uploading ${sizeConfig.folder} to S3: ${s3Key}`);
+                
+                const command = new PutObjectCommand(uploadParams);
+                const uploadResult = await s3Client.send(command);
+                
+                // Generate URLs
+                const bucket = process.env.AWS_BUCKET_NAME || 'scrpt';
+                const region = process.env.AWS_REGION || 'us-east-1';
+                const httpUrl = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`;
+                const s3Uri = `s3://${bucket}/${s3Key}`;
+                
+                results.push({
+                    size: sizeConfig.folder,
+                    width: sizeConfig.width,
+                    height: sizeConfig.height,
+                    dimensions: `${sizeConfig.width}x${sizeConfig.height || 'auto'}`,
+                    s3Key: s3Key,
+                    httpUrl: httpUrl,
+                    s3Uri: s3Uri,
+                    bufferSize: resizedBuffer.length,
+                    success: true,
+                    uploadResult: uploadResult
+                });
+                
+                console.log(`✅ Successfully uploaded ${sizeConfig.folder}: ${httpUrl}`);
+                
+            } catch (sizeError) {
+                console.error(`❌ Error processing size ${sizeConfig.folder}:`, sizeError.message);
+                errors.push({
+                    size: sizeConfig.folder,
+                    error: sizeError.message,
+                    success: false
+                });
+            }
+        }
+
+        const successCount = results.length;
+        const errorCount = errors.length;
+        
+        console.log(`🎉 Resize and upload completed: ${successCount} successful, ${errorCount} failed`);
+
+        return {
+            success: successCount > 0,
+            originalFileName: fileName,
+            baseName: baseName,
+            timestamp: timestamp,
+            originalBufferSize: imageBuffer.length,
+            totalResults: successCount + errorCount,
+            successCount: successCount,
+            errorCount: errorCount,
+            results: results,
+            errors: errors,
+            bucket: process.env.AWS_BUCKET_NAME || 'scrpt',
+            region: process.env.AWS_REGION || 'us-east-1'
+        };
+
+    } catch (error) {
+        console.error('❌ Fatal error in resizeAndUploadImageToS3:', error);
+        return {
+            success: false,
+            error: error.message,
+            originalFileName: fileName,
+            originalBufferSize: imageBuffer ? imageBuffer.length : 0,
+            results: [],
+            errors: [{ error: error.message, success: false }]
+        };
+    }
+};
+
 module.exports = {
     uploadToS3: uploadToS3,
     uploadVideoToS3: uploadVideoToS3,
@@ -752,6 +929,7 @@ module.exports = {
     uploadBufferToS3: uploadBufferToS3,
     fetchImageFromGoogleDrive: fetchImageFromGoogleDrive,
     uploadImageToMultipleSizes: uploadImageToMultipleSizes,
+    resizeAndUploadImageToS3: resizeAndUploadImageToS3,
     generateSignedUrl: generateSignedUrl,
     s3UriToHttps: s3UriToHttps,
     upload: upload,

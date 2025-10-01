@@ -153,25 +153,16 @@ module.exports = function(router){
 		Journal.getStreamComments(req,res);
 	});
 
-	router.post('/addStreamPostLike',function(req,res){
-		Journal.addStreamPostLike(req,res);
+	router.post('/addStreamAction',function(req,res){
+		Journal.addStreamAction(req,res);
 	});
-	router.post('/removeStreamPostLike',function(req,res){
-		Journal.removeStreamPostLike(req,res);
+	router.post('/removeStreamAction',function(req,res){
+		Journal.removeStreamAction(req,res);
 	});
-	router.post('/getStreamLikes',function(req,res){
-		Journal.getStreamLikes(req,res);
-	});
-
-	router.post('/addLike',function(req,res){
-		Journal.addLike(req,res);
-	});
-	router.post('/removeLike',function(req,res){
-		Journal.removeLike(req,res);
-	});
-	router.post('/getStreamCommentsLikes',function(req,res){
-		Journal.getStreamCommentsLikes(req,res);
-	});
+	// getStreamLikes moved to mediaActionRoutes.js (/mediaAction/getStreamLikes)
+	// addLike moved to mediaActionRoutes.js (/mediaAction/addCommentLike)
+	// removeLike moved to mediaActionRoutes.js (/mediaAction/removeCommentLike)
+	// getStreamCommentsLikes moved to mediaActionRoutes.js (/mediaAction/getCommentLikes)
 
 	router.post('/userStreamsPostsWithActivities',function(req,res){
 		Journal.userStreamsPostsWithActivities(req,res);

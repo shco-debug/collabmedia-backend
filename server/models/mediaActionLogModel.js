@@ -3,13 +3,15 @@ var mongoose = require('mongoose');
 var mediaActionLogSchema = new mongoose.Schema({
 	PostId:{ type : mongoose.Schema.Types.ObjectId},				//added on 21st Sep 2017 - have to fix this asap.
 	UserId:{ type : mongoose.Schema.Types.ObjectId , ref: 'user'},
-	MediaId:{ type : mongoose.Schema.Types.ObjectId },
+	MediaId:{ type : mongoose.Schema.Types.ObjectId },				// Post ID (for post-level actions)
 	Title:{ type: String },
 	Prompt:{ type:String },
 	Locator:{ type: String },
 	OwnerId:{ type : mongoose.Schema.Types.ObjectId },
-	BoardId:{type : mongoose.Schema.Types.ObjectId}, 
+	BoardId:{type : mongoose.Schema.Types.ObjectId}, 				// Page ID
+	StreamId:{type : mongoose.Schema.Types.ObjectId},				// Capsule/Stream ID - Added Oct 1, 2025
 	Action:{ type: String },							//Post/Mark/Stamp/Vote/Comment
+	ActionLevel:{ type: String, enum: ['post', 'stream'], default: 'post' },	// 'post' = post-level action, 'stream' = stream-level action
 	MediaType:{ type:String },
 	ContentType:{ type:String },
 	UserFsg:{ type:Object },
