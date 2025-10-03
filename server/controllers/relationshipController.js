@@ -188,6 +188,14 @@ const initializeDefaultRelationships = async function() {
                 Color: '#6c757d',
                 Order: 4,
                 IsActive: true
+            },
+            {
+                RelationshipTitle: 'Significant Other',
+                Description: 'Romantic partner or significant other relationship',
+                Icon: '💕',
+                Color: '#e91e63',
+                Order: 5,
+                IsActive: true
             }
         ];
 

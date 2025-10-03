@@ -96,6 +96,7 @@ const addFriend = async function(req, res) {
             tempUser.Email = req.body.email;
             tempUser.Name = req.body.name;
             tempUser.NickName = req.body.name;
+            tempUser.UserName = req.body.email; // Use email as username to avoid null duplicate key error
             tempUser.Password = tempUser.generateHash('temp123'); // Generate temporary password
             tempUser.ProfileStatus = 0; // Not fully registered
             tempUser.IsDeleted = false;
