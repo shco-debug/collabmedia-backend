@@ -20122,9 +20122,17 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
               // Extract blend settings from first selected blend image
               const firstBlend = SelectedBlendImages[0];
               const blendSettings = {
-                blendMode: firstBlend.blendMode || "overlay",
-                image1Url: firstBlend.blendImage1,
-                image2Url: firstBlend.blendImage2,
+                blendMode: (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") 
+                  ? (firstBlend.blendMode || "overlay") 
+                  : null,
+                image1Url: firstBlend.blendImage1 || null,
+                image2Url: (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") 
+                  ? (firstBlend.blendImage2 || null) 
+                  : null,
+                lightness1: firstBlend.lightness1 || firstBlend.Lightness1 || 0.8,
+                lightness2: (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") 
+                  ? (firstBlend.lightness2 || firstBlend.Lightness2 || 0.8) 
+                  : null,
                 keywords: firstBlend.Keywords || [],
                 selectedKeywords: firstBlend.SelectedKeywords || [],
                 PostStatement: PostStatement,
@@ -20134,11 +20142,15 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
                 allBlendConfigurations: SelectedBlendImages
               };
 
-              // Create Location array with both images
-              const locationArray = [
-                { Size: "", URL: firstBlend.blendImage1 || "" },
-                { Size: "", URL: firstBlend.blendImage2 || "" }
-              ];
+              // Create Location array (one or two images based on post type)
+              const locationArray = (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") 
+                ? [
+                    { Size: "", URL: firstBlend.blendImage1 || "" },
+                    { Size: "", URL: firstBlend.blendImage2 || "" }
+                  ]
+                : [
+                    { Size: "", URL: firstBlend.blendImage1 || "" }
+                  ];
 
               await Media.updateOne(
                 { _id: PostId },
@@ -23049,22 +23061,38 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         // console.log("Final blendImage1:", blendImage1);
         // console.log("Final blendImage2:", blendImage2);
 
-        // Create blend settings for 2MJ posts - will be updated with blend image URL after generation
+        // Create blend settings based on post type (single or dual image)
         const blendSettings = {
+          blendMode: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
+            ? (req.body.blendMode || "overlay") 
+            : null,
+          image1Url: blendImage1 || "",
+          image2Url: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
+            ? (blendImage2 || "") 
+            : null,
+          lightness1: req.body.lightness1 || req.body.Lightness1 || 0.8,
+          lightness2: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
+            ? (req.body.lightness2 || req.body.Lightness2 || 0.8) 
+            : null,
+          keywords: req.body.Keywords || [],
+          selectedKeywords: req.body.SelectedKeywords || [],
+          PostStatement: postStatement || "",
+          PostStreamType: postStreamType,
+          UpdatedOn: Date.now(),
           SelectedBlendImages: [
             {
               MediaURL: "", // Will be updated with blend image URL after generation
-              MediaURL2: "", // Not needed for blend image
+              MediaURL2: "", // Not needed for single image posts
               MediaId: mediaId,
-              MediaType: "2MJPost",
-              BlendMode: req.body.blendMode || "overlay",
+              MediaType: postStreamType,
+              blendMode: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
+                ? (req.body.blendMode || "overlay") 
+                : null,
               PostStatement: postStatement || "",
               CreatedOn: Date.now(),
             },
           ],
-          PostStatement: postStatement || "",
-          PostStreamType: postStreamType,
-          UpdatedOn: Date.now(),
+          allBlendConfigurations: [] // Will be populated if multiple blends are generated
         };
 
         // Save blend settings to Media collection

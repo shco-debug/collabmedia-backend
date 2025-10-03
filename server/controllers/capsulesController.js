@@ -6725,10 +6725,19 @@ var getCapsulePosts = async function (req, res) {
     const countResult = await Chapter.aggregate(countPipeline);
     const totalCount = countResult.length > 0 ? countResult[0].total : 0;
 
+    // Remove allBlendConfigurations from BlendSettings before sending response
+    const cleanedPosts = posts.map(post => {
+      if (post.BlendSettings && post.BlendSettings.allBlendConfigurations) {
+        const { allBlendConfigurations, ...cleanedBlendSettings } = post.BlendSettings;
+        post.BlendSettings = cleanedBlendSettings;
+      }
+      return post;
+    });
+
     res.json({
       code: "200",
       msg: "Success",
-      response: posts,
+      response: cleanedPosts, // Updated to use cleanedPosts
       count: totalCount,
       capsuleId: capsuleId,
       pagination: {
@@ -8702,10 +8711,19 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
     const countResult = await Chapter.aggregate(countPipeline).exec();
     const totalCount = countResult.length > 0 ? countResult[0].total : 0;
 
+    // Remove allBlendConfigurations from BlendSettings before sending response
+    const cleanedPosts = posts.map(post => {
+      if (post.BlendSettings && post.BlendSettings.allBlendConfigurations) {
+        const { allBlendConfigurations, ...cleanedBlendSettings } = post.BlendSettings;
+        post.BlendSettings = cleanedBlendSettings;
+      }
+      return post;
+    });
+
     res.json({
       code: 200,
       msg: "Success",
-      response: posts,
+      response: cleanedPosts,
       count: totalCount,
       userCapsules: userCapsules.length,
       pagination: {

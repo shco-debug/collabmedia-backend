@@ -2988,33 +2988,119 @@ const createSinglePost = async (req, res) => {
     }
 
     // Handle blend settings if provided
+    let blendImage1Url = null;
+    let blendImage2Url = null;
+    
     if (
       blendSettings &&
       blendSettings.blendImage1 &&
       blendSettings.blendImage2
     ) {
-      console.log("Creating blend image...");
+      console.log("Processing blend images...");
 
-      // Use CommonAlgo to determine blend mode if not provided
-      const blendMode = blendSettings.blendMode || "hard-light";
+      // Check if images are URLs, base64, or files
+      const isImage1Url = typeof blendSettings.blendImage1 === 'string' && blendSettings.blendImage1.startsWith('http');
+      const isImage1Base64 = typeof blendSettings.blendImage1 === 'string' && blendSettings.blendImage1.startsWith('data:');
+      const isImage2Url = typeof blendSettings.blendImage2 === 'string' && blendSettings.blendImage2.startsWith('http');
+      const isImage2Base64 = typeof blendSettings.blendImage2 === 'string' && blendSettings.blendImage2.startsWith('data:');
 
-      // Create blend image
-      blendResult = await createBlendImage(
-        blendSettings.blendImage1,
-        blendSettings.blendImage2,
-        blendMode
-      );
-
-      if (blendResult.success) {
-        blendImageUrl = blendResult.url;
-        console.log("✅ Blend image created:", blendImageUrl);
+      if (isImage1Url && isImage2Url) {
+        // Scenario 1: Both are URLs - save directly
+        console.log("✅ Both images are URLs - saving directly");
+        blendImage1Url = blendSettings.blendImage1;
+        blendImage2Url = blendSettings.blendImage2;
       } else {
-        console.error("❌ Failed to create blend image:", blendResult.error);
-        return res.status(500).json({
-          code: 500,
-          message: "Failed to create blend image",
-          error: blendResult.error,
-        });
+        // Scenario 2: Images are base64 or files - upload to S3 with multiple sizes
+        console.log("📤 Images are base64/files - uploading to S3 with multiple sizes");
+        
+        const awsS3Utils = require("../utilities/awsS3Utils.js");
+        
+        try {
+          // Helper function to convert base64 to buffer
+          const base64ToBuffer = (base64String) => {
+            if (base64String.startsWith('data:')) {
+              const base64Data = base64String.split(',')[1];
+              return Buffer.from(base64Data, 'base64');
+            }
+            return base64String; // If it's already a buffer
+          };
+          
+          // Upload first image
+          if (!isImage1Url) {
+            const timestamp1 = Date.now();
+            const randomId1 = Math.round(Math.random() * 1e9);
+            const fileName1 = `blend1_${timestamp1}_${randomId1}`;
+            const imageBuffer1 = isImage1Base64 ? base64ToBuffer(blendSettings.blendImage1) : blendSettings.blendImage1;
+            
+            console.log(`📤 Uploading first image: ${isImage1Base64 ? 'base64' : 'buffer'} (size: ${imageBuffer1.length} bytes)`);
+            
+            const uploadResult1 = await awsS3Utils.resizeAndUploadImageToS3(
+              imageBuffer1,
+              `${fileName1}.webp`,
+              [
+                { width: 100, height: 100, folder: '100', fit: 'cover' },
+                { width: 300, height: 300, folder: '300', fit: 'cover' },
+                { width: 600, height: 600, folder: '600', fit: 'cover' },
+                { width: 1000, height: 1000, folder: 'aspectfit_small', fit: 'inside' },
+                { width: null, height: null, folder: 'aspectfit', fit: 'inside' } // Original resolution
+              ],
+              { customFolder: 'userUploads' }
+            );
+            
+            if (uploadResult1.success) {
+              // Get the original resolution URL from the results array
+              const aspectfitResult = uploadResult1.results.find(r => r.size === 'aspectfit');
+              blendImage1Url = aspectfitResult ? aspectfitResult.httpUrl : uploadResult1.results[0]?.httpUrl;
+              console.log("✅ First image uploaded:", blendImage1Url);
+            } else {
+              throw new Error(`Failed to upload first image: ${uploadResult1.error}`);
+            }
+          } else {
+            blendImage1Url = blendSettings.blendImage1;
+          }
+
+          // Upload second image
+          if (!isImage2Url) {
+            const timestamp2 = Date.now() + 1;
+            const randomId2 = Math.round(Math.random() * 1e9);
+            const fileName2 = `blend2_${timestamp2}_${randomId2}`;
+            const imageBuffer2 = isImage2Base64 ? base64ToBuffer(blendSettings.blendImage2) : blendSettings.blendImage2;
+            
+            console.log(`📤 Uploading second image: ${isImage2Base64 ? 'base64' : 'buffer'} (size: ${imageBuffer2.length} bytes)`);
+            
+            const uploadResult2 = await awsS3Utils.resizeAndUploadImageToS3(
+              imageBuffer2,
+              `${fileName2}.webp`,
+              [
+                { width: 100, height: 100, folder: '100', fit: 'cover' },
+                { width: 300, height: 300, folder: '300', fit: 'cover' },
+                { width: 600, height: 600, folder: '600', fit: 'cover' },
+                { width: 1000, height: 1000, folder: 'aspectfit_small', fit: 'inside' },
+                { width: null, height: null, folder: 'aspectfit', fit: 'inside' } // Original resolution
+              ],
+              { customFolder: 'userUploads' }
+            );
+            
+            if (uploadResult2.success) {
+              // Get the original resolution URL from the results array
+              const aspectfitResult = uploadResult2.results.find(r => r.size === 'aspectfit');
+              blendImage2Url = aspectfitResult ? aspectfitResult.httpUrl : uploadResult2.results[0]?.httpUrl;
+              console.log("✅ Second image uploaded:", blendImage2Url);
+            } else {
+              throw new Error(`Failed to upload second image: ${uploadResult2.error}`);
+            }
+          } else {
+            blendImage2Url = blendSettings.blendImage2;
+          }
+
+        } catch (uploadError) {
+          console.error("❌ Error uploading blend images:", uploadError);
+          return res.status(500).json({
+            code: 500,
+            message: "Failed to upload blend images",
+            error: uploadError.message,
+          });
+        }
       }
     }
 
@@ -3057,25 +3143,28 @@ const createSinglePost = async (req, res) => {
         locationArray.push({
           Size: "original",
           URL: url,
-          Type: "source",
-          Index: index,
         });
       });
     }
 
-    // Add blended image if created
-    if (blendImageUrl) {
+    // Add blend images if provided
+    if (blendImage1Url) {
       locationArray.push({
         Size: "original",
-        URL: blendImageUrl,
-        Type: "blended",
-        Index: locationArray.length,
+        URL: blendImage1Url,
       });
     }
 
-    // Determine the main image URL (blend image takes priority for thumbnail)
+    if (blendImage2Url) {
+      locationArray.push({
+        Size: "original",
+        URL: blendImage2Url,
+      });
+    }
+
+    // Determine the main image URL (first blend image takes priority for thumbnail)
     const mainImageUrl =
-      blendImageUrl || (mediaUrls.length > 0 ? mediaUrls[0] : null);
+      blendImage1Url || (mediaUrls.length > 0 ? mediaUrls[0] : null);
 
     // Prepare media data
     const mediaData = {
@@ -3087,12 +3176,12 @@ const createSinglePost = async (req, res) => {
       UploadedBy: "user",
       UploadedOn: new Date(),
       UploaderID: userId,
-      Source: blendImageUrl ? "blending" : "user_upload",
+      Source: (blendImage1Url || blendImage2Url) ? "blending" : "user_upload",
       GroupTags: groupTagIds,
       Collection: [],
       Status: 1,
       AddedWhere: "directToPf",
-      AddedHow: blendImageUrl ? "blending" : "user_upload",
+      AddedHow: (blendImage1Url || blendImage2Url) ? "blending" : "user_upload",
       IsDeleted: 0,
       Content: content,
       MediaType: "Image",
@@ -3107,7 +3196,25 @@ const createSinglePost = async (req, res) => {
         : "0",
       DominantColors: "",
       MetaData: metadata,
-      BlendSettings: blendSettings,
+      BlendSettings: {
+        // Use consistent keys like other implementations
+        image1Url: blendImage1Url,
+        image2Url: blendImage2Url,
+        blendMode: blendSettings.blendMode || "multiply",
+        lightness1: blendSettings.lightness1 || 0.8,
+        lightness2: blendSettings.lightness2 || 0.8,
+        keywords: blendSettings.Keywords || [],
+        selectedKeywords: blendSettings.SelectedKeywords || [],
+        PostStatement: blendSettings.PostStatement || content,
+        PostStreamType: blendSettings.PostStreamType || "Image",
+        UpdatedOn: Date.now(),
+        // Keep original structure for backward compatibility (only URLs, not base64)
+        blendImage1: blendImage1Url,
+        blendImage2: blendImage2Url,
+        isSelected: blendSettings.isSelected || false,
+        selectedVariantIndex: blendSettings.selectedVariantIndex || 0
+        // Do NOT spread the original blendSettings to avoid including base64 data
+      },
       IsUnsplashImage: false,
       ViewsCount: 0,
       Views: {},
@@ -3382,10 +3489,8 @@ const getUserPosts = async (req, res) => {
       Posts: 1, // Add Posts field for likes and comments
     };
 
-    // Conditionally include blend settings
-    if (includeBlendSettings) {
-      fields.BlendSettings = 1;
-    }
+    // Always include blend settings
+    fields.BlendSettings = 1;
 
     // Execute optimized aggregation pipeline
     const posts = await media.aggregate([
@@ -3619,6 +3724,7 @@ const getUserPosts = async (req, res) => {
           Source: 1,
           IsUnsplashImage: 1,
           Photographer: 1,
+          BlendSettings: 1,
           // Interaction fields
           likes: 1,
           dislikes: 1,
@@ -3698,7 +3804,7 @@ const getUserPosts = async (req, res) => {
         styleKeyword: post.StyleKeyword,
         metaData: post.MetaData,
         images: post.Location || [],
-        blendSettings: includeBlendSettings ? post.BlendSettings : undefined,
+        blendSettings: post.BlendSettings || null,
         posts: post.Posts || null, // Add Posts data (likes and comments)
       };
 
@@ -3733,7 +3839,7 @@ const getUserPosts = async (req, res) => {
           searchQuery: finalSearchQuery,
           dateFrom: dateFrom,
           dateTo: dateTo,
-          includeBlendSettings: includeBlendSettings,
+          includeBlendSettings: true,
         },
       },
     });
@@ -3893,3 +3999,4 @@ module.exports = {
   getUserPosts,
   updatePostPrivacy,
 };
+
