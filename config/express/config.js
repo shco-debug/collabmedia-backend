@@ -921,6 +921,11 @@ module.exports = (app) => {
 	app.use('/mediaAction', mediaActionRoutes);
 	router.mediaActionRoutes = mediaActionRoutes;
 	
+	// User Activity routes
+	const userActivityRoutes = express.Router();
+	app.use('/userActivity', userActivityRoutes);
+	router.userActivityRoutes = userActivityRoutes;
+	
 	// Relationship management routes
 	const relationshipRoutes = express.Router();
 	app.use('/relationships', relationshipRoutes);

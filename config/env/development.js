@@ -21,50 +21,21 @@ module.exports = function(){
 	process.perUserSpace = 524288000;   //500 MB
 
 	process.CAPSULE_VERIFIER = ["manishpodiyal@gmail.com","scrptco@gmail.com"];
+	
+	// Load SMTP configuration
+	const smtpConfig = require('./smtp.js');
+	const currentEnv = process.env.NODE_ENV || 'development';
+	const smtpSettings = smtpConfig[currentEnv];
+	
 	//console.log("__dirname ------------------",__dirname);
 	process.EMAIL_ENGINE = {
 		info : {
-			smtpOptions : {
-				//service: "Godaddy",
-				auth : {
-					user: "hello@scrpt.com",
-					pass: "xiAsH5S#cMq7CLsW"
-				},
-				host: "smtp.office365.com", //"smtp.ionos.com", "smtp.office365.com", //"smtpout.secureserver.net",
-				port: 587, //465,
-				secure: false,
-				secureConnection: false,
-				requireTLS:true,
-				tls: true,
-				// DKIM configuration commented out for local development
-				/*
-				dkim: {
-					domainName: "scrpt.com",
-					keySelector: "handwritten",
-					//privateKey: "-----BEGIN OPENSSH PRIVATE KEY-----b3BlbnNzaC1rZXktdjEAAAAACmFlczI1Ni1jdHIAAAAGYmNyeXB0AAAAGAAAABCyIkWMzxn2QPZ70vo0DorVAAAAEAAAAAEAAAEXAAAAB3NzaC1yc2EAAAADAQABAAABAQC/QiGJERB3mIqOMTbTY7Q1qtlDTgBwXLQVk4LpXo/CA5ZaajYro990OBerXrQ4lB+w6VMtxFB16WlMvA4bXISefIu6moFx4z4bFpOCfZxyUrVT2dzai66CJdHsaccJRqwgoTpllHSqjFk9mqT7TheDLI0cjLnRRupPDSZYacySQ8OGTCwalHZTk7sPCnKbQjPqShMX9bJGQ2uJI3y9a8trHmtlpqLLAiO8WNl7EG8i0PJrg2jauuLP9SvHTUx7bnxksmsJsXAK7HnjoPXHE6ty2OjZawcMEU4206h3VFfgM+9HS3XQJnJf3DVKs2hvNDg4UrB8nWHetqLdebfGThO5AAAD4CeNLslIx7ogkb1l/L8XLA6kUftvx/qKMg8x2I8TjNW6d4/swEX99qXnLQ2YSGlKiA+Un3gwYJbIxCVBxKpW3xKwLfYLKInOFnGEgxuzlbLJFQamGei5ceok+UVkS1up17WeoGNBED6nFhDrdcBAooIeevUZMm+B/EnTwDUcU/1bawv5l1Bp0rUuSm9dFXsn9ZdsFCn59yshdR3VLYd/gREWL5Y1LX1H1ePrjT655cIpNqFYpdNMWvqjf71Qcn79gYfDVzy82dHWeHKz3FAG9E6Kdl6PtpDlEQOKe3iOrLMGnbAOAisCh8jM7Sdcbv/DzLTfadF6P+imOBBWz6xpDaS9yDIqxyT0yxlSlL5taviAkS+PrIMYYyJfV1eVzwFB7IwpX3c7u9zFIlgdqFEYCy8wSwZ6tLejVZLkEytuGDdRG/cXcRhU4CJ2Wtj4pfKRf9I06ZqweKdxexZzQba0xv2irsNofQEoqorgVO4f6qJLtXq2JMdgNiUSc6bJHedS/ZBPycqIAnpX6SwKwr6WrqgGGFPsYYD4mo/Li6741W+fHfaOY4bjWYztOl01OPSA0bWrEmdumTlAezJ1MtCFr1N+a9ctNWmXMTKwz7sg3rP1yddIEDgJi20xpAcbZACa7aN9FnOckRDi+Iscy2HsrSr9VPcwzzqQRayZO3n8vHQWlZcAZuQ/PScb7fnlaMA1QAy91VPE7x0KuqW6WSmVhN9P2ZOI/kzjLpWifyqaXeF2upgcBTyyEIJvSVJ00UjTvj5E73TdYUucOkZXUVbltKBullxBFTb3zrOYdKglH5ymJ+0bdH2zmgeCu60TSfupBfYcjiG2nT29HfTfKsTbRBnE0Aj+rFpiNYga7N3FDo0m0A8I53gyNe2IzR9Rih/0VV38TMhsaJvcxeCKATraUBQQlbF+2SLLCwLgaRLJKooyB9bQVkEip6CfpLfOM29KHVZBsAev4GbiRl2rDBwC4eOQyRXJJ+1zCqjJbG6gKyljbnzPNCRW2Q1LYCgGoS1OO+k8KOohKUx9PUCCysNHRXyoq0yg3z69W9bi67/N9sqEARwm19MxpGqkO4J4ao+lyUFMbhF9ilyqBW+q8wZTVdejOVd6l8BFf/iRdauLy8c8/hfGFeUyBKrs+RTsQoiC3++NZVDN67dLju6tLGRo8xxCTpV1BC+DR4fzj7cOMigGgeeqaSoKahqRJ0YD27IjPRI1TRwo3KPJqTFRRtJvnz+Qm7OuAxdqepP04Zofau+wMT4Fr7lWYSnHIWBWDqTC5bsB8EeBzfy78GN210JsTCWG74KRGjFZwFIFns92EYcx-----END OPENSSH PRIVATE KEY-----"
-					privateKey: fs.readFileSync(__dirname+'/dkim.pem', "utf8"),
-					cacheDir: process.env.TMPDIR,
-					cacheTreshold: 100 * 1024
-				}
-				*/
-			},
-			senderLine : "Scrpt <hello@scrpt.com>"
+			smtpOptions : smtpSettings.primary,
+			senderLine : smtpSettings.email.senderLine
 		},
 		password : {
-			smtpOptions : {
-				type: "SMTP",
-				service: "office365", //"ionos",
-				host: "smtp.office365.com", //"smtp.ionos.com", "smtp.office365.com", //"smtpout.secureserver.net",
-				requireTLS:true,
-				secure: false,
-				secureConnection: false,
-				tls:true,
-				auth : {
-					user: "hello@scrpt.com",
-					pass: "xiAsH5S#cMq7CLsW"
-				}
-			},
-			senderLine : "Scrpt <hello@scrpt.com>"
+			smtpOptions : smtpSettings.primary,
+			senderLine : smtpSettings.email.senderLine
 		}
 	};
 

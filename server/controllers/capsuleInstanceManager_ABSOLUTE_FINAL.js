@@ -292,7 +292,7 @@ const createCapsuleInstance = async (
             CapsuleData.LaunchSettings.StreamType = CapsuleData.LaunchSettings
               .StreamType
               ? CapsuleData.LaunchSettings.StreamType
-              : null;
+              : "";
 
             data.LaunchSettings = data.LaunchSettings
               ? data.LaunchSettings

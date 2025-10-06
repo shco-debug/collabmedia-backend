@@ -1,0 +1,549 @@
+{
+	"info": {
+		"_postman_id": "stream-email-delivery-001",
+		"name": "Stream Email Delivery System",
+		"description": "Complete workflow for delivering posts to capsule purchasers",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "stream-email-delivery"
+	},
+	"item": [
+		{
+			"name": "1. Get Capsule Details",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    const response = pm.response.json();",
+							"    if (response.code === 200) {",
+							"        pm.collectionVariables.set('capsuleId', response.data._id);",
+							"        pm.collectionVariables.set('capsuleTitle', response.data.Title);",
+							"        pm.collectionVariables.set('frequency', response.data.Frequency);",
+							"        pm.collectionVariables.set('emailTemplate', response.data.EmailTemplate);",
+							"        console.log('Capsule ID set:', response.data._id);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{jwt_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/capsules/getCapsuleDetails?CapsuleId={{capsule_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"capsules",
+						"getCapsuleDetails"
+					],
+					"query": [
+						{
+							"key": "CapsuleId",
+							"value": "{{capsule_id}}",
+							"description": "Your capsule ID (e.g., 68badf21e7111ff6b63383ac)"
+						}
+					]
+				},
+				"description": "Get capsule details including frequency settings and email template"
+			},
+			"response": []
+		},
+		{
+			"name": "2. Get Capsule Purchasers",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    const response = pm.response.json();",
+							"    if (response.code === 200) {",
+							"        const purchasers = response.data || [];",
+							"        const emails = purchasers.map(p => p.Email).filter(email => email);",
+							"        pm.collectionVariables.set('purchaserEmails', JSON.stringify(emails));",
+							"        console.log('Purchaser emails:', emails);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{jwt_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/capsules/getCapsulePurchasers?CapsuleId={{capsule_id}}",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"capsules",
+						"getCapsulePurchasers"
+					],
+					"query": [
+						{
+							"key": "CapsuleId",
+							"value": "{{capsule_id}}",
+							"description": "Your capsule ID"
+						}
+					]
+				},
+				"description": "Get list of users who purchased this capsule"
+			},
+			"response": []
+		},
+		{
+			"name": "3. Get Capsule Posts",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    const response = pm.response.json();",
+							"    if (response.code === 200) {",
+							"        const posts = response.data || [];",
+							"        pm.collectionVariables.set('capsulePosts', JSON.stringify(posts));",
+							"        console.log('Found posts:', posts.length);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{jwt_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"CapsuleId\": \"{{capsule_id}}\",\n  \"type\": \"all\",\n  \"limit\": 50\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/getCapsulePosts",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"capsules",
+						"getCapsulePosts"
+					]
+				},
+				"description": "Get all posts from the capsule"
+			},
+			"response": []
+		},
+		{
+			"name": "4. Create SyncedPost Record",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    const response = pm.response.json();",
+							"    if (response.code === 200) {",
+							"        console.log('SyncedPost created successfully');",
+							"    } else {",
+							"        console.error('Failed to create SyncedPost:', response.message);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{jwt_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"PageId\": \"{{page_id}}\",\n  \"PostId\": \"{{post_id}}\",\n  \"PostImage\": \"{{post_image}}\",\n  \"PostStatement\": \"{{post_statement}}\",\n  \"PostOwnerId\": \"{{post_owner_id}}\",\n  \"ReceiverEmails\": {{purchaser_emails}},\n  \"SurpriseSelectedTags\": [\"test\", \"sample\"],\n  \"EmailEngineDataSets\": [\n    {\n      \"AfterDays\": 1,\n      \"DateOfDelivery\": \"{{delivery_date_1}}\",\n      \"Delivered\": false,\n      \"VisualUrls\": [\"{{post_image}}\"],\n      \"TextAboveVisual\": \"New post from {{capsule_title}}\",\n      \"TextBelowVisual\": \"{{post_statement}}\",\n      \"SoundFileUrl\": null,\n      \"BlendMode\": \"hard-light\",\n      \"SelectedKeywords\": [\"test\"],\n      \"hexcode_blendedImage\": \"#FF0000\"\n    },\n    {\n      \"AfterDays\": 7,\n      \"DateOfDelivery\": \"{{delivery_date_2}}\",\n      \"Delivered\": false,\n      \"VisualUrls\": [\"{{post_image}}\"],\n      \"TextAboveVisual\": \"Reminder: {{capsule_title}}\",\n      \"TextBelowVisual\": \"{{post_statement}}\",\n      \"SoundFileUrl\": null,\n      \"BlendMode\": \"hard-light\",\n      \"SelectedKeywords\": [\"test\"],\n      \"hexcode_blendedImage\": \"#FF0000\"\n    }\n  ],\n  \"CapsuleId\": \"{{capsule_id}}\",\n  \"EmailTemplate\": \"{{email_template}}\",\n  \"Status\": true,\n  \"IsOnetimeStream\": false,\n  \"IsOnlyPostImage\": false,\n  \"IsPrivateQuestionPost\": false,\n  \"IsPageStreamCase\": true,\n  \"instantEmail\": false\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/journal/streamPost_withEmailSync_v2",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"journal",
+						"streamPost_withEmailSync_v2"
+					]
+				},
+				"description": "Create SyncedPost record for email delivery scheduling"
+			},
+			"response": []
+		},
+		{
+			"name": "5. Create SyncedpostsMap Backup",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    const response = pm.response.json();",
+							"    if (response.code === 200) {",
+							"        console.log('SyncedpostsMap created successfully');",
+							"    } else {",
+							"        console.error('Failed to create SyncedpostsMap:', response.message);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{jwt_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"StreamId\": \"{{capsule_id}}\",\n  \"action\": \"createBackup\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/createSyncedPostsMap",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"capsules",
+						"createSyncedPostsMap"
+					]
+				},
+				"description": "Create backup of all SyncedPost records in SyncedpostsMap"
+			},
+			"response": []
+		},
+		{
+			"name": "6. Trigger Email Delivery (Manual)",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    const response = pm.response.json();",
+							"    if (response.code === 200) {",
+							"        console.log('Email delivery triggered successfully');",
+							"        console.log('Emails sent:', response.data?.emailsSent || 0);",
+							"    } else {",
+							"        console.error('Failed to trigger email delivery:', response.message);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "GET",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{jwt_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/journal/SynedPostEmailCron",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"journal",
+						"SynedPostEmailCron"
+					]
+				},
+				"description": "Manually trigger the email delivery cron job"
+			},
+			"response": []
+		},
+		{
+			"name": "7. Check Email Delivery Status",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    const response = pm.response.json();",
+							"    if (response.code === 200) {",
+							"        const data = response.data || [];",
+							"        let totalEmails = 0;",
+							"        let deliveredEmails = 0;",
+							"        let pendingEmails = 0;",
+							"        ",
+							"        data.forEach(syncedPost => {",
+							"            syncedPost.EmailEngineDataSets.forEach(emailData => {",
+							"                totalEmails++;",
+							"                if (emailData.Delivered) {",
+							"                    deliveredEmails++;",
+							"                } else {",
+							"                    pendingEmails++;",
+							"                }",
+							"            });",
+							"        });",
+							"        ",
+							"        console.log('=== EMAIL DELIVERY STATUS ===');",
+							"        console.log('Total Emails Scheduled:', totalEmails);",
+							"        console.log('Delivered:', deliveredEmails);",
+							"        console.log('Pending:', pendingEmails);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{jwt_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"CapsuleId\": \"{{capsule_id}}\",\n  \"includeDelivered\": true,\n  \"includePending\": true\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/journal/getSyncedPostStatus",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"journal",
+						"getSyncedPostStatus"
+					]
+				},
+				"description": "Check the delivery status of all SyncedPost records for this capsule"
+			},
+			"response": []
+		},
+		{
+			"name": "8. Test Single Post Delivery",
+			"event": [
+				{
+					"listen": "test",
+					"script": {
+						"exec": [
+							"if (pm.response.code === 200) {",
+							"    const response = pm.response.json();",
+							"    if (response.code === 200) {",
+							"        console.log('Test email sent successfully');",
+							"    } else {",
+							"        console.error('Failed to send test email:', response.message);",
+							"    }",
+							"}"
+						],
+						"type": "text/javascript"
+					}
+				}
+			],
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Authorization",
+						"value": "Bearer {{jwt_token}}",
+						"type": "text"
+					},
+					{
+						"key": "Content-Type",
+						"value": "application/json",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"PageId\": \"{{page_id}}\",\n  \"PostId\": \"{{post_id}}\",\n  \"PostImage\": \"{{post_image}}\",\n  \"PostStatement\": \"{{post_statement}}\",\n  \"PostOwnerId\": \"{{post_owner_id}}\",\n  \"ReceiverEmails\": [\"{{test_email}}\"],\n  \"SurpriseSelectedTags\": [\"test\"],\n  \"EmailEngineDataSets\": [\n    {\n      \"AfterDays\": 0,\n      \"DateOfDelivery\": \"{{immediate_delivery_date}}\",\n      \"Delivered\": false,\n      \"VisualUrls\": [\"{{post_image}}\"],\n      \"TextAboveVisual\": \"Test Email - {{capsule_title}}\",\n      \"TextBelowVisual\": \"{{post_statement}}\",\n      \"SoundFileUrl\": null,\n      \"BlendMode\": \"hard-light\",\n      \"SelectedKeywords\": [\"test\"],\n      \"hexcode_blendedImage\": \"#FF0000\"\n    }\n  ],\n  \"CapsuleId\": \"{{capsule_id}}\",\n  \"EmailTemplate\": \"{{email_template}}\",\n  \"Status\": true,\n  \"IsOnetimeStream\": false,\n  \"IsOnlyPostImage\": false,\n  \"IsPrivateQuestionPost\": false,\n  \"IsPageStreamCase\": true,\n  \"instantEmail\": true\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/journal/streamPost_withEmailSync_v2",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"journal",
+						"streamPost_withEmailSync_v2"
+					]
+				},
+				"description": "Send a test email immediately to verify the delivery system works"
+			},
+			"response": []
+		}
+	],
+	"event": [
+		{
+			"listen": "prerequest",
+			"script": {
+				"type": "text/javascript",
+				"exec": [
+					"// Set default delivery dates",
+					"const now = new Date();",
+					"const tomorrow = new Date(now.getTime() + 24 * 60 * 60 * 1000);",
+					"const nextWeek = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);",
+					"",
+					"pm.collectionVariables.set('delivery_date_1', tomorrow.toISOString());",
+					"pm.collectionVariables.set('delivery_date_2', nextWeek.toISOString());",
+					"pm.collectionVariables.set('immediate_delivery_date', now.toISOString());"
+				]
+			}
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3002",
+			"type": "string",
+			"description": "Backend API base URL"
+		},
+		{
+			"key": "jwt_token",
+			"value": "your-jwt-token-here",
+			"type": "string",
+			"description": "JWT authentication token"
+		},
+		{
+			"key": "capsule_id",
+			"value": "68badf21e7111ff6b63383ac",
+			"type": "string",
+			"description": "Your capsule ID"
+		},
+		{
+			"key": "page_id",
+			"value": "your-page-id",
+			"type": "string",
+			"description": "Page ID associated with the capsule"
+		},
+		{
+			"key": "post_id",
+			"value": "your-post-id",
+			"type": "string",
+			"description": "Post ID to deliver"
+		},
+		{
+			"key": "post_image",
+			"value": "https://example.com/post-image.jpg",
+			"type": "string",
+			"description": "Post image URL"
+		},
+		{
+			"key": "post_statement",
+			"value": "Your post content here",
+			"type": "string",
+			"description": "Post content/statement"
+		},
+		{
+			"key": "post_owner_id",
+			"value": "your-user-id",
+			"type": "string",
+			"description": "Post owner/creator user ID"
+		},
+		{
+			"key": "test_email",
+			"value": "test@example.com",
+			"type": "string",
+			"description": "Test email address for verification"
+		}
+	]
+}

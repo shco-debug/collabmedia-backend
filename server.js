@@ -315,6 +315,7 @@ require("./server/middlewares.js")(router.capsuleRoutes);
 require("./server/middlewares.js")(router.referralRoutes);
 require("./server/middlewares.js")(router.journalRoutes);
 require("./server/middlewares.js")(router.mediaActionRoutes);
+require("./server/middlewares.js")(router.userActivityRoutes);
 
 // Frontend API Routes
 require("./server/routes/frontend/api/userRoutes.js")(router.userRoutes);
@@ -353,6 +354,9 @@ require("./server/routes/frontend/api/journalRoutes.js")(
 );
 require("./server/routes/frontend/api/mediaActionRoutes.js")(
   router.mediaActionRoutes
+);
+require("./server/routes/frontend/api/userActivityRoutes.js")(
+  router.userActivityRoutes
 );
 
 // Relationship routes

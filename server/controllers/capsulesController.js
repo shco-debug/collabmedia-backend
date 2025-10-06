@@ -6326,8 +6326,8 @@ var getCapsulePosts = async function (req, res) {
           mediaDoc: { $exists: true, $ne: null },
         },
       },
-      // Filter by media type if provided
-      ...(req.body.type
+      // Filter by media type if provided (but skip if type is "all")
+      ...(req.body.type && req.body.type !== "all"
         ? [
             {
               $match: {
@@ -6351,6 +6351,13 @@ var getCapsulePosts = async function (req, res) {
                           "mediaDoc.MediaType": "Link",
                           "mediaDoc.LinkType": { $ne: "image" },
                         },
+                        { "mediaDoc.MediaType": "Video" },
+                        { "mediaDoc.MediaType": "Audio" },
+                      ]
+                    : []),
+                  ...(req.body.type === "Audio"
+                    ? [
+                        { "mediaDoc.MediaType": "Audio" },
                       ]
                     : []),
                 ],
@@ -6574,6 +6581,28 @@ var getCapsulePosts = async function (req, res) {
       IsDeleted: { $ne: true },
     });
     console.log("Chapters found for capsule:", chaptersCount);
+    
+    // Debug: Check total media count by type in the database
+    const Media = require("./../models/mediaModel.js");
+    const videoCount = await Media.countDocuments({ MediaType: "Video", IsDeleted: { $ne: 1 } });
+    const audioCount = await Media.countDocuments({ MediaType: "Audio", IsDeleted: { $ne: 1 } });
+    const imageCount = await Media.countDocuments({ MediaType: "Image", IsDeleted: { $ne: 1 } });
+    const mj1Count = await Media.countDocuments({ MediaType: "1MJPost", IsDeleted: { $ne: 1 } });
+    const mj2Count = await Media.countDocuments({ MediaType: "2MJPost", IsDeleted: { $ne: 1 } });
+    const unsplash1Count = await Media.countDocuments({ MediaType: "1UnsplashPost", IsDeleted: { $ne: 1 } });
+    const unsplash2Count = await Media.countDocuments({ MediaType: "2UnsplashPost", IsDeleted: { $ne: 1 } });
+    const notesCount = await Media.countDocuments({ MediaType: "Notes", IsDeleted: { $ne: 1 } });
+    
+    console.log("=== TOTAL MEDIA COUNT BY TYPE ===");
+    console.log(`Video: ${videoCount}`);
+    console.log(`Audio: ${audioCount}`);
+    console.log(`Image: ${imageCount}`);
+    console.log(`1MJPost: ${mj1Count}`);
+    console.log(`2MJPost: ${mj2Count}`);
+    console.log(`1UnsplashPost: ${unsplash1Count}`);
+    console.log(`2UnsplashPost: ${unsplash2Count}`);
+    console.log(`Notes: ${notesCount}`);
+    console.log("=== END TOTAL MEDIA COUNT ===");
 
     // Debug: Check if any chapters have pages
     const chaptersWithPages = await Chapter.find({
@@ -6681,6 +6710,18 @@ var getCapsulePosts = async function (req, res) {
 
     const posts = await Chapter.aggregate(pipeline);
     console.log("Final posts found:", posts.length);
+    
+    // Debug: Log the MediaTypes of found posts
+    if (posts.length > 0) {
+      console.log("=== POST TYPES DEBUG ===");
+      posts.forEach((post, index) => {
+        console.log(`Post ${index + 1}: MediaType = "${post.MediaType}", Location = ${post.Location ? post.Location.length : 0} items`);
+        if (post.Location && post.Location.length > 0) {
+          console.log(`  - Location[0].URL: ${post.Location[0].URL ? 'EXISTS' : 'MISSING'}`);
+        }
+      });
+      console.log("=== END POST TYPES DEBUG ===");
+    }
 
     // Add user's interaction status for each post and clean up user data
     if (req.session.user && req.session.user._id) {
@@ -8324,7 +8365,7 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
       { $match: { mediaDoc: { $exists: true, $ne: null } } },
 
       // Apply media type filter
-      ...(type
+      ...(type && type !== "all"
         ? [
             {
               $match: {
@@ -8348,6 +8389,8 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
                           "mediaDoc.MediaType": "Link",
                           "mediaDoc.LinkType": { $ne: "image" },
                         },
+                        { "mediaDoc.MediaType": "Video" },
+                        { "mediaDoc.MediaType": "Audio" },
                       ]
                     : []),
                 ],
