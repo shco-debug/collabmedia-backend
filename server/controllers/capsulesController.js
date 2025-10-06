@@ -8514,6 +8514,60 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
         },
       },
 
+      // Lookup PageStream data to get SelectedBlendImages
+      {
+        $lookup: {
+          from: "PageStream",
+          localField: "_id",
+          foreignField: "PostId",
+          as: "pageStreamData",
+        },
+      },
+      // Add SelectedBlendImages from PageStream with better error handling
+      {
+        $addFields: {
+          selectedBlendImage: {
+            $let: {
+              vars: {
+                pageStream: { $arrayElemAt: ["$pageStreamData", 0] }
+              },
+              in: {
+                $cond: {
+                  if: { $ne: ["$$pageStream", null] },
+                  then: {
+                    $cond: {
+                      if: { 
+                        $and: [
+                          { $ne: ["$$pageStream.SelectedBlendImages", null] },
+                          { $isArray: "$$pageStream.SelectedBlendImages" },
+                          { $gt: [{ $size: "$$pageStream.SelectedBlendImages" }, 0] }
+                        ]
+                      },
+                      then: { $arrayElemAt: ["$$pageStream.SelectedBlendImages", 0] },
+                      else: null
+                    }
+                  },
+                  else: null
+                }
+              }
+            }
+          },
+          // Debug field to see what's in pageStreamData
+          debugPageStream: {
+            $cond: {
+              if: { 
+                $and: [
+                  { $isArray: "$pageStreamData" },
+                  { $gt: [{ $size: "$pageStreamData" }, 0] }
+                ]
+              },
+              then: { $arrayElemAt: ["$pageStreamData", 0] },
+              else: "No PageStream found"
+            }
+          }
+        }
+      },
+
       // Lookup interactions for each post
       {
         $lookup: {
@@ -8689,9 +8743,15 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
           capsuleData: 0, // Remove the raw capsuleData object
           capsuleOwner: 0, // Remove the raw capsuleOwner object
           capsuleCreator: 0, // Remove the raw capsuleCreator object
+          pageStreamData: 0, // Remove the raw pageStreamData object
+          // debugPageStream: 0, // Keep debug field for now
         },
       },
     ];
+
+    // Debug: Log the pipeline for troubleshooting
+    console.log("🔍 Debug - Starting aggregation pipeline for getUserPurchasedCapsulesPosts");
+    console.log("🔍 Debug - Looking for PageStream records with PostId matching media _id");
 
     const posts = await Chapter.aggregate(pipeline).exec();
 
@@ -8709,6 +8769,15 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
         capsuleCreatorName: posts[0].capsuleCreatorName,
         capsuleCreatorProfilePic: posts[0].capsuleCreatorProfilePic,
         hasCapsuleData: !!posts[0].capsuleData,
+      });
+
+      // Debug: Check PageStream data
+      console.log("🔍 Debug - PageStream data for first post:", {
+        postId: posts[0]._id,
+        selectedBlendImage: posts[0].selectedBlendImage,
+        debugPageStream: posts[0].debugPageStream,
+        hasPageStreamData: !!posts[0].pageStreamData,
+        pageStreamDataLength: posts[0].pageStreamData ? posts[0].pageStreamData.length : 0
       });
     }
 
