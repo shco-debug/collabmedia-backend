@@ -165,14 +165,19 @@ async function __getKeywordIdsByNames(selectedWordsArr) {
 }
 
 async function saveAsFriend(loginUser, member) {
+  console.log('🔄 saveAsFriend called for:', { ownerId: loginUser._id, memberEmail: member.Email });
+  
+  // Check if friendship already exists (Owner -> Member)
   var friendsData = await Friend.find({
     UserID: loginUser._id,
     "Friend.Email": { $regex: new RegExp(member.Email, "i") },
     Status: 1,
     IsDeleted: 0,
   });
+  
   if (!friendsData.length) {
-    //save as friend
+    console.log('✅ Creating Owner -> Member friendship');
+    //save as friend (Owner -> Member)
     var frndData = await User.findOne({
       Email: { $regex: new RegExp(member.Email, "i") },
       IsDeleted: false,
@@ -184,7 +189,10 @@ async function saveAsFriend(loginUser, member) {
       IsRegistered = false;
     }
 
-    var rel = "Friend~57fc1357c51f7e980747f2ce";
+    // Use relationship data from member object, fallback to default
+    var rel = member.RelationshipId && member.Relation 
+      ? `${member.Relation}~${member.RelationshipId}`
+      : "Friend~57fc1357c51f7e980747f2ce";
     rel = rel.split("~");
     var newFriendData = {};
     newFriendData.IsRegistered = IsRegistered;
@@ -207,6 +215,47 @@ async function saveAsFriend(loginUser, member) {
     friendship.CreatedOn = Date.now();
     friendship.ModifiedOn = Date.now();
     await friendship.save();
+    console.log('✅ Owner -> Member friendship created');
+  } else {
+    console.log('⚠️ Owner -> Member friendship already exists');
+  }
+
+  // Create reverse friendship (Member -> Owner) if member is registered
+  if (IsRegistered) {
+    console.log('🔄 Checking Member -> Owner friendship');
+    var reverseFriendsData = await Friend.find({
+      UserID: frndData._id,
+      "Friend.Email": { $regex: new RegExp(loginUser.Email, "i") },
+      Status: 1,
+      IsDeleted: 0,
+    });
+    
+    if (!reverseFriendsData.length) {
+      console.log('✅ Creating Member -> Owner friendship');
+      var ownerFriendData = {};
+      ownerFriendData.IsRegistered = true;
+      ownerFriendData.ID = loginUser._id;
+      ownerFriendData.Email = loginUser.Email;
+      ownerFriendData.Name = loginUser.Name;
+      ownerFriendData.NickName = loginUser.NickName;
+      ownerFriendData.Pic = loginUser.ProfilePic;
+      ownerFriendData.Relation = "Friend"; // Default relation for reverse
+      ownerFriendData.RelationID = "57fc1357c51f7e980747f2ce"; // Default relation ID
+
+      var reverseFriendship = new Friend();
+      reverseFriendship.UserID = frndData._id;
+      reverseFriendship.Friend = ownerFriendData;
+      reverseFriendship.Status = 1;
+      reverseFriendship.IsDeleted = 0;
+      reverseFriendship.CreatedOn = Date.now();
+      reverseFriendship.ModifiedOn = Date.now();
+      await reverseFriendship.save();
+      console.log('✅ Member -> Owner friendship created');
+    } else {
+      console.log('⚠️ Member -> Owner friendship already exists');
+    }
+  } else {
+    console.log('⚠️ Member not registered yet, skipping reverse friendship');
   }
 }
 
@@ -18785,27 +18834,44 @@ async function sendMembersInvitationEmail(users, OwnerDetails, StreamId) {
     info = info || {};
     info.response = info.response ? info.response : {};
     console.log(
-      "sendMembersInvitationEmail---------Message sent: " +
+      "sendMembersInvitationEmail---------Message sent to: " +
         mailOptions.to +
+        " - Response: " +
         info.response
     );
   }
 }
 
 async function createMembersUserAccount(newUsers, OwnerDetails, StreamId) {
+  console.log('🚀 createMembersUserAccount STARTED');
+  console.log('📊 Input:', { newUsersCount: newUsers.length, OwnerDetails: OwnerDetails?.Name, StreamId });
+  
   var newUserAccountEmailIdMap = {};
   newUsers = Array.isArray(newUsers) ? newUsers : [];
   if (!newUsers.length) {
-    return;
+    console.log('ℹ️ No new users to create, returning empty map');
+    return newUserAccountEmailIdMap;
   }
+  
+  console.log('🔍 About to look for Capsule with ID:', StreamId);
 
   var conditionStrm = {};
   conditionStrm._id = new ObjectId(StreamId);
   var resultsStrm = await Capsule.find(conditionStrm, {});
   resultsStrm = Array.isArray(resultsStrm) ? resultsStrm : [];
+  console.log('📦 Capsule query result:', resultsStrm.length > 0 ? 'FOUND' : 'NOT FOUND');
+  if (resultsStrm.length > 0) {
+    console.log('📦 Capsule details:', { 
+      Title: resultsStrm[0].Title, 
+      OwnerId: resultsStrm[0].OwnerId,
+      StreamFlow: resultsStrm[0].StreamFlow 
+    });
+  }
   if (!resultsStrm.length) {
+    console.log('❌ No Capsule found with ID:', StreamId, '- returning early');
     return;
   }
+  console.log('✅ Capsule found, proceeding with user creation...');
   var SurpriseGiftStatement =
     "<br><br>This is a surprise, so please don’t tell {OwnerName}!";
 
@@ -18853,9 +18919,18 @@ async function createMembersUserAccount(newUsers, OwnerDetails, StreamId) {
   }
 
   var CapsuleName = resultsStrm[0].Title ? resultsStrm[0].Title : "";
+  console.log('📧 Looking for email template with condition:', condition);
   var results = await EmailTemplate.find(condition, {});
   results = Array.isArray(results) ? results : [];
+  console.log('📧 Email template found:', results.length > 0 ? 'YES' : 'NO');
+  if (results.length > 0) {
+    console.log('📧 Email template details:', { 
+      name: results[0].name, 
+      description: results[0].description ? 'EXISTS' : 'MISSING' 
+    });
+  }
   if (!results.length) {
+    console.log('❌ No email template found with condition:', condition, '- returning early');
     return;
   }
 
@@ -18865,30 +18940,59 @@ async function createMembersUserAccount(newUsers, OwnerDetails, StreamId) {
     : "Birthday";
 
   for (var i = 0; i < newUsers.length; i++) {
-    saveAsFriend(OwnerDetails, body);
+    console.log(`🔄 Processing user ${i + 1}/${newUsers.length}`);
     var body = newUsers[i] ? newUsers[i] : {};
+    console.log('📧 Checking if user exists:', body.Email);
+    
     var result = await User.find({
       Email: { $regex: new RegExp("^" + body.Email + "$", "i") },
       IsDeleted: false,
     });
     result = Array.isArray(result) ? result : [];
+    console.log('🔍 User exists check result:', result.length > 0 ? 'EXISTS' : 'NOT EXISTS');
+    
     if (result.length == 0) {
+      console.log('🆕 Creating new user:', body.Email);
       var newUser = new User();
       newUser.Email = body.Email;
       newUser.Password = newUser.generateHash(body.Password);
       newUser.Name = body.Name;
       newUser.NickName = body.Name ? body.Name : "";
+      newUser.UserName = body.Email; // Use email as unique username
       newUser.EmailConfirmationStatus = true;
 
+      console.log('💾 Saving new user to database...');
       var numAffected = await newUser.save();
       numAffected = typeof numAffected == "object" ? numAffected : {};
+      console.log('✅ User saved successfully:', numAffected._id);
 
       newUserAccountEmailIdMap[body.Email] = numAffected._id;
+      console.log('📝 Added to email map:', body.Email, '->', numAffected._id);
+
+      // Verify user was actually created
+      var verifyUser = await User.findOne({ _id: numAffected._id });
+      console.log('🔍 User verification:', verifyUser ? 'FOUND' : 'NOT FOUND');
+      if (verifyUser) {
+        console.log('👤 Verified user details:', { 
+          Email: verifyUser.Email, 
+          Name: verifyUser.Name, 
+          ID: verifyUser._id 
+        });
+      }
+      
+      // Create friendships AFTER user is created and saved
+      console.log('🤝 Creating friendships after user creation...');
+      saveAsFriend(OwnerDetails, body);
 
       __createDefaultJournal_BackgroundCall(numAffected._id, numAffected.Email);
 
       __updateChapterCollection(newUser.Email, numAffected._id);
       __updateChapterCollection__invitationCase(newUser.Email, numAffected._id);
+    } else {
+      // User already exists, create friendship immediately
+      console.log('🤝 Creating friendships for existing user...');
+      saveAsFriend(OwnerDetails, body);
+    }
 
       var userStreamPageUrl = "https://www.scrpt.com/login";
       var newHtml = results[0].description.replace(
@@ -18988,12 +19092,15 @@ async function createMembersUserAccount(newUsers, OwnerDetails, StreamId) {
       info = info || {};
       info.response = info.response ? info.response : {};
       console.log(
-        "createMembersUserAccount---------Message sent: " +
+      "createMembersUserAccount---------Message sent to: " +
           mailOptions.to +
+        " - Response: " +
           info.response
       );
     }
-  }
+  console.log('🎯 createMembersUserAccount COMPLETED');
+  console.log('📊 Final newUserAccountEmailIdMap:', newUserAccountEmailIdMap);
+  console.log('📊 Map keys:', Object.keys(newUserAccountEmailIdMap));
   return newUserAccountEmailIdMap;
 }
 
@@ -19068,11 +19175,17 @@ async function sendCoffeeInvitationEmail(
 }
 
 var stream__addMembers = async function (req, res) {
-  var StreamId = req.body.StreamId ? ObjectId(req.body.StreamId) : null;
-  var OwnerId = req.body.OwnerId ? ObjectId(req.body.OwnerId) : null;
+  console.log('🚀 stream__addMembers STARTED');
+  console.log('📊 Request body:', JSON.stringify(req.body, null, 2));
+  
+  var StreamId = req.body.StreamId ? new ObjectId(req.body.StreamId) : null;
+  var OwnerId = req.body.OwnerId ? new ObjectId(req.body.OwnerId) : null;
   var members = req.body.members ? req.body.members : [];
+  
+  console.log('🔍 Parsed IDs:', { StreamId, OwnerId, membersCount: members.length });
+  
   if (!StreamId || !OwnerId) {
-    // || !members.length
+    console.log('❌ Missing required data:', { StreamId, OwnerId });
     return res.json({ code: 501, message: "Wrong input." });
   }
 
@@ -19081,8 +19194,11 @@ var stream__addMembers = async function (req, res) {
     { Name: 1, Email: 1, Birthdate: 1 }
   );
   OwnerDetails = typeof OwnerDetails == "object" ? OwnerDetails : null;
+  
+  console.log('👤 Owner Details found:', OwnerDetails ? { Name: OwnerDetails.Name, Email: OwnerDetails.Email } : 'NOT FOUND');
 
   if (!OwnerDetails) {
+    console.log('❌ Owner not found for ID:', OwnerId);
     return res.json({ code: 501, message: "Wrong input." });
   }
 
@@ -19114,11 +19230,14 @@ var stream__addMembers = async function (req, res) {
     : [];
   var UserEmailIdMap = {};
 
+  console.log('🔍 Existing users found:', alreadyExistsUsers.length);
+  console.log('📧 Existing users:', alreadyExistsUsers.map(u => ({ Email: u.Email, Name: u.Name })));
+
   var alreadyExistingUsersIds = [];
   for (var i = 0; i < alreadyExistsUsers.length; i++) {
     alreadyExistsUsers[i].Email = alreadyExistsUsers[i].Email.toLowerCase();
     UserEmailIdMap[alreadyExistsUsers[i].Email] = alreadyExistsUsers[i]._id;
-    alreadyExistingUsersIds.push(ObjectId(alreadyExistsUsers[i]._id));
+    alreadyExistingUsersIds.push(new ObjectId(alreadyExistsUsers[i]._id));
   }
 
   var newUserAccountNeedsToBeCreated = [];
@@ -19131,13 +19250,21 @@ var stream__addMembers = async function (req, res) {
       });
     }
   }
+  
+  console.log('🆕 New users to be created:', newUserAccountNeedsToBeCreated.length);
+  console.log('📋 New users data:', newUserAccountNeedsToBeCreated);
+  
   var newUserAccountEmailIdMap = {};
   if (newUserAccountNeedsToBeCreated.length) {
+    console.log('🚀 Calling createMembersUserAccount...');
     newUserAccountEmailIdMap = await createMembersUserAccount(
       newUserAccountNeedsToBeCreated,
       OwnerDetails,
       StreamId
-    );
+    ) || {};
+    console.log('✅ createMembersUserAccount returned:', newUserAccountEmailIdMap);
+  } else {
+    console.log('ℹ️ No new users need to be created');
   }
 
   var conditions = {
@@ -19150,6 +19277,9 @@ var stream__addMembers = async function (req, res) {
   strm_result = Array.isArray(strm_result) ? strm_result : [];
   strm_result = strm_result.length > 0 ? strm_result[0] : null;
 
+  var alreadyInvitedUsers = [];
+  var newInviteUsers = [];
+
   if (alreadyExistsUsers.length) {
     var sendInvitesToUsers = [];
     if (strm_result) {
@@ -19158,26 +19288,52 @@ var stream__addMembers = async function (req, res) {
         : [];
       for (var i = 0; i < alreadyExistsUsers.length; i++) {
         if (
-          strm_result.Members.indexOf(ObjectId(alreadyExistsUsers[i]._id)) < 0
+          strm_result.Members.indexOf(new ObjectId(alreadyExistsUsers[i]._id)) < 0
         ) {
           sendInvitesToUsers.push(alreadyExistsUsers[i]);
+          newInviteUsers.push(alreadyExistsUsers[i].Email);
+        } else {
+          alreadyInvitedUsers.push(alreadyExistsUsers[i].Email);
+          console.log('⚠️ User already invited to stream:', alreadyExistsUsers[i].Email);
         }
       }
     } else {
       sendInvitesToUsers = alreadyExistsUsers;
+      newInviteUsers = alreadyExistsUsers.map(u => u.Email);
     }
-    sendMembersInvitationEmail(sendInvitesToUsers, OwnerDetails, StreamId);
+    
+    if (sendInvitesToUsers.length > 0) {
+      await sendMembersInvitationEmail(sendInvitesToUsers, OwnerDetails, StreamId);
+    }
   }
 
   //now add member ids in StreamMembers.
+  console.log('🔄 Processing members for StreamMembers update...');
+  console.log('📊 Input data:', { 
+    membersCount: members.length, 
+    UserEmailIdMapKeys: Object.keys(UserEmailIdMap), 
+    newUserAccountEmailIdMapKeys: Object.keys(newUserAccountEmailIdMap) 
+  });
+  
   for (var i = 0; i < members.length; i++) {
+    console.log(`🔍 Processing member ${i + 1}/${members.length}:`, members[i].Email);
     var memberId = UserEmailIdMap[members[i].Email]
       ? UserEmailIdMap[members[i].Email]
       : newUserAccountEmailIdMap[members[i].Email];
+    
+    console.log('🔍 Member ID found:', memberId ? 'YES' : 'NO', memberId);
+    
     if (memberId) {
-      membersToAdd.push(new ObjectId(memberId));
+      var objectIdMemberId = new ObjectId(memberId);
+      membersToAdd.push(objectIdMemberId);
+      console.log('✅ Added to membersToAdd:', objectIdMemberId);
+    } else {
+      console.log('❌ No member ID found for:', members[i].Email);
     }
   }
+  
+  console.log('📊 Final membersToAdd array:', membersToAdd);
+  console.log('📊 membersToAdd length:', membersToAdd.length);
 
   if (strm_result == null) {
     strm_result = {};
@@ -19196,10 +19352,29 @@ var stream__addMembers = async function (req, res) {
     strm_result.Members = Array.isArray(strm_result.Members)
       ? strm_result.Members
       : [];
-    strm_result.Members = Array.isArray(membersToAdd)
-      ? membersToAdd
-      : strm_result.Members;
-    var result = await StreamMembers.update(conditions, { $set: strm_result });
+    
+    // Append new members to existing members (don't overwrite)
+    console.log('🔄 Updating existing StreamMembers...');
+    console.log('📊 Current Members array:', strm_result.Members);
+    console.log('📊 membersToAdd to append:', membersToAdd);
+    
+    if (Array.isArray(membersToAdd) && membersToAdd.length > 0) {
+      console.log('✅ membersToAdd is valid array with length:', membersToAdd.length);
+      for (var j = 0; j < membersToAdd.length; j++) {
+        console.log(`🔍 Checking member ${j + 1}:`, membersToAdd[j]);
+        if (strm_result.Members.indexOf(membersToAdd[j]) < 0) {
+          strm_result.Members.push(membersToAdd[j]);
+          console.log('✅ Added member to array:', membersToAdd[j]);
+        } else {
+          console.log('⚠️ Member already exists, skipping:', membersToAdd[j]);
+        }
+      }
+    } else {
+      console.log('❌ membersToAdd is invalid or empty:', membersToAdd);
+    }
+    
+    console.log('📊 Final Members array before update:', strm_result.Members);
+    var result = await StreamMembers.updateOne(conditions, { $set: strm_result });
     result = typeof result == "object" ? result : null;
 
     if (!result) {
@@ -19207,16 +19382,45 @@ var stream__addMembers = async function (req, res) {
     }
   }
 
-  await Capsule.update(
+  console.log('🔄 Updating Capsule with IsInvitationSent flag...');
+  await Capsule.updateOne(
     { _id: StreamId },
     { $set: { "LaunchSettings.IsInvitationSent": true } }
   );
-  return res.json({ code: 200, message: "Members added successfully." });
+  console.log('✅ Capsule updated successfully');
+  
+  // Prepare response message with detailed feedback
+  var responseMessage = "";
+  var responseData = {
+    newInvites: newInviteUsers.length,
+    alreadyInvited: alreadyInvitedUsers.length,
+    newInviteUsers: newInviteUsers,
+    alreadyInvitedUsers: alreadyInvitedUsers
+  };
+  
+  if (newInviteUsers.length > 0 && alreadyInvitedUsers.length > 0) {
+    responseMessage = `${newInviteUsers.length} new invitation(s) sent. ${alreadyInvitedUsers.length} user(s) were already invited to this stream.`;
+  } else if (newInviteUsers.length > 0) {
+    responseMessage = `${newInviteUsers.length} invitation(s) sent successfully.`;
+  } else if (alreadyInvitedUsers.length > 0) {
+    responseMessage = `All ${alreadyInvitedUsers.length} user(s) were already invited to this stream.`;
+  } else {
+    responseMessage = "Members added successfully.";
+  }
+  
+  console.log('🎉 stream__addMembers COMPLETED SUCCESSFULLY');
+  console.log('📊 Response summary:', responseData);
+  
+  return res.json({ 
+    code: 200, 
+    message: responseMessage,
+    data: responseData
+  });
 };
 
 var stream__sendCoffeeInvitation = async function (req, res) {
   //var OwnerId = req.body.OwnerId ? ObjectId(req.body.OwnerId) : null;
-  var OwnerId = req.session.user._id ? ObjectId(req.session.user._id) : null;
+  var OwnerId = req.session.user._id ? new ObjectId(req.session.user._id) : null;
   var members = req.body.members ? req.body.members : [];
   var postObj = req.body.postObj || null;
   var PostStatement = postObj.PostStatement
@@ -20121,6 +20325,7 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
             try {
               // Extract blend settings from first selected blend image
               const firstBlend = SelectedBlendImages[0];
+              
               const blendSettings = {
                 blendMode: (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") 
                   ? (firstBlend.blendMode || "overlay") 
@@ -21998,6 +22203,12 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     ) {
       type = postStreamType;
       name = `unsplash_${incNum}`;
+    } else if (postStreamType === "Video" || postStreamType === "1VideoPost") {
+      type = "Video";
+      name = `video_${incNum}`;
+    } else if (postStreamType === "Audio" || postStreamType === "1AudioPost") {
+      type = "Audio";
+      name = `audio_${incNum}`;
     } else if (postStreamType === "Notes") {
       type = "Notes";
       name = dateFormat();
@@ -22026,119 +22237,23 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     };
     
     if (postStreamType === "1MJPost" && MJImageArr && MJImageArr.length === 1) {
+      // Handle 1MJ posts with payload structure - extract aspectfit URL directly (like 2MJ)
       const imageData = MJImageArr[0];
+      console.log("🔍 Processing 1MJ post with payload URL:", imageData);
       
-      // Check if we have actual image data to upload
-      if (
-        imageData.base64 ||
-        imageData.buffer ||
-        imageData.data ||
-        imageData.imageData
-      ) {
-        try {
-          const awsS3Utils = require("./../utilities/awsS3Utils.js");
-          
-          // Convert base64 to buffer if needed
-          let imageBuffer;
-          if (imageData.base64) {
-            imageBuffer = Buffer.from(imageData.base64, "base64");
-          } else if (imageData.buffer) {
-            imageBuffer = imageData.buffer;
-          } else if (imageData.data) {
-            imageBuffer = Buffer.from(imageData.data, "base64");
-          } else if (imageData.imageData) {
-            imageBuffer = Buffer.from(imageData.imageData, "base64");
-          }
-          
-          // Upload to S3 with multiple sizes
-          const resizeResult = await awsS3Utils.resizeAndUploadImageToS3(
-            imageBuffer,
-            imageData.fileName,
-            [
-              { width: 100, height: 100, folder: '100', fit: 'cover' },
-              { width: 300, height: 300, folder: '300', fit: 'cover' },
-              { width: 600, height: 600, folder: '600', fit: 'cover' },
-              { width: 1200, height: null, folder: 'aspectfit', fit: 'inside' }
-            ],
-            { source: '1mj-post', jpegQuality: 85 }
-          );
-          
-          if (resizeResult.success) {
-            // Save ALL resized image URLs to location array
-            resizeResult.results.forEach(result => {
+      // Extract aspectfit URL from payload (same structure as 2MJ)
+      if (imageData && imageData.url) {
               locationArray.push({ 
-                Size: result.size, 
-                URL: result.httpUrl,
-                Width: result.width,
-                Height: result.height,
-                BufferSize: result.bufferSize
-              });
-            });
-            
-            console.log(`✅ 1MJ image resized to ${resizeResult.successCount} sizes`);
+          Size: "aspectfit", 
+          URL: imageData.url,
+          S3Key: imageData.key || "",
+          FileSize: imageData.size || 0
+        });
+        console.log(`✅ 1MJ image URL saved from payload: ${imageData.url}`);
           } else {
-            // Fallback - save generated URL only
-          const imageUrl = generateS3Url(imageData.fileName);
-            locationArray.push({ Size: "aspectfit", URL: imageUrl });
-            console.log(`❌ 1MJ resize failed, using fallback URL`);
-          }
-        } catch (uploadError) {
-          // Fallback to just generating URL
-          const imageUrl = generateS3Url(imageData.fileName);
-          locationArray.push({ Size: "", URL: imageUrl });
-        }
-      } else if (imageData.fileId) {
-        try {
-          const awsS3Utils = require("./../utilities/awsS3Utils.js");
-          
-          // Fetch image from Google Drive using fileId
-          const imageBuffer = await awsS3Utils.fetchImageFromGoogleDrive(
-            imageData.fileId
-          );
-          
-          if (imageBuffer && imageBuffer.length > 0) {
-            // Upload to S3 with multiple sizes
-            const resizeResult = await awsS3Utils.resizeAndUploadImageToS3(
-              imageBuffer,
-              imageData.fileName,
-              [
-                { width: 100, height: 100, folder: '100', fit: 'cover' },
-                { width: 300, height: 300, folder: '300', fit: 'cover' },
-                { width: 600, height: 600, folder: '600', fit: 'cover' },
-                { width: 1200, height: null, folder: 'aspectfit', fit: 'inside' }
-              ],
-              { source: '1mj-gdrive', jpegQuality: 85 }
-            );
-            
-            if (resizeResult.success) {
-              // Save ALL resized image URLs to location array
-              resizeResult.results.forEach(result => {
-                locationArray.push({ 
-                  Size: result.size, 
-                  URL: result.httpUrl,
-                  Width: result.width,
-                  Height: result.height,
-                  BufferSize: result.bufferSize
-                });
-              });
-              console.log(`✅ 1MJ Google Drive image resized to ${resizeResult.successCount} sizes`);
-            } else {
-              // Fallback - save generated URL only
-            const imageUrl = generateS3Url(imageData.fileName);
-              locationArray.push({ Size: "aspectfit", URL: imageUrl });
-              console.log(`❌ 1MJ Google Drive resize failed, using fallback URL`);
-            }
-          } else {
-            const imageUrl = generateS3Url(imageData.fileName);
-            locationArray.push({ Size: "", URL: imageUrl });
-          }
-        } catch (error) {
-          const imageUrl = generateS3Url(imageData.fileName);
-          locationArray.push({ Size: "", URL: imageUrl });
-        }
-      } else {
-        const imageUrl = generateS3Url(imageData.fileName);
-        locationArray.push({ Size: "", URL: imageUrl });
+        // Fallback - empty URL
+        locationArray.push({ Size: "aspectfit", URL: "" });
+        console.log("⚠️ No 1MJ payload URL found, using empty URL");
       }
     } else if (
       postStreamType === "2MJPost" &&
@@ -22291,11 +22406,106 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       // console.log("📸 Original Image 1 URL:", locationArray[0]?.URL || "Not uploaded");
       // console.log("📸 Original Image 2 URL:", locationArray[1]?.URL || "Not uploaded");
       // console.log("Final locationArray:", locationArray);
+    } else if (postStreamType === "Video" || postStreamType === "1VideoPost") {
+      // Handle video posts - get data from MJImageArr (same structure as MJ posts)
+      console.log("🎥 === VIDEO POST DEBUG ===");
+      console.log("🎥 PostStreamType:", postStreamType);
+      console.log("🎥 MJImageArr length:", MJImageArr ? MJImageArr.length : "undefined");
+      console.log("🎥 MJImageArr:", JSON.stringify(MJImageArr, null, 2));
+      
+      if (MJImageArr && MJImageArr.length > 0) {
+        const videoData = MJImageArr[0];
+        console.log("🎥 Video data object:", JSON.stringify(videoData, null, 2));
+        console.log("🎥 Video data keys:", Object.keys(videoData));
+        
+        // Check for video data in the same structure as MJ posts
+        if (videoData.base64 || videoData.buffer || videoData.data || videoData.imageData || videoData.fileId || videoData.s3Url || videoData.url || videoData.videoUrl) {
+          // Extract video URL from various possible fields
+          const videoUrl = videoData.s3Url || videoData.url || videoData.videoUrl || videoData.fileName;
+          const fileSize = videoData.fileSize || videoData.size || 0;
+          const s3Key = videoData.s3Key || videoData.fileName || "";
+          
+          locationArray.push({ 
+            Size: fileSize, 
+            URL: videoUrl,
+            Type: "original",
+            Index: 0,
+            S3Key: s3Key
+          });
+          console.log(`✅ Video data processed - URL: ${videoUrl}, Size: ${fileSize}, S3Key: ${s3Key}`);
+        } else {
+          locationArray.push({ Size: "", URL: "" });
+          console.log("⚠️ No video data found in expected fields");
+        }
+      } else {
+        locationArray.push({ Size: "", URL: "" });
+        console.log("⚠️ No video data found in MJImageArr");
+      }
+    } else if (postStreamType === "Audio" || postStreamType === "1AudioPost") {
+      // Handle audio posts - get data from MJImageArr (same structure as MJ posts)
+      console.log("🎵 === AUDIO POST DEBUG ===");
+      console.log("🎵 PostStreamType:", postStreamType);
+      console.log("🎵 MJImageArr length:", MJImageArr ? MJImageArr.length : "undefined");
+      console.log("🎵 MJImageArr:", JSON.stringify(MJImageArr, null, 2));
+      
+      if (MJImageArr && MJImageArr.length > 0) {
+        const audioData = MJImageArr[0];
+        console.log("🎵 Audio data object:", JSON.stringify(audioData, null, 2));
+        console.log("🎵 Audio data keys:", Object.keys(audioData));
+        
+        // Check for audio data in the same structure as MJ posts
+        if (audioData.base64 || audioData.buffer || audioData.data || audioData.imageData || audioData.fileId || audioData.s3Url || audioData.url || audioData.audioUrl) {
+          // Extract audio URL from various possible fields
+          const audioUrl = audioData.s3Url || audioData.url || audioData.audioUrl || audioData.fileName;
+          const fileSize = audioData.fileSize || audioData.size || 0;
+          const s3Key = audioData.s3Key || audioData.fileName || "";
+          
+          locationArray.push({ 
+            Size: fileSize, 
+            URL: audioUrl,
+            Type: "original",
+            Index: 0,
+            S3Key: s3Key
+          });
+          console.log(`✅ Audio data processed - URL: ${audioUrl}, Size: ${fileSize}, S3Key: ${s3Key}`);
+        } else {
+          locationArray.push({ Size: "", URL: "" });
+          console.log("⚠️ No audio data found in expected fields");
+        }
+      } else {
+        locationArray.push({ Size: "", URL: "" });
+        console.log("⚠️ No audio data found in MJImageArr");
+      }
     } else if (
       postStreamType === "1UnsplashPost" ||
       postStreamType === "2UnsplashPost"
     ) {
       locationArray.push({ Size: "", URL: "" });
+    } else if (postStreamType === "2MJPost") {
+      // Handle 2MJ posts with new payload structure - extract aspectfit URLs
+      if (req.body.postStreamObj && req.body.postStreamObj.fileArr) {
+        const fileArr = req.body.postStreamObj.fileArr;
+        console.log("🔍 Populating Location array for 2MJ from fileArr:", fileArr.length, "files");
+        
+        // Add aspectfit URLs to Location array
+        for (let i = 0; i < fileArr.length; i++) {
+          const fileData = fileArr[i];
+          if (fileData && fileData.version === "aspectfit") {
+            locationArray.push({ 
+              Size: "aspectfit", 
+              URL: fileData.url,
+              S3Key: fileData.key || "",
+              FileSize: fileData.size || 0
+            });
+            console.log(`✅ Added 2MJ image ${i + 1} to Location array:`, fileData.url);
+          }
+        }
+      } else {
+        // Fallback - empty URLs
+        locationArray.push({ Size: "aspectfit", URL: "" });
+        locationArray.push({ Size: "aspectfit", URL: "" });
+        console.log("⚠️ No 2MJ payload structure found, using empty URLs");
+      }
     } else {
       locationArray.push({ Size: "", URL: "" });
     }
@@ -22335,7 +22545,7 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     const dataToUpload = {
       Location: locationArray,
       AutoId: incNum,
-      UploadedBy: "user",
+      UploadedBy: (postStreamType === "Video" || postStreamType === "Audio" || postStreamType === "1VideoPost" || postStreamType === "1AudioPost") ? "admin" : "user",
       UploadedOn: Date.now(),
       UploaderID: result[0].OwnerId,
       Source: "Thinkstock",
@@ -22366,7 +22576,19 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         postStreamType === "1UnsplashPost" || postStreamType === "2UnsplashPost"
           ? true
           : false,
+      // Add MediaSelectionCriteria metadata for all post types
+      MediaSelectionCriteria: req.body.MediaSelectionCriteria || null,
+      MediaSelectionCriteria1: req.body.MediaSelectionCriteria1 || null,
+      MediaSelectionCriteria2: req.body.MediaSelectionCriteria2 || null,
+      // Add post comments array
+      PostCommentsArr: req.body.postCommentsArr || [],
     };
+
+    // Log MediaSelectionCriteria for debugging
+    console.log("📋 MediaSelectionCriteria metadata being saved:");
+    console.log("📋 MediaSelectionCriteria:", req.body.MediaSelectionCriteria);
+    console.log("📋 MediaSelectionCriteria1:", req.body.MediaSelectionCriteria1);
+    console.log("📋 MediaSelectionCriteria2:", req.body.MediaSelectionCriteria2);
 
     let mediaData = await Media(dataToUpload).save();
     mediaData = typeof mediaData === "object" ? mediaData : {};
@@ -22378,6 +22600,35 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     }
     
     console.log("✅ Media saved with ID:", mediaId);
+
+    // Generate thumbnail for video posts (same as media/uploadfile)
+    if (postStreamType === "Video" || postStreamType === "1VideoPost") {
+      try {
+        // Get the video URL from location array
+        const videoLocation = locationArray.find(loc => loc.URL);
+        if (videoLocation && videoLocation.URL) {
+          console.log("🎬 Starting thumbnail generation for video post...");
+          
+          // Import the thumbnail generation function
+          const videoAudioController = require('./videoAudioController.js');
+          
+          // Generate thumbnail using the same method as media/uploadfile
+          const thumbnailResult = await videoAudioController.video__getNsaveThumbnail_S3(videoLocation.URL, mediaId);
+          console.log("🎬 Thumbnail generation result:", thumbnailResult);
+          
+          if (thumbnailResult.success) {
+            console.log("✅ Video thumbnail generated successfully");
+          } else {
+            console.log("⚠️ Video thumbnail generation failed:", thumbnailResult.error);
+          }
+        } else {
+          console.log("⚠️ No video URL found for thumbnail generation");
+        }
+      } catch (thumbnailError) {
+        console.error("❌ Error generating video thumbnail:", thumbnailError);
+        // Continue with the process even if thumbnail generation fails
+      }
+    }
 
     fields.Medias = result[0].Medias || [];
     fields.Medias.push(mediaId);
@@ -22509,10 +22760,11 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       console.log("✅ Copied SecondaryKeywordsMap2:", req.body.SecondaryKeywordsMap2);
     }
 
-    // Keywords are only used for image filtering - not stored in media schema
+    // Keywords are used for image filtering (MJ posts) and metadata processing (all posts)
     
     if (keywords.length == 2) {
-      console.log("✅ Proceeding with blend images API call");
+      // Apply same metadata processing to ALL post types (MJ, Video, Audio, etc.)
+      console.log("✅ Proceeding with metadata processing for post type:", postStreamType);
 
     // ===== RANK DATA STRUCTURE CREATION =====
     // Create rank objects for keyword-based ranking system
@@ -22822,16 +23074,21 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           }),
         };
         
-        console.log("🔄 Calling addBlendImages_INTERNAL_API...");
+        // Skip blend images API only for MJ posts (they use payload URLs), but allow for Unsplash posts
+        if (postStreamType === "1MJPost" || postStreamType === "2MJPost") {
+          console.log("✅ Skipping blend images API for MJ post type:", postStreamType);
+          outputArr.push(`metadata processing completed for ${postStreamType} post.`);
+        } else {
+          console.log("🔄 Calling addBlendImages_INTERNAL_API for post type:", postStreamType);
         // Call the function directly (self-reference)
         await addBlendImages_INTERNAL_API(mockReq, mockRes);
         console.log("✅ addBlendImages_INTERNAL_API completed successfully");
+          outputArr.push("mapped SelectedBlendImages with the post successfully.");
+        }
       } catch (error) {
         console.log("❌ Error calling addBlendImages_INTERNAL_API:", error.message);
         responseData = { code: null };
       }
-
-      outputArr.push("mapped SelectedBlendImages with the post successfully.");
 
       //now check if postStreamObj is having 1MJPost or 2MJPost as a type to set the stream
       const MJImageArr = postStreamObj.fileArr || [];
@@ -22979,6 +23236,7 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     // For 2MJ posts, create blend settings directly from the post's own data
     if (postStreamType === "2MJPost") {
       console.log("=== 2MJ POST PROCESSING START ===");
+      console.log("📦 2MJ POST PAYLOAD:", JSON.stringify(req.body, null, 2));
       console.log(
         "MJImageArr length:",
         MJImageArr ? MJImageArr.length : "undefined"
@@ -23003,65 +23261,33 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         let blendImage1 = "";
         let blendImage2 = "";
 
-        // Try to get MJ image URLs from various sources
-        if (req.body.blendImage1 && req.body.blendImage2) {
-          // If blend images are provided in request body
-          // console.log("Using blend images from request body");
-          blendImage1 = req.body.blendImage1;
-          blendImage2 = req.body.blendImage2;
-        } else if (MJImageArr && MJImageArr.length >= 1 && MJImageArr[0].imageData) {
-          // PRIORITIZE ACTUAL IMAGE DATA OVER LOCATION ARRAY URLs
-          // Use actual image data from MJImageArr - THIS IS THE CORRECT APPROACH
-          // console.log("✅ Using actual image data from MJImageArr for blending");
+        // Extract aspectfit URLs from the new payload structure
+        if (req.body.postStreamObj && req.body.postStreamObj.fileArr) {
+          const fileArr = req.body.postStreamObj.fileArr;
+          console.log("🔍 Extracting aspectfit URLs from fileArr:", fileArr.length, "files");
           
-          // Check for image data in various possible fields
-          // console.log("🔍 Checking blendImage1 data...");
-          // console.log("MJImageArr[0].imageData:", !!MJImageArr[0].imageData);
-          // console.log("MJImageArr[0].base64:", !!MJImageArr[0].base64);
-          // console.log("MJImageArr[0].data:", !!MJImageArr[0].data);
-          
-          if (MJImageArr[0].imageData || MJImageArr[0].base64 || MJImageArr[0].data) {
-            blendImage1 = MJImageArr[0].imageData || MJImageArr[0].base64 || MJImageArr[0].data;
-            // console.log("✅ Using actual image data for blendImage1, length:", blendImage1.length);
-            // console.log("blendImage1 preview:", blendImage1.substring(0, 50) + "...");
-          } else {
-            // console.log("❌ No image data found for blendImage1, checking available fields:", Object.keys(MJImageArr[0]));
-            blendImage1 = "";
+          // Get aspectfit URL from first image (fileArr[0])
+          if (fileArr[0] && fileArr[0].version === "aspectfit") {
+            blendImage1 = fileArr[0].url;
+            console.log("✅ Extracted aspectfit URL for image 1:", blendImage1);
           }
           
-          if (MJImageArr.length >= 2) {
-            // console.log("🔍 Checking blendImage2 data...");
-            // console.log("MJImageArr[1].imageData:", !!MJImageArr[1].imageData);
-            // console.log("MJImageArr[1].base64:", !!MJImageArr[1].base64);
-            // console.log("MJImageArr[1].data:", !!MJImageArr[1].data);
-            
-            if (MJImageArr[1].imageData || MJImageArr[1].base64 || MJImageArr[1].data) {
-              blendImage2 = MJImageArr[1].imageData || MJImageArr[1].base64 || MJImageArr[1].data;
-              // console.log("✅ Using actual image data for blendImage2, length:", blendImage2.length);
-              // console.log("blendImage2 preview:", blendImage2.substring(0, 50) + "...");
-            } else {
-              // console.log("❌ No image data found for blendImage2, checking available fields:", Object.keys(MJImageArr[1]));
-              blendImage2 = "";
-            }
-          } else {
-            // console.log("⚠️ Only 1 MJ image available - cannot create blend");
-            blendImage2 = "";
+          // Get aspectfit URL from second image (fileArr[1])
+          if (fileArr.length >= 2 && fileArr[1] && fileArr[1].version === "aspectfit") {
+            blendImage2 = fileArr[1].url;
+            console.log("✅ Extracted aspectfit URL for image 2:", blendImage2);
           }
         } else if (
           currentMedia &&
           currentMedia.Location &&
           currentMedia.Location.length >= 2
         ) {
-          // Fallback to Location array URLs if no image data available
-          console.log("⚠️ No image data found, falling back to Location array URLs");
+          // Fallback to Location array URLs if no payload structure found
+          console.log("⚠️ No payload structure found, falling back to Location array URLs");
           blendImage1 = currentMedia.Location[0].URL || "";
           blendImage2 = currentMedia.Location[1].URL || "";
         }
 
-        // console.log("Final blendImage1:", blendImage1);
-        // console.log("Final blendImage2:", blendImage2);
-
-        // Create blend settings based on post type (single or dual image)
         const blendSettings = {
           blendMode: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
             ? (req.body.blendMode || "overlay") 
@@ -23079,20 +23305,7 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           PostStatement: postStatement || "",
           PostStreamType: postStreamType,
           UpdatedOn: Date.now(),
-          SelectedBlendImages: [
-            {
-              MediaURL: "", // Will be updated with blend image URL after generation
-              MediaURL2: "", // Not needed for single image posts
-              MediaId: mediaId,
-              MediaType: postStreamType,
-              blendMode: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
-                ? (req.body.blendMode || "overlay") 
-                : null,
-              PostStatement: postStatement || "",
-              CreatedOn: Date.now(),
-            },
-          ],
-          allBlendConfigurations: [] // Will be populated if multiple blends are generated
+          // No SelectedBlendImages or blend image generation needed for S3 URLs
         };
 
         // Save blend settings to Media collection
@@ -23111,96 +23324,16 @@ const addNewPost_INTERNAL_API = async (req, res) => {
             PageId: pageId,
             PostId: mediaId,
             PostStatement: postStatement || "",
-            SelectedBlendImages: blendSettings.SelectedBlendImages,
+            SelectedBlendImages: [], // No blend images needed for S3 URLs
             PostStreamType: postStreamType,
             CreatedOn: Date.now(),
           };
           await PageStream(pageStreamData).save();
         }
 
-        // If we have valid blend images, call the blend generation function
-        if (blendImage1 && blendImage2) {
-          // console.log("=== GENERATING BLEND IMAGE ===");
-          // console.log("Blend Image 1 URL:", blendImage1);
-          // console.log("Blend Image 2 URL:", blendImage2);
-          // console.log("Blend Mode:", req.body.blendMode || "overlay");
-
-          try {
-            const blendReqObj = {
-              blendImage1: blendImage1,
-              blendImage2: blendImage2,
-              blendMode: req.body.blendMode || "overlay",
-              mediaId: mediaId,
-            };
-
-            // Call generatePostBlendImage_INTERNAL_API directly
-            const mockReq = { body: blendReqObj };
-            const mockRes = {
-              json: (data) => {
-                if (data.code === 200) {
-                  // console.log(
-                  //   "✅ Blend image generated and uploaded to S3 successfully"
-                  // );
-                  // console.log("Blend S3 URL:", data.blendImageUrl);
-                  
-                  // Update blend settings with the actual blended image URL
-                  if (data.blendImageUrl && mediaId) {
-                    // Update blend settings with blended image URL
-                    Media.updateOne(
-                      { _id: mediaId },
-                      {
-                        $set: {
-                          "BlendSettings.SelectedBlendImages.0.MediaURL": data.blendImageUrl,
-                          "BlendSettings.UpdatedOn": Date.now(),
-                        },
-                      }
-                    ).catch((error) => {
-                      // console.log("❌ Failed to update blend settings with URL:", error.message);
-                    });
-                    
-                    // Also add blended image URL to Media.Location array
-                    Media.updateOne(
-                      { _id: mediaId },
-                      {
-                        $push: {
-                          Location: {
-                            Size: "",
-                            URL: data.blendImageUrl,
-                          },
-                        },
-                      }
-                    ).catch((error) => {
-                      // console.log("❌ Failed to add blend image to Location array:", error.message);
-                    });
-                  }
-                  
-                  outputArr.push(
-                    "Blend image generated and uploaded to S3 successfully."
-                  );
-                } else {
-                  // console.log(
-                  //   "❌ Blend image generation failed:",
-                  //   data.message
-                  // );
-                  outputArr.push(
-                    "Blend image generation failed: " +
-                      (data.message || "Unknown error")
-                  );
-                }
-              },
-            };
-
-            await generatePostBlendImage_INTERNAL_API(mockReq, mockRes);
-          } catch (blendError) {
-            // console.log("❌ Error generating blend image:", blendError.message);
-            outputArr.push(
-              "Error generating blend image: " + blendError.message
-            );
-          }
-        } else {
-          // console.log("❌ No valid blend images found - cannot generate blend");
-          outputArr.push("No valid blend images found for blending.");
-        }
+        // No blend image generation needed - using S3 URLs for frontend CSS blending
+        console.log("✅ 2MJ blend settings saved with S3 URLs for frontend blending");
+        outputArr.push("Blend settings saved with S3 URLs for frontend CSS blending.");
 
         // console.log("=== 2MJ POST PROCESSING COMPLETE ===");
         outputArr.push(

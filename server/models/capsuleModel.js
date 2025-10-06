@@ -83,7 +83,7 @@ var launchSettings = {
 	},
 	StreamType : {
 		type : String,
-		enum : ['', 'Group'], //empty string for simple stream, 'Group' for group stream
+		enum : ['', 'Group', 'Stream'], //empty string for simple stream, 'Group' for group stream, 'Stream' for stream
 		default : undefined
 	},
 	OwnerBirthday : {

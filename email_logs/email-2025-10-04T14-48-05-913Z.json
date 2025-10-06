@@ -1,0 +1,24 @@
+{
+  "timestamp": "2025-10-04T14:48:05.914Z",
+  "to": "test@example.com",
+  "from": "Scrpt <hello@scrpt.com>",
+  "subject": "Chapter Invitation from Nauman",
+  "html": "\n      <!DOCTYPE html>\n      <html>\n      <head>\n          <meta charset=\"utf-8\">\n          <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\">\n          <title>Chapter Invitation - CollabMedia</title>\n          <style>\n              body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }\n              .container { max-width: 600px; margin: 0 auto; padding: 20px; }\n              .header { background: #009688; color: white; padding: 20px; text-align: center; border-radius: 5px 5px 0 0; }\n              .content { background: #f9f9f9; padding: 20px; border-radius: 0 0 5px 5px; }\n              .button { display: inline-block; background: #009688; color: white; padding: 12px 24px; text-decoration: none; border-radius: 5px; margin: 20px 0; }\n              .footer { text-align: center; margin-top: 20px; color: #666; font-size: 12px; }\n              .invitation-box { background: #e0f2f1; border-left: 4px solid #009688; padding: 15px; margin: 15px 0; }\n          </style>\n      </head>\n      <body>\n          <div class=\"container\">\n              <div class=\"header\">\n                  <h1>📖 Chapter Invitation</h1>\n              </div>\n              <div class=\"content\">\n                  <h2>Hello Test User!</h2>\n                  \n                  <div class=\"invitation-box\">\n                      <p><strong>Invited by:</strong> Nauman</p>\n                      <p><strong>Chapter:</strong> Professional Development Stream</p>\n                  </div>\n                  \n                  <p>Nauman has invited you to join a chapter. This is a great opportunity to connect and learn together!</p>\n                  \n                  <div style=\"text-align: center;\">\n                      <a href=\"https://www.scrpt.com/streams/68badf21e7111ff6b63383ac\" class=\"button\">Join Chapter</a>\n                  </div>\n                  \n                  <p>Don't miss out on this exciting opportunity to be part of a learning community!</p>\n                  \n                  <p>Best regards,<br>The CollabMedia Team</p>\n              </div>\n              <div class=\"footer\">\n                  <p>This is an automated email. Please do not reply to this message.</p>\n                  <p>&copy; 2024 CollabMedia. All rights reserved.</p>\n              </div>\n          </div>\n      </body>\n      </html>\n    ",
+  "originalSmtpOptions": {
+    "host": "smtp.office365.com",
+    "port": 587,
+    "secure": false,
+    "requireTLS": true,
+    "auth": {
+      "user": "hello@scrpt.com",
+      "pass": "scrpt123_2014collabmedia"
+    },
+    "tls": {
+      "ciphers": "SSLv3",
+      "rejectUnauthorized": false
+    },
+    "connectionTimeout": 60000,
+    "greetingTimeout": 30000,
+    "socketTimeout": 60000
+  }
+}

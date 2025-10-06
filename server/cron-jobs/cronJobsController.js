@@ -2395,7 +2395,31 @@ exports.WishHappyBirthdayCron = WishHappyBirthdayCron; //not in use
 exports.WishHappyBirthdayCron__API = WishHappyBirthdayCron__API; //not in use
 
 exports.SynedPostEmailCron = SynedPostEmailCron;
-// exports.SynedPostEmailCronApi = SynedPostEmailCronApi; // Function not defined
+
+var SynedPostEmailCronApi = function (req, res) {
+    console.log("🔔 SynedPostEmailCronApi called via API");
+    try {
+        // Call the main cron function
+        SynedPostEmailCron();
+        
+        // Return success response
+        res.json({
+            success: true,
+            message: "Email delivery cron job executed successfully",
+            timestamp: new Date().toISOString()
+        });
+    } catch (error) {
+        console.error("❌ SynedPostEmailCronApi error:", error);
+        res.json({
+            success: false,
+            message: "Email delivery cron job failed",
+            error: error.message,
+            timestamp: new Date().toISOString()
+        });
+    }
+};
+
+exports.SynedPostEmailCronApi = SynedPostEmailCronApi;
 
 //stream launch cron jobs
 // exports.GroupStreamBirthdayCron__API = GroupStreamBirthdayCron__API; // Function not defined

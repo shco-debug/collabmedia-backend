@@ -1043,4 +1043,5 @@ const audioUpload = function (req, res) {
 module.exports = {
   videoUpload,
   audioUpload,
+  video__getNsaveThumbnail_S3,
 };
