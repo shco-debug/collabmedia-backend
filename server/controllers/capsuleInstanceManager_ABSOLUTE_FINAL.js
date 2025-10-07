@@ -2,6 +2,7 @@ var Capsule = require("./../models/capsuleModel.js");
 var Chapter = require("./../models/chapterModel.js");
 var Page = require("./../models/pageModel.js");
 var PageStream = require("./../models/pageStreamModel.js");
+var Media = require("./../models/mediaModel.js");
 var User = require("./../models/userModel.js");
 var EmailTemplate = require("./../models/emailTemplateModel.js");
 var Referral = require("./../models/referralModel.js");
@@ -599,36 +600,9 @@ const createCapsuleInstance = async (
               pageData.UpdatedOn = nowDate;
 
               if (CapsuleData.LaunchSettings.CapsuleFor == "Stream") {
-                // Make a copy of Posts and transfer ownership
-                pageData.Medias = pageDetail.Medias ? pageDetail.Medias : [];
-                for (let i = 0; i < pageData.Medias.length; i++) {
-                  pageData.Medias[i].OriginatedFrom = pageData.Medias[i]._id;
-                  pageData.Medias[i].Origin = "Copy";
-                  pageData.Medias[i]._id = new mongoose.Types.ObjectId();
-                  pageData.Medias[i].OwnerId = pageData.OwnerId;
-                  pageData.Medias[i].PostedBy = pageData.OwnerId;
-
-                  const cond = {
-                    PageId: pageData.OriginatedFrom,
-                    PostId: pageData.Medias[i].OriginatedFrom,
-                  };
-                  const f = {
-                    SelectedBlendImages: 1,
-                  };
-                  const SelectedBlendImages = await PageStream.find(cond, f);
-                  if (SelectedBlendImages.length) {
-                    pageData.Medias[i].SelectedBlendImages =
-                      SelectedBlendImages[0].SelectedBlendImages
-                        ? SelectedBlendImages[0].SelectedBlendImages
-                        : [];
-                  }
-
-                  pageData.Medias[i].SelectedBlendImages = pageData.Medias[i]
-                    .SelectedBlendImages
-                    ? pageData.Medias[i].SelectedBlendImages
-                    : [];
-                }
-                // Make a copy of post and transfer ownership
+                // Simply copy media IDs from original stream (no duplication)
+                pageData.Medias = pageDetail.Medias ? [...pageDetail.Medias] : [];
+                console.log(`📋 Copied ${pageData.Medias.length} media IDs to new stream instance`);
               }
 
               // AUTO NAME REPLACE FILTER
@@ -967,15 +941,66 @@ const createCapsuleInstance = async (
                 CapsuleData.LaunchSettings.StreamType != "Group"
               ) {
                 if (newPage.Medias && newPage.Medias.length) {
-                  CapsuleData._id = newCapsuleId;
-                  const streamPagePostNow = getStreamPagePostNow();
-                  await streamPagePostNow(
-                    newPage.Medias,
-                    newPage,
-                    shareWithEmail,
-                    req,
-                    CapsuleData
-                  );
+                  // Fetch the media documents (same ones from original stream) for streaming
+                  const mediaDocsForStreaming = await Media.find({ 
+                    _id: { $in: newPage.Medias },
+                    IsDeleted: { $ne: true }
+                  }).lean();
+                  
+                  if (mediaDocsForStreaming.length > 0) {
+                    console.log(`📋 Fetching PageStream blend configurations for ${mediaDocsForStreaming.length} media`);
+                    
+                    // Fetch PageStream data from ORIGINAL stream (pageDetail) for blend configurations
+                    // The original PageStream documents contain the blend settings we need
+                    for (let i = 0; i < mediaDocsForStreaming.length; i++) {
+                      const mediaDoc = mediaDocsForStreaming[i];
+                      
+                      // Skip Audio and Video - they don't have blend images
+                      if (mediaDoc.MediaType === 'Audio' || mediaDoc.MediaType === 'Video' || 
+                          mediaDoc.MediaType === '1AudioPost' || mediaDoc.MediaType === '1VideoPost') {
+                        console.log(`⏭️ Skipping ${mediaDoc.MediaType} (no blend images needed)`);
+                        mediaDoc.SelectedBlendImages = [];
+                        continue;
+                      }
+                      
+                      // Fetch PageStream from the ORIGINAL page (pageDetail._id) and ORIGINAL media (_id)
+                      const pageStreamDocs = await PageStream.find({
+                        PageId: pageDetail._id,  // Original page ID
+                        PostId: mediaDoc._id      // Original media ID (same as new, since we're reusing)
+                      }).lean();
+                      
+                      console.log(`🔍 Checking PageStream for ${mediaDoc.MediaType} (${mediaDoc._id}): Found ${pageStreamDocs.length} entries`);
+                      
+                      if (pageStreamDocs.length > 0) {
+                        // Support both BlendSettings (new format) and SelectedBlendImages (old format)
+                        if (pageStreamDocs[0].BlendSettings && pageStreamDocs[0].BlendSettings.allBlendConfigurations) {
+                          console.log(`✅ Found BlendSettings with ${pageStreamDocs[0].BlendSettings.allBlendConfigurations.length} blend configs`);
+                          mediaDoc.BlendSettings = pageStreamDocs[0].BlendSettings;
+                          mediaDoc.SelectedBlendImages = pageStreamDocs[0].BlendSettings.allBlendConfigurations;
+                        } else if (pageStreamDocs[0].SelectedBlendImages) {
+                          console.log(`✅ Found SelectedBlendImages with ${pageStreamDocs[0].SelectedBlendImages.length} blend configs`);
+                          mediaDoc.SelectedBlendImages = pageStreamDocs[0].SelectedBlendImages;
+                        } else {
+                          console.log(`⚠️ PageStream found but no blend data in BlendSettings or SelectedBlendImages`);
+                          mediaDoc.SelectedBlendImages = [];
+                        }
+                      } else {
+                        console.log(`⚠️ No PageStream entry found for ${mediaDoc.MediaType} ${mediaDoc._id}`);
+                        mediaDoc.SelectedBlendImages = [];
+                      }
+                    }
+                    
+                    CapsuleData._id = newCapsuleId;
+                    const streamPagePostNow = getStreamPagePostNow();
+                    await streamPagePostNow(
+                      mediaDocsForStreaming, // Pass full media objects with blend configurations
+                      newPage,
+                      shareWithEmail,
+                      req,
+                      CapsuleData,
+                      newPage.OwnerId // Pass new owner ID for SyncedPost creation
+                    );
+                  }
                 }
               }
             }

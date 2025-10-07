@@ -8444,8 +8444,8 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
         },
       },
 
-      // Sort by upload date (newest first) for consistent pagination
-      { $sort: { UploadedOn: -1 } },
+      // Sort by upload date (newest first) with _id as tiebreaker for consistent pagination
+      { $sort: { UploadedOn: -1, _id: -1 } },
 
       // Apply pagination
       { $skip: skip },
@@ -8552,19 +8552,6 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
               }
             }
           },
-          // Debug field to see what's in pageStreamData
-          debugPageStream: {
-            $cond: {
-              if: { 
-                $and: [
-                  { $isArray: "$pageStreamData" },
-                  { $gt: [{ $size: "$pageStreamData" }, 0] }
-                ]
-              },
-              then: { $arrayElemAt: ["$pageStreamData", 0] },
-              else: "No PageStream found"
-            }
-          }
         }
       },
 
@@ -8744,42 +8731,13 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
           capsuleOwner: 0, // Remove the raw capsuleOwner object
           capsuleCreator: 0, // Remove the raw capsuleCreator object
           pageStreamData: 0, // Remove the raw pageStreamData object
-          // debugPageStream: 0, // Keep debug field for now
         },
       },
+      // Re-sort after $group to maintain consistent order
+      { $sort: { UploadedOn: -1, _id: -1 } },
     ];
 
-    // Debug: Log the pipeline for troubleshooting
-    console.log("🔍 Debug - Starting aggregation pipeline for getUserPurchasedCapsulesPosts");
-    console.log("🔍 Debug - Looking for PageStream records with PostId matching media _id");
-
     const posts = await Chapter.aggregate(pipeline).exec();
-
-    // Debug: Check if capsule data is being fetched
-    if (posts.length > 0) {
-      console.log("🔍 Debug - First post capsule data:", {
-        capsuleId: posts[0].capsuleId,
-        capsuleTitle: posts[0].capsuleTitle,
-        capsuleCoverArt: posts[0].capsuleCoverArt,
-        capsuleMenuIcon: posts[0].capsuleMenuIcon,
-        capsuleOwnerId: posts[0].capsuleOwnerId,
-        capsuleOwnerName: posts[0].capsuleOwnerName,
-        capsuleOwnerProfilePic: posts[0].capsuleOwnerProfilePic,
-        capsuleCreatorId: posts[0].capsuleCreatorId,
-        capsuleCreatorName: posts[0].capsuleCreatorName,
-        capsuleCreatorProfilePic: posts[0].capsuleCreatorProfilePic,
-        hasCapsuleData: !!posts[0].capsuleData,
-      });
-
-      // Debug: Check PageStream data
-      console.log("🔍 Debug - PageStream data for first post:", {
-        postId: posts[0]._id,
-        selectedBlendImage: posts[0].selectedBlendImage,
-        debugPageStream: posts[0].debugPageStream,
-        hasPageStreamData: !!posts[0].pageStreamData,
-        pageStreamDataLength: posts[0].pageStreamData ? posts[0].pageStreamData.length : 0
-      });
-    }
 
     // Add user's interaction status for each post and clean up user data
     if (req.session.user && req.session.user._id) {
