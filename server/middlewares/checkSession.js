@@ -222,7 +222,8 @@ module.exports = function(req, res, next){
 			'/markAsPrivateQuestionPost',
 			'/markAsOneTimePost',
 			'/markAsRepeatPost',
-			'/markAsBroadcastPost'
+			'/markAsBroadcastPost',
+			'/updateStreamMediaFilterSortingOrder_BROWSER_API'
 		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}

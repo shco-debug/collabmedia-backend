@@ -448,7 +448,7 @@ async function getPrimarySecondaryKeywordsPrompt() {
       return result.PrimarySecondaryKeywordsPrompt;
     } else {
       console.log("   - Using default prompt (no stored prompt found)");
-      return "What are the 2 single-words within this thought that are in yin and yang conflict with each other? Print them as the first and second words. Then, extract the 8 keywords that capture the key concepts of the thought. Print them as words 3 to 10. No numbers, descriptions, preface, labels, explanations. Only 10 single-word concepts as answers. Give me only comma separated answers.";
+      return "Extract exactly 10 single-word keywords from the text.\n\nFormat: word1,word2:::word3,word4,word5,word6:::word7,word8,word9,word10\n\nRules:\n- Words 1-2 (before first :::): Opposite concepts\n- Words 3-6 (after first :::): Key concepts\n- Words 7-10 (after second :::): Additional concepts\n- Use ::: to separate the three groups\n- Each word must be a single word (no spaces)\n\nEXAMPLE: anger,peace:::outburst,path,mind,defaults:::recognize,habit,channel,behavior\n\nOutput only the keywords in this exact format. NO explanations:";
     }
   } catch (error) {
     console.log(
@@ -457,7 +457,7 @@ async function getPrimarySecondaryKeywordsPrompt() {
     );
     console.log("   - Error stack:", error.stack);
     console.log("   - Using default prompt due to error");
-    return "What are the 2 single-words within this thought that are in yin and yang conflict with each other? Print them as the first and second words. Then, extract the 8 keywords that capture the key concepts of the thought. Print them as words 3 to 10. No numbers, descriptions, preface, labels, explanations. Only 10 single-word concepts as answers. Give me only comma separated answers.";
+    return "Extract exactly 10 single-word keywords from the text.\n\nFormat: word1,word2:::word3,word4,word5,word6:::word7,word8,word9,word10\n\nRules:\n- Words 1-2 (before first :::): Opposite concepts\n- Words 3-6 (after first :::): Key concepts\n- Words 7-10 (after second :::): Additional concepts\n- Use ::: to separate the three groups\n- Each word must be a single word (no spaces)\n\nEXAMPLE: anger,peace:::outburst,path,mind,defaults:::recognize,habit,channel,behavior\n\nOutput only the keywords in this exact format. NO explanations:";
   }
 }
 
@@ -618,29 +618,52 @@ const updateStreamMediaFilterSortingOrder_BROWSER_API = async function (
 ) {
   const StreamMediaFilterSortingOrder =
     req.query.StreamMediaFilterSortingOrder || null;
-  if (!StreamMediaFilterSortingOrder) {
-    return res.json({ code: 501, message: "Wrong input." });
-  }
+  
   let possibleValues = ["123", "132", "213", "231", "312", "321"];
+  
+  if (!StreamMediaFilterSortingOrder) {
+    return res.json({ 
+      code: 501, 
+      message: "StreamMediaFilterSortingOrder parameter is required.",
+      possibleValues: possibleValues,
+      example: "/journal/updateStreamMediaFilterSortingOrder_BROWSER_API?StreamMediaFilterSortingOrder=231"
+    });
+  }
 
   if (possibleValues.indexOf(StreamMediaFilterSortingOrder) < 0) {
-    return res.json({ code: 501, message: "Wrong input." });
+    return res.json({ 
+      code: 501, 
+      message: `Invalid value '${StreamMediaFilterSortingOrder}'. Must be one of: ${possibleValues.join(', ')}`,
+      possibleValues: possibleValues,
+      receivedValue: StreamMediaFilterSortingOrder
+    });
   }
 
-  await AppSettings.update(
-    { StreamMediaFilterSortingOrder: { $exists: true } },
-    { $set: { StreamMediaFilterSortingOrder: StreamMediaFilterSortingOrder } }
-  );
-  return res.json({
-    code: 200,
-    message: "StreamMediaFilterSortingOrder has been updated successfully",
-  });
+  try {
+    await AppSettings.updateOne(
+      { StreamMediaFilterSortingOrder: { $exists: true } },
+      { $set: { StreamMediaFilterSortingOrder: StreamMediaFilterSortingOrder } },
+      { upsert: true }
+    );
+    return res.json({
+      code: 200,
+      message: "StreamMediaFilterSortingOrder has been updated successfully",
+      updatedValue: StreamMediaFilterSortingOrder
+    });
+  } catch (error) {
+    console.error("Error updating StreamMediaFilterSortingOrder:", error);
+    return res.json({
+      code: 500,
+      message: "Failed to update StreamMediaFilterSortingOrder",
+      error: error.message
+    });
+  }
 };
 
 /**fetchKeywordsFromText_PrimarySecondary - Using Gemini API with OpenAI format compatibility */
 async function fetchKeywordsFromText_PrimarySecondary(text) {
-  const MODEL_NAME = "gemini-1.5-flash-8b";
-  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1/models/${MODEL_NAME}:generateContent`;
+  const MODEL_NAME = "gemini-2.5-flash";
+  const GEMINI_URL = `https://generativelanguage.googleapis.com/v1beta/models/${MODEL_NAME}:generateContent`;
 
   var keywordResult = {};
   var response = {};
@@ -672,7 +695,7 @@ async function fetchKeywordsFromText_PrimarySecondary(text) {
       console.log("❌ ERROR: Invalid prompt received:", prompt);
       console.log("   - Using fallback prompt");
       prompt =
-        "What are the 2 single-words within this thought that are in yin and yang conflict with each other? Print them as the first and second words. Then, extract the 8 keywords that capture the key concepts of the thought. Print them as words 3 to 10. No numbers, descriptions, preface, labels, explanations. Only 10 single-word concepts as answers. Give me only comma separated answers.";
+        "Extract exactly 10 single-word keywords from the text.\n\nFormat: word1,word2:::word3,word4,word5,word6:::word7,word8,word9,word10\n\nRules:\n- Words 1-2 (before first :::): Opposite concepts\n- Words 3-6 (after first :::): Key concepts\n- Words 7-10 (after second :::): Additional concepts\n- Use ::: to separate the three groups\n- Each word must be a single word (no spaces)\n\nEXAMPLE: anger,peace:::outburst,path,mind,defaults:::recognize,habit,channel,behavior\n\nOutput only the keywords in this exact format. NO explanations:";
     }
 
     try {
@@ -685,10 +708,10 @@ async function fetchKeywordsFromText_PrimarySecondary(text) {
               parts: [
                 {
                   text:
-                    "You are an accurate researcher.\n" +
                     prompt +
-                    "\n" +
-                    inputText,
+                    "\n\nText:\n" +
+                    inputText +
+                    "\n\nKeywords:",
                 },
               ],
             },
@@ -731,29 +754,55 @@ async function fetchKeywordsFromText_PrimarySecondary(text) {
 
   // Now we can use the original OpenAI format processing
   csvkeywords = openaiResponse.data.choices[0].message.content.trim();
-  // csvkeywords = csvkeywords.replace(/[^a-zA-Z-,: ]/g, ""); - this is creating the problem I think
+  console.log("🤖 RAW AI Response:", csvkeywords);
+  
+  // Clean up AI response: remove bullet points, newlines, extra spaces, and labels
+  csvkeywords = csvkeywords
+    .replace(/^keywords?:?\s*/i, '')  // Remove "keyword:" or "keywords:" prefix
+    .replace(/\*\s+/g, '')  // Remove bullet points (*)
+    .replace(/\n+/g, ',')    // Replace newlines with commas
+    .replace(/,+/g, ',')     // Remove duplicate commas
+    .replace(/\s+/g, ' ')    // Normalize spaces
+    .trim();
+  console.log("🤖 CLEANED AI Response:", csvkeywords);
+  
   var keywordPartsArr = csvkeywords.split(":::").map((obj) => obj.trim());
-  var primaryKeywords =
-    keywordPartsArr.length >= 1
-      ? keywordPartsArr[0]
-          .split(",")
-          .slice(0, 2)
-          .map((obj) => obj.trim())
-      : [];
-  var secondaryKeywords =
-    keywordPartsArr.length >= 2
-      ? keywordPartsArr[1].split(",").map((obj) => obj.trim())
-      : [];
-  var secondary2Keywords =
-    keywordPartsArr.length === 3
-      ? keywordPartsArr[2].split(",").map((obj) => obj.trim())
-      : [];
+  
+  // If AI didn't use ::: separators, split the comma-separated list manually
+  if (keywordPartsArr.length === 1 && csvkeywords.includes(',')) {
+    const allWords = csvkeywords.split(",").map((obj) => obj.trim()).filter(w => w.length > 0);
+    console.log("🤖 No ::: separators found, manually splitting", allWords.length, "words");
+    
+    // Split into groups: First 2 = Primary, Next 4 = Secondary, Last 4 = Secondary2
+    var primaryKeywords = allWords.slice(0, 2);
+    var secondaryKeywords = allWords.slice(2, 6);
+    var secondary2Keywords = allWords.slice(6, 10);
+  } else {
+    // Standard parsing with ::: separators
+    var primaryKeywords =
+      keywordPartsArr.length >= 1
+        ? keywordPartsArr[0]
+            .split(",")
+            .slice(0, 2)
+            .map((obj) => obj.trim())
+        : [];
+    var secondaryKeywords =
+      keywordPartsArr.length >= 2
+        ? keywordPartsArr[1].split(",").map((obj) => obj.trim())
+        : [];
+    var secondary2Keywords =
+      keywordPartsArr.length === 3
+        ? keywordPartsArr[2].split(",").map((obj) => obj.trim())
+        : [];
+  }
 
   response.data = {
     Primary: primaryKeywords,
     Secondary: secondaryKeywords,
     Secondary2: secondary2Keywords,
   };
+  console.log("🤖 PARSED Keywords:", { Primary: primaryKeywords, Secondary: secondaryKeywords, Secondary2: secondary2Keywords });
+  
   response.data = response.data ? response.data : {};
   var keywordResult = response.data ? response.data : {};
   keywordResult.Primary = Array.isArray(keywordResult.Primary)
@@ -771,7 +820,7 @@ async function fetchKeywordsFromText_PrimarySecondary(text) {
   } else if (keywordResult.Primary.length === 1) {
     keywordResult.Primary.push("flower");
   }
-  console.log("keywordResult = ", keywordResult);
+  console.log("🤖 FINAL keywordResult = ", keywordResult);
   return keywordResult;
 }
 
@@ -5775,8 +5824,14 @@ var getMediaFromSet = async function (req, callback) {
     );
     console.log("🎯 ObjectIds extracted for querying:", objectIdsFromTotalSets);
     
-    // Update the conditions with ObjectIds instead of string keywords
-    conditions["GroupTags.GroupTagID"] = { $in: objectIdsFromTotalSets };
+    // CRITICAL FIX: Only add GroupTags filter if we have valid ObjectIds
+    // Otherwise rely on Media Selection Criteria alone
+    if (objectIdsFromTotalSets.length > 0) {
+      conditions["GroupTags.GroupTagID"] = { $in: objectIdsFromTotalSets };
+      console.log("✅ Using keyword filter + Media Selection Criteria");
+    } else {
+      console.log("⚠️ No valid keyword ObjectIds - using ONLY Media Selection Criteria");
+    }
 
     var maxRank = totalSets.length;
     var switchBranches = [];
@@ -6205,25 +6260,36 @@ var getMediaFromSet = async function (req, callback) {
     
     var local_map_selectedgtValues = local_map_selectedgt ? Object.values(local_map_selectedgt) : [];
     var gtArr = [];
+    console.log("🔍 local_map_selectedgt:", local_map_selectedgt);
+    console.log("🔍 local_map_selectedgtValues:", local_map_selectedgtValues);
     for( var loop = 0; loop < local_map_selectedgtValues.length; loop++ ){
-      // Extract ObjectId from "title__id" strings
+      // Extract ObjectId - check if already an ObjectId or has __ separator
       for (let item of local_map_selectedgtValues[loop]) {
-        if (typeof item === 'string' && item.includes('__')) {
-          let parts = item.split('__');
-          if (parts.length >= 2) {
-            gtArr.push(parts[1]); // Extract the ObjectId part
+        if (typeof item === 'string') {
+          // Check if it's a valid ObjectId (24 hex characters)
+          if (item.length === 24 && /^[0-9a-fA-F]{24}$/.test(item)) {
+            gtArr.push(item); // Already an ObjectId
+          } else if (item.includes('__')) {
+            // Extract from "title__id" format
+            let parts = item.split('__');
+            if (parts.length >= 2 && parts[1].length === 24 && /^[0-9a-fA-F]{24}$/.test(parts[1])) {
+              gtArr.push(parts[1]); // Extract the ObjectId part
+            }
           }
         }
       }
     }
+    console.log("🔍 gtArr:", gtArr);
 
     //get all selected gt titles map
     var selectedGtResults = await groupTags.find({_id : {$in : gtArr}}, {GroupTagTitle : 1, _id: 1});
     selectedGtResults = selectedGtResults ? selectedGtResults : [];
+    console.log("🔍 selectedGtResults:", selectedGtResults);
     var gtTitleMap = {};
     for( var loop = 0; loop < selectedGtResults.length; loop++ ){
       gtTitleMap[selectedGtResults[loop]._id] = selectedGtResults[loop].GroupTagTitle ? selectedGtResults[loop].GroupTagTitle : '';
     }
+    console.log("🔍 gtTitleMap:", gtTitleMap);
 
     //console.log("$$$$$$$$$$$$$$$$$$$$$$ ----------------results ----------------------------- ", results);
     for( var loop = 0; loop < results.length; loop++ ){
@@ -6241,14 +6307,28 @@ var getMediaFromSet = async function (req, callback) {
       var index = tempObj.value.Ranks ? tempObj.value.Ranks : null;
       if(index) {
         var finalIndex = local_map_selectedgt["rank_"+index] ? local_map_selectedgt["rank_"+index] : null;
-        if(finalIndex) {
-          var gtTitle = gtTitleMap[finalIndex] = gtTitleMap[finalIndex] ? gtTitleMap[finalIndex] : '';
-          tempObj.value.SelectedGtTitle = gtTitle;
+        if(finalIndex && finalIndex.length > 0) {
+          // Get the ObjectId - it's already extracted from totalSets
+          let gtId = finalIndex[0]; // Get first element from array
+          
+          // gtId could be either:
+          // 1. A valid ObjectId string (24 hex chars) - use directly
+          // 2. A "title__id" format (shouldn't happen after extraction, but check anyway)
+          if (typeof gtId === 'string') {
+            if (gtId.includes('__')) {
+              gtId = gtId.split('__')[1]; // Extract ObjectId after __
+            }
+            // Now lookup the title
+            var gtTitle = gtTitleMap[gtId] ? gtTitleMap[gtId] : '';
+            tempObj.value.SelectedGtTitle = gtTitle;
+          }
         }
       }
       tempObj.value.SecondaryKeywordsMap = getKeywordNamesByKeywordMap(tempObj.value.SecondaryKeywords, SecondaryKeywordsMap);
+      if (loop < 2) console.log(`🔍 Media ${loop}: Rank=${tempObj.value.Ranks}, SelectedGtTitle="${tempObj.value.SelectedGtTitle}", SecondaryKeywordsCount=${tempObj.value.SecondaryKeywordsCount}`);
       outputRecords.push(tempObj);
     }
+    console.log("🔍 Total outputRecords with SelectedGtTitle populated:", outputRecords.filter(r => r.value.SelectedGtTitle).length, "/", outputRecords.length);
 
     if(timer) {
       clearInterval(timer);
@@ -6474,8 +6554,14 @@ var getMediaFromSet2 = async function (req, callback) {
     );
     console.log("🎯 ObjectIds extracted for querying:", objectIdsFromTotalSets);
     
-    // Update the conditions with ObjectIds instead of string keywords
-    conditions["GroupTags.GroupTagID"] = { $in: objectIdsFromTotalSets };
+    // CRITICAL FIX: Only add GroupTags filter if we have valid ObjectIds
+    // Otherwise rely on Media Selection Criteria alone
+    if (objectIdsFromTotalSets.length > 0) {
+      conditions["GroupTags.GroupTagID"] = { $in: objectIdsFromTotalSets };
+      console.log("✅ Using keyword filter + Media Selection Criteria");
+    } else {
+      console.log("⚠️ No valid keyword ObjectIds - using ONLY Media Selection Criteria");
+    }
 
     var maxRank = totalSets.length;
     var switchBranches = [];
@@ -6865,25 +6951,36 @@ var getMediaFromSet2 = async function (req, callback) {
     
     var local_map_selectedgtValues = local_map_selectedgt ? Object.values(local_map_selectedgt) : [];
     var gtArr = [];
+    console.log("🔍 local_map_selectedgt:", local_map_selectedgt);
+    console.log("🔍 local_map_selectedgtValues:", local_map_selectedgtValues);
     for( var loop = 0; loop < local_map_selectedgtValues.length; loop++ ){
-      // Extract ObjectId from "title__id" strings
+      // Extract ObjectId - check if already an ObjectId or has __ separator
       for (let item of local_map_selectedgtValues[loop]) {
-        if (typeof item === 'string' && item.includes('__')) {
-          let parts = item.split('__');
-          if (parts.length >= 2) {
-            gtArr.push(parts[1]); // Extract the ObjectId part
+        if (typeof item === 'string') {
+          // Check if it's a valid ObjectId (24 hex characters)
+          if (item.length === 24 && /^[0-9a-fA-F]{24}$/.test(item)) {
+            gtArr.push(item); // Already an ObjectId
+          } else if (item.includes('__')) {
+            // Extract from "title__id" format
+            let parts = item.split('__');
+            if (parts.length >= 2 && parts[1].length === 24 && /^[0-9a-fA-F]{24}$/.test(parts[1])) {
+              gtArr.push(parts[1]); // Extract the ObjectId part
+            }
           }
         }
       }
     }
+    console.log("🔍 gtArr:", gtArr);
 
     //get all selected gt titles map
     var selectedGtResults = await groupTags.find({_id : {$in : gtArr}}, {GroupTagTitle : 1, _id: 1});
     selectedGtResults = selectedGtResults ? selectedGtResults : [];
+    console.log("🔍 selectedGtResults:", selectedGtResults);
     var gtTitleMap = {};
     for( var loop = 0; loop < selectedGtResults.length; loop++ ){
       gtTitleMap[selectedGtResults[loop]._id] = selectedGtResults[loop].GroupTagTitle ? selectedGtResults[loop].GroupTagTitle : '';
     }
+    console.log("🔍 gtTitleMap:", gtTitleMap);
 
     //console.log("$$$$$$$$$$$$$$$$$$$$$$ ----------------results ----------------------------- ", results);
     for( var loop = 0; loop < results.length; loop++ ){
@@ -6901,14 +6998,28 @@ var getMediaFromSet2 = async function (req, callback) {
       var index = tempObj.value.Ranks ? tempObj.value.Ranks : null;
       if(index) {
         var finalIndex = local_map_selectedgt["rank_"+index] ? local_map_selectedgt["rank_"+index] : null;
-        if(finalIndex) {
-          var gtTitle = gtTitleMap[finalIndex] = gtTitleMap[finalIndex] ? gtTitleMap[finalIndex] : '';
-          tempObj.value.SelectedGtTitle = gtTitle;
+        if(finalIndex && finalIndex.length > 0) {
+          // Get the ObjectId - it's already extracted from totalSets
+          let gtId = finalIndex[0]; // Get first element from array
+          
+          // gtId could be either:
+          // 1. A valid ObjectId string (24 hex chars) - use directly
+          // 2. A "title__id" format (shouldn't happen after extraction, but check anyway)
+          if (typeof gtId === 'string') {
+            if (gtId.includes('__')) {
+              gtId = gtId.split('__')[1]; // Extract ObjectId after __
+            }
+            // Now lookup the title
+            var gtTitle = gtTitleMap[gtId] ? gtTitleMap[gtId] : '';
+            tempObj.value.SelectedGtTitle = gtTitle;
+          }
         }
       }
       tempObj.value.SecondaryKeywordsMap = getKeywordNamesByKeywordMap(tempObj.value.SecondaryKeywords, SecondaryKeywordsMap);
+      if (loop < 2) console.log(`🔍 Media ${loop}: Rank=${tempObj.value.Ranks}, SelectedGtTitle="${tempObj.value.SelectedGtTitle}", SecondaryKeywordsCount=${tempObj.value.SecondaryKeywordsCount}`);
       outputRecords.push(tempObj);
     }
+    console.log("🔍 Total outputRecords with SelectedGtTitle populated:", outputRecords.filter(r => r.value.SelectedGtTitle).length, "/", outputRecords.length);
 
     if(timer) {
       clearInterval(timer);
@@ -8217,6 +8328,14 @@ var streamPost = function (req, res) {
             DominantColors: record.value.DominantColors
               ? record.value.DominantColors
               : null,
+            SelectedGtTitle: record.value.SelectedGtTitle ? record.value.SelectedGtTitle : '',
+            SecondaryKeywords: record.value.SecondaryKeywords ? record.value.SecondaryKeywords : [],
+            SecondaryKeywordsCount: record.value.SecondaryKeywordsCount ? record.value.SecondaryKeywordsCount : 0,
+            SecondaryKeywordsMap: record.value.SecondaryKeywordsMap ? record.value.SecondaryKeywordsMap : [],
+            MediaSelectionCriteriaCount: record.value.MediaSelectionCriteriaCount ? record.value.MediaSelectionCriteriaCount : 0,
+            MediaSelectionCriteriaArr: record.value.MediaSelectionCriteriaArr ? record.value.MediaSelectionCriteriaArr : [],
+            MetaData: record.value.MetaData ? record.value.MetaData : {},
+            AllMetaData: record.value.AllMetaData ? record.value.AllMetaData : {}
           });
         }
 
@@ -8241,6 +8360,14 @@ var streamPost = function (req, res) {
             DominantColors: record.value.DominantColors
               ? record.value.DominantColors
               : null,
+            SelectedGtTitle: record.value.SelectedGtTitle ? record.value.SelectedGtTitle : '',
+            SecondaryKeywords: record.value.SecondaryKeywords ? record.value.SecondaryKeywords : [],
+            SecondaryKeywordsCount: record.value.SecondaryKeywordsCount ? record.value.SecondaryKeywordsCount : 0,
+            SecondaryKeywordsMap: record.value.SecondaryKeywordsMap ? record.value.SecondaryKeywordsMap : [],
+            MediaSelectionCriteriaCount: record.value.MediaSelectionCriteriaCount ? record.value.MediaSelectionCriteriaCount : 0,
+            MediaSelectionCriteriaArr: record.value.MediaSelectionCriteriaArr ? record.value.MediaSelectionCriteriaArr : [],
+            MetaData: record.value.MetaData ? record.value.MetaData : {},
+            AllMetaData: record.value.AllMetaData ? record.value.AllMetaData : {}
           });
         }
 
@@ -22038,12 +22165,9 @@ var setStreamMediaSelectionCriteria__INTERNAL_API = async function (req, res) {
 const addNewPost_INTERNAL_API = async (req, res) => {
   const startTime = Date.now();
 
-  console.log("🔍 addNewPost_INTERNAL_API - Processing request");
-
   // Always use mongoose.Types.ObjectId to avoid conflicts with global ObjectId
   const ObjectIdConstructor = mongoose?.Types?.ObjectId;
   if (!ObjectIdConstructor) {
-    console.log("❌ ERROR: mongoose.Types.ObjectId not available");
     return res.json({
       code: 500,
       message: "mongoose.Types.ObjectId not available",
@@ -22057,12 +22181,10 @@ const addNewPost_INTERNAL_API = async (req, res) => {
 		
 		// Validate required parameters
 		if (!pageId) {
-			console.log("❌ ERROR: pageId is required");
 			return res.json({ code: 400, message: "pageId is required" });
 		}
 		
 		if (!postStatement) {
-			console.log("❌ ERROR: postStatement is required");
 			return res.json({ code: 400, message: "postStatement is required" });
 		}
 
@@ -22086,7 +22208,7 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         postStatement = beforePostHeader + afterPostHeader;
       }
     } catch (formatError) {
-      console.log("❌ ERROR in postStatement formatting:", formatError.message);
+      // Silent fail - use original statement
     }
 
     /*doing post formating for post header --- <<>>*/
@@ -22239,21 +22361,18 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     if (postStreamType === "1MJPost" && MJImageArr && MJImageArr.length === 1) {
       // Handle 1MJ posts with payload structure - extract aspectfit URL directly (like 2MJ)
       const imageData = MJImageArr[0];
-      console.log("🔍 Processing 1MJ post with payload URL:", imageData);
       
       // Extract aspectfit URL from payload (same structure as 2MJ)
       if (imageData && imageData.url) {
-              locationArray.push({ 
+        locationArray.push({ 
           Size: "aspectfit", 
           URL: imageData.url,
           S3Key: imageData.key || "",
           FileSize: imageData.size || 0
         });
-        console.log(`✅ 1MJ image URL saved from payload: ${imageData.url}`);
-          } else {
+      } else {
         // Fallback - empty URL
         locationArray.push({ Size: "aspectfit", URL: "" });
-        console.log("⚠️ No 1MJ payload URL found, using empty URL");
       }
     } else if (
       postStreamType === "2MJPost" &&
@@ -22661,25 +22780,17 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       keywordsObj.Secondary = sArr || [];
       keywordsObj.Secondary2 = s2Arr || [];
       
-      console.log("📝 Final keywordsObj from provided keywords:");
-      console.log("📝 Primary:", keywordsObj.Primary);
-      console.log("📝 Secondary:", keywordsObj.Secondary);
-      console.log("📝 Secondary2:", keywordsObj.Secondary2);
     } else {
-      console.log("🤖 Using AI extraction from post statement");
-      console.log("🤖 Post statement:", postStatement);
       try {
         keywordsObj = await fetchKeywordsFromText_PrimarySecondary(
           postStatement
         );
-        console.log("🤖 AI extraction successful:");
-        console.log("🤖 Primary:", keywordsObj.Primary);
-        console.log("🤖 Secondary:", keywordsObj.Secondary);
-        console.log("🤖 Secondary2:", keywordsObj.Secondary2);
+        // Use AI-generated keywords for pArr (for GroupTags population)
+        pArr = keywordsObj.Primary || [];
+        sArr = keywordsObj.Secondary || [];
+        s2Arr = keywordsObj.Secondary2 || [];
       } catch (error) {
-        console.log("❌ AI extraction failed:", error.message);
         keywordsObj = { Primary: [], Secondary: [], Secondary2: [] };
-        console.log("❌ Using empty keywords as fallback");
       }
     }
     
@@ -22687,84 +22798,58 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     const secondaryKeywords = keywordsObj.Secondary || [];
     const secondaryKeywords2 = keywordsObj.Secondary2 || [];
 
-    // Log final keyword arrays
-    console.log("📊 Final keyword arrays for processing:");
-    console.log("📊 keywords (Primary):", keywords);
-    console.log("📊 secondaryKeywords:", secondaryKeywords);
-    console.log("📊 secondaryKeywords2:", secondaryKeywords2);
 
     req.body.SecondaryKeywordsMap = {};
     req.body.SecondaryKeywords = [];
     req.body.SecondaryKeywordsMap2 = {};
     req.body.SecondaryKeywords2 = [];
 
-    console.log("🔄 Starting keyword ID mapping...");
 
     if (secondaryKeywords.length) {
-      console.log("🔄 Processing secondary keywords:", secondaryKeywords);
       try {
         var secKeywordsObj =
           (await __getKeywordIdsByNames_CMIDW(secondaryKeywords)) || {};
         
-        console.log("✅ Secondary keywords mapping result:");
-        console.log("✅ keywordIds:", secKeywordsObj.keywordIds);
-        console.log("✅ secondaryKeywordsMap:", secKeywordsObj.secondaryKeywordsMap);
         
         req.body.SecondaryKeywordsMap =
           secKeywordsObj.secondaryKeywordsMap || {};
         req.body.SecondaryKeywords = secKeywordsObj.keywordIds || [];
         
-        console.log("✅ Final SecondaryKeywords:", req.body.SecondaryKeywords);
-        console.log("✅ Final SecondaryKeywordsMap:", req.body.SecondaryKeywordsMap);
       } catch (error) {
-        console.log("❌ Error processing secondary keywords:", error.message);
         req.body.SecondaryKeywordsMap = {};
         req.body.SecondaryKeywords = [];
       }
     } else {
-      console.log("⚠️ No secondary keywords to process");
     }
 
     if (secondaryKeywords.join(",") !== secondaryKeywords2.join(",")) {
-      console.log("🔄 Processing secondary2 keywords (different from secondary):", secondaryKeywords2);
       if (secondaryKeywords2.length) {
         try {
           var secKeywordsObj =
             (await __getKeywordIdsByNames_CMIDW(secondaryKeywords2)) || {};
           
-          console.log("✅ Secondary2 keywords mapping result:");
-          console.log("✅ keywordIds:", secKeywordsObj.keywordIds);
-          console.log("✅ secondaryKeywordsMap:", secKeywordsObj.secondaryKeywordsMap);
           
           req.body.SecondaryKeywordsMap2 =
             secKeywordsObj.secondaryKeywordsMap || {};
           req.body.SecondaryKeywords2 = secKeywordsObj.keywordIds || [];
           
-          console.log("✅ Final SecondaryKeywords2:", req.body.SecondaryKeywords2);
-          console.log("✅ Final SecondaryKeywordsMap2:", req.body.SecondaryKeywordsMap2);
         } catch (error) {
-          console.log("❌ Error processing secondary2 keywords:", error.message);
           req.body.SecondaryKeywordsMap2 = {};
           req.body.SecondaryKeywords2 = [];
         }
       } else {
-        console.log("⚠️ No secondary2 keywords to process");
         req.body.SecondaryKeywordsMap2 = {};
         req.body.SecondaryKeywords2 = [];
       }
     } else {
-      console.log("⚠️ Secondary2 keywords same as secondary - copying data");
       req.body.SecondaryKeywordsMap2 = req.body.SecondaryKeywordsMap || {};
       req.body.SecondaryKeywords2 = req.body.SecondaryKeywords || [];
-      console.log("✅ Copied SecondaryKeywords2:", req.body.SecondaryKeywords2);
-      console.log("✅ Copied SecondaryKeywordsMap2:", req.body.SecondaryKeywordsMap2);
     }
 
     // Keywords are used for image filtering (MJ posts) and metadata processing (all posts)
     
     if (keywords.length == 2) {
       // Apply same metadata processing to ALL post types (MJ, Video, Audio, etc.)
-      console.log("✅ Proceeding with metadata processing for post type:", postStreamType);
 
     // ===== RANK DATA STRUCTURE CREATION =====
     // Create rank objects for keyword-based ranking system
@@ -22779,7 +22864,6 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       ...(secondaryKeywords2 || [])
     ];
     
-    console.log("🎯 All keywords for ranking:", allKeywordsForRanking);
 
     // Initialize required variables (like old code)
     req.body.selectedKeywords = req.body.selectedKeywords || [];
@@ -22789,7 +22873,6 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     // Use position-based ranking fallback
     var keywordRankingResponse = {};
     try {
-      console.log("🎯 Fetching keyword rankings for rank system...");
       
       // API endpoint removed
       var request_url = '';
@@ -22801,28 +22884,16 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       };
       
       const axios = require('axios');
-      console.log("🎯 Making API request to:", request_url);
       keywordRankingResponse = await axios.post(request_url, request_body);
     } catch (error) {
-      console.log("⚠️ Failed to fetch keyword rankings:", error.message);
       keywordRankingResponse = { data: {} };
     }
     
     // ===== CORRECT RANK SYSTEM IMPLEMENTATION (Matching Old Code) =====
-    console.log("🎯 Implementing rank system matching old code logic");
-    
     // Check if we have valid ranking data (fallback implementation)
-    console.log("🎯 DEBUG: keywordRankingResponse:", keywordRankingResponse);
-    console.log("🎯 DEBUG: keywordRankingResponse.data:", keywordRankingResponse.data);
-    console.log("🎯 DEBUG: Object.keys length:", Object.keys(keywordRankingResponse.data || {}).length);
-    
     var hasRankingData = keywordRankingResponse && keywordRankingResponse.data && typeof keywordRankingResponse.data === 'object' && Object.keys(keywordRankingResponse.data).length > 0;
     
-    console.log("🎯 DEBUG: hasRankingData:", hasRankingData);
-    
     if (hasRankingData) {
-      console.log("✅ Using API ranking data");
-      console.log("🎯 API ranking data:", keywordRankingResponse.data);
       
       // ===== MISSING DATABASE QUERY (Step 2 from old code) =====
       // Query GroupTags database to get matching keywords (like old code)
@@ -22850,11 +22921,9 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         _id: 1
       };
       
-      console.log("🎯 Querying GroupTags database for rank assignment...");
       
       try {
         var results = await groupTags.find(conditions, groupTagsFields);
-        console.log(`🎯 Found ${results.length} matching GroupTags`);
         
         // ===== RANK ASSIGNMENT (Step 3 from old code) =====
         
@@ -22889,7 +22958,6 @@ const addNewPost_INTERNAL_API = async (req, res) => {
                   subsetByRankObj2[groupedRank].push(String(results[i].GroupTagTitle));
                 }
                 
-                console.log(`🎯 Keyword "${key}" -> Original Rank ${originalRank} -> Grouped Rank ${groupedRank}`);
               }
             }
           }
@@ -22898,11 +22966,8 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         // Concatenate selectedKeywords with generatedKeywords (like old code)
         req.body.generatedKeywords = req.body.selectedKeywords.concat(req.body.generatedKeywords);
       } catch (error) {
-        console.log("⚠️ Error querying GroupTags:", error.message);
       }
     } else {
-      console.log("⚠️ No valid ranking data from API, using position-based ranking");
-      console.log("🎯 API response was empty, creating fallback rank structure");
       
       // Query database to get ObjectIds for keywords (like old code)
       var conditions = {
@@ -22918,16 +22983,9 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         _id: 1,
       };
       
-      console.log("🎯 Querying database for keyword ObjectIds...");
-      console.log("🎯 DEBUG: groupTags type:", typeof groupTags);
-      console.log("🎯 DEBUG: groupTags:", groupTags);
-      console.log("🎯 DEBUG: groupTags.find type:", typeof groupTags?.find);
-      console.log("🎯 DEBUG: conditions:", conditions);
-      console.log("🎯 DEBUG: queryFields:", queryFields);
       
       var results = await groupTags.find(conditions, queryFields);
       results = Array.isArray(results) ? results : [];
-      console.log("🎯 Found", results.length, "keywords in database");
       
       // Fallback: Use position-based ranking (like old code fallback)
       var rankCounter = 1;
@@ -22962,7 +23020,6 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         subsetByRankObj[rankCounter].push(keyword + "__" + keywordObjectId);
         subsetByRankObj2[rankCounter].push(keyword);
         
-        console.log(`🎯 Rank ${rankCounter}: ${keyword}`);
         
         // Move to next rank every 4 keywords to limit total ranks
         if (subsetByRankObj[rankCounter].length >= 4) {
@@ -22994,7 +23051,6 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         }
         subsetByRankObj[rankCounter].push(keyword + "__" + keywordObjectId);
           subsetByRankObj2[rankCounter].push(keyword);
-          console.log(`🎯 Rank ${rankCounter}: ${keyword} (additional)`);
         }
       }
       
@@ -23012,9 +23068,7 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     subsetByRankObj2 = sortKeys(subsetByRankObj2);
     req.body.subsetByRankObj2 = subsetByRankObj2;
     
-    console.log("🎯 Final rank objects:");
-    console.log("🎯 subsetByRank:", req.body.subsetByRank);
-    console.log("🎯 subsetByRankObj2:", req.body.subsetByRankObj2);
+   
 
     // Add rank objects to the request for image filtering
     req.body.subsetByRank = req.body.subsetByRank || [];
@@ -23025,9 +23079,6 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           req.body.subsetByRank2 = req.body.subsetByRank;  // Same rank data for Image 2
           req.body.subsetByRankObj22 = req.body.subsetByRankObj2;  // Same rank data for Image 2
     
-    console.log("🎯 Rank objects added to request body:");
-    console.log("🎯 req.body.subsetByRank:", req.body.subsetByRank);
-    console.log("🎯 req.body.subsetByRankObj2:", req.body.subsetByRankObj2);
       const PostId = mediaId;
       outputArr.push(
         "Keywords fetched from api and mapped with the post as SurpriseSelectedWords, PrimaryKeywords and SecondaryKeywords."
@@ -23051,7 +23102,6 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         subsetByRankObj2: req.body.subsetByRankObj2 || {},
       };
       
-      console.log("🔄 Request object for addBlendImages_INTERNAL_API:", reqObj);
       
       try {
         // Create a mock request object for the function call
@@ -23074,19 +23124,11 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           }),
         };
         
-        // Skip blend images API only for MJ posts (they use payload URLs), but allow for Unsplash posts
-        if (postStreamType === "1MJPost" || postStreamType === "2MJPost") {
-          console.log("✅ Skipping blend images API for MJ post type:", postStreamType);
-          outputArr.push(`metadata processing completed for ${postStreamType} post.`);
-        } else {
-          console.log("🔄 Calling addBlendImages_INTERNAL_API for post type:", postStreamType);
+        // Call addBlendImages_INTERNAL_API for ALL post types (MJ, Unsplash, etc.)
         // Call the function directly (self-reference)
         await addBlendImages_INTERNAL_API(mockReq, mockRes);
-        console.log("✅ addBlendImages_INTERNAL_API completed successfully");
-          outputArr.push("mapped SelectedBlendImages with the post successfully.");
-        }
+        outputArr.push("mapped SelectedBlendImages with the post successfully.");
       } catch (error) {
-        console.log("❌ Error calling addBlendImages_INTERNAL_API:", error.message);
         responseData = { code: null };
       }
 
@@ -23318,20 +23360,9 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           }
         );
 
-        // Also save to PageStream collection
-        if (pageId && mediaId) {
-          const pageStreamData = {
-            PageId: pageId,
-            PostId: mediaId,
-            PostStatement: postStatement || "",
-            SelectedBlendImages: [], // No blend images needed for S3 URLs
-            PostStreamType: postStreamType,
-            CreatedOn: Date.now(),
-          };
-          await PageStream(pageStreamData).save();
-        }
-
-        // No blend image generation needed - using S3 URLs for frontend CSS blending
+        // PageStream will be saved by addBlendImages_INTERNAL_API with the generated blend configurations
+        // No need to save here with empty array
+        
         console.log("✅ 2MJ blend settings saved with S3 URLs for frontend blending");
         outputArr.push("Blend settings saved with S3 URLs for frontend CSS blending.");
 

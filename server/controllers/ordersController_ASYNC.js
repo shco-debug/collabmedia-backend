@@ -27,6 +27,9 @@ var mediaController = require("./../controllers/mediaController.js");
 var EmailTemplate = require("./../models/emailTemplateModel.js");
 var AppSetting = require("./../models/appSettingModel.js");
 
+// Import journal controller functions for direct calls (no HTTP)
+var journalController = require("./journalControllerV2.js");
+
 var async_lib = require("async");
 
 var nodemailer = require("nodemailer");
@@ -48,7 +51,7 @@ async function increamentStreamPrice(streamId, price, cent) {
   var centToUSD = cent / 100;
   var increamentedPrice = parseFloat(price + centToUSD).toFixed(2);
   await Capsule.update(
-    { _id: ObjectId(streamId) },
+    { _id: new ObjectId(streamId) },
     { $set: { Price: increamentedPrice } }
   );
 }
@@ -112,6 +115,8 @@ function __getEmailEngineDataSetsForKeyPost(
       } else {
         if (postObj.SelectedBlendImages.length) {
           selectBlendImageCounter++;
+          const blendConfig = postObj.SelectedBlendImages[selectBlendImageCounter];
+          
           if (
             postObj.SelectedBlendImages[selectBlendImageCounter].blendImage1 &&
             postObj.SelectedBlendImages[selectBlendImageCounter].blendImage2
@@ -120,6 +125,10 @@ function __getEmailEngineDataSetsForKeyPost(
               postObj.SelectedBlendImages[selectBlendImageCounter].blendImage1;
             emailDataSet.VisualUrls[1] =
               postObj.SelectedBlendImages[selectBlendImageCounter].blendImage2;
+          } else if (blendConfig.image1Url && blendConfig.image2Url) {
+            // Fallback: try image1Url/image2Url format
+            emailDataSet.VisualUrls[0] = blendConfig.image1Url;
+            emailDataSet.VisualUrls[1] = blendConfig.image2Url;
           }
 
           emailDataSet.BlendMode = postObj.SelectedBlendImages[
@@ -127,6 +136,13 @@ function __getEmailEngineDataSetsForKeyPost(
           ].blendMode
             ? postObj.SelectedBlendImages[selectBlendImageCounter].blendMode
             : "hard-light";
+
+          // Populate SelectedKeywords from the blend configuration
+          emailDataSet.SelectedKeywords = postObj.SelectedBlendImages[
+            selectBlendImageCounter
+          ].Keywords
+            ? postObj.SelectedBlendImages[selectBlendImageCounter].Keywords
+            : [];
 
           if (
             selectBlendImageCounter ==
@@ -296,6 +312,8 @@ function __getEmailEngineDataSetsFromSelectedBlendImages_NDays(
       } else {
         if (currentPostObj.SelectedBlendImages.length) {
           selectBlendImageCounter = selectBlendImageCounter + 1;
+          const blendConfig = currentPostObj.SelectedBlendImages[selectBlendImageCounter];
+          
           if (
             currentPostObj.SelectedBlendImages[selectBlendImageCounter]
               .blendImage1 &&
@@ -310,6 +328,10 @@ function __getEmailEngineDataSetsFromSelectedBlendImages_NDays(
               currentPostObj.SelectedBlendImages[
                 selectBlendImageCounter
               ].blendImage2;
+          } else if (blendConfig.image1Url && blendConfig.image2Url) {
+            // Fallback: try image1Url/image2Url format
+            emailDataSet.VisualUrls[0] = blendConfig.image1Url;
+            emailDataSet.VisualUrls[1] = blendConfig.image2Url;
           }
 
           emailDataSet.BlendMode = currentPostObj.SelectedBlendImages[
@@ -318,6 +340,13 @@ function __getEmailEngineDataSetsFromSelectedBlendImages_NDays(
             ? currentPostObj.SelectedBlendImages[selectBlendImageCounter]
                 .blendMode
             : "hard-light";
+
+          // Populate SelectedKeywords from the blend configuration
+          emailDataSet.SelectedKeywords = currentPostObj.SelectedBlendImages[
+            selectBlendImageCounter
+          ].Keywords
+            ? currentPostObj.SelectedBlendImages[selectBlendImageCounter].Keywords
+            : [];
 
           if (
             selectBlendImageCounter ==
@@ -376,33 +405,35 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
     if (firstTimeFlag) {
       //1) fetch all saved SyncedPosts
       var conditions = {
-        CapsuleId: ObjectId(StreamId),
+        CapsuleId: new ObjectId(StreamId),
         IsDeleted: false,
       };
       var allSyncedPosts = await SyncedPost.find(conditions).sort({
         "EmailEngineDataSets.DateOfDelivery": 1,
       });
+      
+      console.log(`📧 First purchase - Found ${allSyncedPosts.length} SyncedPosts created by API calls`);
 
       //2) save SyncedPostsMap here
       var dataToSave = {
-        CapsuleId: ObjectId(StreamId),
+        CapsuleId: new ObjectId(StreamId),
         SyncedPosts: allSyncedPosts,
       };
       await SyncedPostsMap(dataToSave).save();
 
       //3) fetch SyncedPostsMap
       var allSyncedPostsMap = await SyncedPostsMap.findOne({
-        CapsuleId: ObjectId(StreamId),
+        CapsuleId: new ObjectId(StreamId),
         IsDeleted: false,
         //"SyncedPosts.EmailEngineDataSets.DateOfDelivery" : {$gte : todayEnd}
       });
 
       //4) delete old records
       var conditions = {
-        CapsuleId: ObjectId(StreamId),
+        CapsuleId: new ObjectId(StreamId),
         IsDeleted: false,
       };
-      await SyncedPost.remove(conditions);
+      await SyncedPost.deleteMany(conditions);
 
       //5) getEmailSchedules based on frequency
       var CreatedOn = Date.now();
@@ -410,6 +441,8 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
         __getEmailEngineDataSetsBasedOnMonthAndFreq(CapsuleData);
 
       //6) reMap email schedules based on email schedules and SyncedPostsMap
+      allSyncedPostsMap.SyncedPosts = allSyncedPostsMap.SyncedPosts || [];
+      
       for (var i = 0; i < EmailEngineDataSets.length; i++) {
         var NoOfDays = EmailEngineDataSets[i].AfterDays
           ? parseInt(EmailEngineDataSets[i].AfterDays)
@@ -419,7 +452,6 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
             ? getDateIncrementedBy_CreatedOn_GroupStream(NoOfDays, CreatedOn)
             : getDateIncrementedBy_CreatedOn(NoOfDays, CreatedOn, 5);
 
-        allSyncedPostsMap.SyncedPosts = allSyncedPostsMap.SyncedPosts || [];
         if (allSyncedPostsMap.SyncedPosts[i]) {
           var tmpObj = allSyncedPostsMap.SyncedPosts[i];
           tmpObj.EmailEngineDataSets[0].AfterDays =
@@ -427,16 +459,17 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
           tmpObj.EmailEngineDataSets[0].DateOfDelivery =
             EmailEngineDataSets[i].DateOfDelivery;
           await SyncedPost(tmpObj).save();
-          console.log("--- SyncedPost.saved ---");
         }
       }
+      
+      console.log(`✅ Remapped ${allSyncedPostsMap.SyncedPosts.length} SyncedPosts`);
       returnVal = true;
     } else {
       //1) fetch SyncedPostsMap
       var allSyncedPostsMap = await SyncedPostsMap.aggregate([
         {
           $match: {
-            CapsuleId: ObjectId(StreamId),
+            CapsuleId: new ObjectId(StreamId),
             IsDeleted: false,
             "SyncedPosts.EmailEngineDataSets.DateOfDelivery": { $gt: todayEnd },
           },
@@ -444,7 +477,7 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
         { $unwind: "$SyncedPosts" },
         {
           $match: {
-            CapsuleId: ObjectId(StreamId),
+            CapsuleId: new ObjectId(StreamId),
             IsDeleted: false,
             "SyncedPosts.EmailEngineDataSets.DateOfDelivery": { $gt: todayEnd },
           },
@@ -469,11 +502,11 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
 
       //3) delete old records after currentDate
       var conditions = {
-        CapsuleId: ObjectId(StreamId),
+        CapsuleId: new ObjectId(StreamId),
         IsDeleted: false,
         "EmailEngineDataSets.DateOfDelivery": { $gt: todayEnd },
       };
-      await SyncedPost.remove(conditions);
+      await SyncedPost.deleteMany(conditions);
 
       //4) reMap SyncedPosts based on currentDate, email schedules and SyncedPostsMap
       for (var i = 0; i < EmailEngineDataSets.length; i++) {
@@ -521,7 +554,7 @@ async function AreSyncedPostsAlreadyThere(StreamId) {
   var firstTimeFlag = false;
   try {
     var alreadySavedRecords = await SyncedPost.find({
-      CapsuleId: ObjectId(StreamId),
+      CapsuleId: new ObjectId(StreamId),
     });
     alreadySavedRecords = Array.isArray(alreadySavedRecords)
       ? alreadySavedRecords
@@ -539,14 +572,13 @@ async function __streamPagePostNow(
   PageData,
   shareWithEmail,
   req,
-  CapsuleData
+  CapsuleData,
+  NewOwnerId = null // Optional: override PostedBy for purchased streams
 ) {
-  console.log(
-    "----------------- __streamPagePostNow STARTED ----------------------------"
-  );
-  console.log(
-    `--- __streamPagePostNow --- ${shareWithEmail} ---- ${CapsuleData._id} ---- ${PagePosts.length}`
-  );
+  console.log(`📧 Processing ${PagePosts.length} stream posts for ${shareWithEmail}`);
+  if (NewOwnerId) {
+    console.log(`📧 Using new owner ID for SyncedPosts: ${NewOwnerId}`);
+  }
 
   //first check if this is the first time
   var firstTimeFlag = await AreSyncedPostsAlreadyThere(CapsuleData._id);
@@ -590,6 +622,24 @@ async function __streamPagePostNow(
 
   for (let loop365 = 0; loop365 < PagePosts2.length; loop365++) {
     var postObj = PagePosts2[loop365];
+    
+    // Check for blend images in both formats
+    const blendImageCount = postObj.BlendSettings?.allBlendConfigurations?.length || 
+                           postObj.SelectedBlendImages?.length || 
+                           0;
+    
+    console.log(`\n📝 Processing Post ${loop365 + 1}/${PagePosts2.length}:`, {
+      _id: postObj._id,
+      MediaType: postObj.MediaType,
+      PostType: postObj.PostType,
+      hasThumbnail: !!postObj.thumbnail,
+      hasMediaURL: !!postObj.MediaURL,
+      hasPostStatement: !!postObj.PostStatement,
+      hasContent: !!postObj.Content,
+      hasBlendImages: blendImageCount,
+      PostedBy: postObj.PostedBy
+    });
+    
     var PostImage = postObj.thumbnail ? postObj.thumbnail : postObj.MediaURL;
     PostImage = PostImage ? PostImage : "";
     PostImage =
@@ -612,7 +662,7 @@ async function __streamPagePostNow(
       CapsuleId: CapsuleData._id ? CapsuleData._id : null,
       PageId: PageData._id ? PageData._id : null,
       PostId: postObj._id,
-      PostOwnerId: postObj.PostedBy,
+      PostOwnerId: NewOwnerId || postObj.PostedBy, // Use new owner if provided (for purchased streams)
       ReceiverEmails: shareWithEmail ? [shareWithEmail] : [],
       PostImage: PostImage,
       PostStatement: PostStatement,
@@ -658,11 +708,6 @@ async function __streamPagePostNow(
         : [];
     }
 
-    console.log(
-      "------------ inputObj.EmailEngineDataSets.length = ",
-      inputObj.EmailEngineDataSets.length
-    );
-
     for (let i365 = 0; i365 < inputObj.EmailEngineDataSets.length; i365++) {
       inputObj.EmailEngineDataSets[i365].TextAboveVisual = inputObj
         .EmailEngineDataSets[i365].TextAboveVisual
@@ -680,6 +725,34 @@ async function __streamPagePostNow(
         : "";
     }
 
+    // Support both SelectedBlendImages and BlendSettings (collabmedia-backend uses BlendSettings)
+    // ⚠️ IMPORTANT: Convert BlendSettings BEFORE calling __getEmailEngineDataSetsFromSelectedBlendImages_NDays
+    if (postObj.BlendSettings && postObj.BlendSettings.allBlendConfigurations) {
+      // Map the structure - allBlendConfigurations already has blendImage1/2 properties
+      postObj.SelectedBlendImages = postObj.BlendSettings.allBlendConfigurations.map(config => ({
+        blendImage1: config.blendImage1 || config.image1Url,  // Try blendImage1 first (correct format)
+        blendImage2: config.blendImage2 || config.image2Url,  // Try blendImage2 first (correct format)
+        blendMode: config.blendMode,
+        lightness1: config.lightness1,
+        lightness2: config.lightness2,
+        Keywords: config.Keywords || config.SelectedKeywords || []
+      }));
+    } else {
+      postObj.SelectedBlendImages = postObj.SelectedBlendImages ? postObj.SelectedBlendImages : [];
+      
+      // If SelectedBlendImages exists but doesn't have blendImage1/2, map it
+      if (postObj.SelectedBlendImages.length > 0 && !postObj.SelectedBlendImages[0].blendImage1) {
+        postObj.SelectedBlendImages = postObj.SelectedBlendImages.map(config => ({
+          blendImage1: config.blendImage1 || config.image1Url,
+          blendImage2: config.blendImage2 || config.image2Url,
+          blendMode: config.blendMode,
+          lightness1: config.lightness1,
+          lightness2: config.lightness2,
+          Keywords: config.Keywords || config.SelectedKeywords || []
+        }));
+      }
+    }
+    
     //get the selected blend images of the post if there is any else use the default procedure.
     //inputObj.EmailEngineDataSets = __getEmailEngineDataSetsFromSelectedBlendImages (postObj, PagePosts2, inputObj.EmailEngineDataSets, CapsuleData);
     inputObj.EmailEngineDataSets =
@@ -690,11 +763,9 @@ async function __streamPagePostNow(
         CapsuleData,
         1
       );
-    postObj.SelectedBlendImages = postObj.SelectedBlendImages
-      ? postObj.SelectedBlendImages
-      : [];
 
     if (inputObj.IsOnetimeStream || postObj.PostType == "GeneralPost") {
+      console.log(`📧 Post ${loop365 + 1}: Onetime/General path - calling function directly`);
       if (
         inputObj.PageId &&
         inputObj.PostId &&
@@ -702,31 +773,32 @@ async function __streamPagePostNow(
         inputObj.EmailEngineDataSets &&
         inputObj.ReceiverEmails.length
       ) {
-        //now call the api.
-        var request_url =
-          "https://www.scrpt.com/journal/streamPage__WithSelectedBlendCase";
-        //var request_url = 'https://www.scrpt.com/journal/streamPage';
-        var response = await axios.post(request_url, inputObj);
-        response = response || {};
-        response.data = response.data ? response.data : {};
-        response.data.code = response.data.code ? response.data.code : null;
-        console.log(
-          "------------ AXIOS ---- Post has been streamed successfully using api call ---------------",
-          response.data.code
-        );
-
-        /*
-				axios.post(request_url, inputObj)
-					.then(response => {
-						response.data = response.data ? response.data : {};
-						response.data.code = response.data.code ? response.data.code : null;
-						console.log("------------ AXIOS ---- Post has been streamed successfully using api call ---------------", response.data.code);
-					});
-				*/
+        // Call function directly instead of HTTP
+        const mockReq = { body: inputObj, session: req.session };
+        const mockRes = { 
+          json: (data) => {
+            console.log(`✅ Function call successful for post ${loop365 + 1}, response code:`, data.code);
+            return data;
+          }
+        };
+        await journalController.streamPage__WithSelectedBlendCase(mockReq, mockRes);
+      } else {
+        console.log(`⚠️ Post ${loop365 + 1}: Onetime/General path - conditions NOT met, skipping`);
       }
     } else {
       if (postObj.SelectedBlendImages.length) {
-        //inputObj.EmailEngineDataSets = NewEmailEngineDataSets;
+        console.log(`📧 Post ${loop365 + 1}: Has SelectedBlendImages - checking API conditions`);
+        
+        // Debug: Check each condition
+        const conditionCheck = {
+          hasPageId: !!inputObj.PageId,
+          hasPostId: !!inputObj.PostId,
+          hasPostOwnerId: !!inputObj.PostOwnerId,
+          hasEmailEngineDataSets: !!inputObj.EmailEngineDataSets,
+          hasReceiverEmails: inputObj.ReceiverEmails && inputObj.ReceiverEmails.length > 0,
+          hasPostImage: !!inputObj.PostImage
+        };
+        console.log(`🔍 Post ${loop365 + 1} conditions:`, JSON.stringify(conditionCheck, null, 2));
 
         if (
           inputObj.PageId &&
@@ -734,62 +806,56 @@ async function __streamPagePostNow(
           inputObj.PostOwnerId &&
           inputObj.EmailEngineDataSets &&
           inputObj.ReceiverEmails.length &&
-          inputObj.PostImage &&
-          inputObj.SurpriseSelectedWords
+          inputObj.PostImage
         ) {
-          //console.log('On right flow - https://www.scrpt.com/journal/streamPage__WithSelectedBlendCase - ', inputObj.EmailEngineDataSets);
-          //now call the api.
-          var request_url =
-            "https://www.scrpt.com/journal/streamPage__WithSelectedBlendCase";
-          //var request_url = 'https://www.scrpt.com/journal/streamPage';
-          var response = await axios.post(request_url, inputObj);
-          response = response || {};
-          response.data = response.data ? response.data : {};
-          response.data.code = response.data.code ? response.data.code : null;
-          console.log(
-            "------------ AXIOS ---- Post has been streamed successfully using api call ---------------",
-            response.data.code
-          );
-
-          /*
-					axios.post(request_url, inputObj)
-						.then(response => {
-							response.data = response.data ? response.data : {};
-							response.data.code = response.data.code ? response.data.code : null;
-							console.log("------------ AXIOS ---- Post has been streamed successfully using api call ---------------", response.data.code);
-						});
-					*/
+          // Call function directly instead of HTTP
+          const mockReq = { body: inputObj, session: req.session };
+          const mockRes = { 
+            json: (data) => {
+              console.log(`✅ Function call successful for post ${loop365 + 1}, response code:`, data.code);
+              return data;
+            }
+          };
+          await journalController.streamPage__WithSelectedBlendCase(mockReq, mockRes);
+        } else {
+          console.log(`⚠️ Post ${loop365 + 1}: Skipping due to missing required fields`);
         }
       } else {
+        console.log(`📧 Post ${loop365 + 1}: NO SelectedBlendImages - checking streamPage API conditions`);
+        
+        // Debug: Check each condition
+        const conditionCheck = {
+          hasPageId: !!inputObj.PageId,
+          hasPostId: !!inputObj.PostId,
+          hasPostOwnerId: !!inputObj.PostOwnerId,
+          hasEmailEngineDataSets: inputObj.EmailEngineDataSets && inputObj.EmailEngineDataSets.length > 0,
+          emailDataSetsLength: inputObj.EmailEngineDataSets ? inputObj.EmailEngineDataSets.length : 0,
+          hasReceiverEmails: inputObj.ReceiverEmails && inputObj.ReceiverEmails.length > 0,
+          receiverEmailsCount: inputObj.ReceiverEmails ? inputObj.ReceiverEmails.length : 0,
+          hasPostImage: !!inputObj.PostImage,
+          PostImageValue: inputObj.PostImage || 'NULL'
+        };
+        console.log(`🔍 Post ${loop365 + 1} conditions:`, JSON.stringify(conditionCheck, null, 2));
+        
         if (
           inputObj.PageId &&
           inputObj.PostId &&
           inputObj.PostOwnerId &&
           inputObj.EmailEngineDataSets.length &&
           inputObj.ReceiverEmails.length &&
-          inputObj.PostImage &&
-          inputObj.SurpriseSelectedWords
+          inputObj.PostImage
         ) {
-          //now call the api.
-          var request_url = "https://www.scrpt.com/journal/streamPage";
-
-          var response = await axios.post(request_url, inputObj);
-          response = response || {};
-          response.data = response.data ? response.data : {};
-          response.data.code = response.data.code ? response.data.code : null;
-          console.log(
-            "------------ AXIOS ---- Post has been streamed successfully using api call ---------------",
-            response.data.code
-          );
-
-          /*
-					axios.post(request_url, inputObj)
-						.then(response => {
-							response.data = response.data ? response.data : {};
-							response.data.code = response.data.code ? response.data.code : null;
-							console.log("------------ AXIOS ---- Post has been streamed successfully using api call ---------------", response.data.code);
-						});
-					*/
+          // Call function directly instead of HTTP
+          const mockReq = { body: inputObj, session: req.session };
+          const mockRes = { 
+            json: (data) => {
+              console.log(`✅ Function call successful for post ${loop365 + 1}, response code:`, data.code);
+              return data;
+            }
+          };
+          await journalController.streamPost(mockReq, mockRes);
+        } else {
+          console.log(`⚠️ Post ${loop365 + 1}: Skipping due to missing required fields`);
         }
       }
     }
@@ -829,7 +895,7 @@ async function __streamPagePostNow(
       CapsuleId: CapsuleData._id ? CapsuleData._id : null,
       PageId: PageData._id ? PageData._id : null,
       PostId: postObj._id,
-      PostOwnerId: postObj.PostedBy,
+      PostOwnerId: NewOwnerId || postObj.PostedBy, // Use new owner if provided (for purchased streams)
       ReceiverEmails: shareWithEmail ? [shareWithEmail] : [],
       PostImage: PostImage,
       PostStatement: PostStatement,
@@ -865,11 +931,6 @@ async function __streamPagePostNow(
         : [];
     }
 
-    console.log(
-      "------------ inputObj.EmailEngineDataSets.length = ",
-      inputObj.EmailEngineDataSets.length
-    );
-
     for (let i366 = 0; i366 < inputObj.EmailEngineDataSets.length; i366++) {
       inputObj.EmailEngineDataSets[i366].TextAboveVisual = inputObj
         .EmailEngineDataSets[i366].TextAboveVisual
@@ -894,9 +955,12 @@ async function __streamPagePostNow(
       inputObj.EmailEngineDataSets,
       CapsuleData
     );
-    postObj.SelectedBlendImages = postObj.SelectedBlendImages
-      ? postObj.SelectedBlendImages
-      : [];
+    // Support both SelectedBlendImages and BlendSettings for KeyPosts
+    if (postObj.BlendSettings && postObj.BlendSettings.allBlendConfigurations) {
+      postObj.SelectedBlendImages = postObj.BlendSettings.allBlendConfigurations;
+    } else {
+      postObj.SelectedBlendImages = postObj.SelectedBlendImages ? postObj.SelectedBlendImages : [];
+    }
 
     var KeyPost_case = true; //inputObj.IsOnetimeStream
     if (KeyPost_case) {
@@ -907,18 +971,15 @@ async function __streamPagePostNow(
         inputObj.EmailEngineDataSets &&
         inputObj.ReceiverEmails.length
       ) {
-        //now call the api.
-        var request_url =
-          "https://www.scrpt.com/journal/streamPage__WithSelectedBlendCase";
-        //var request_url = 'https://www.scrpt.com/journal/streamPage';
-        var response = await axios.post(request_url, inputObj);
-        response = response || {};
-        response.data = response.data ? response.data : {};
-        response.data.code = response.data.code ? response.data.code : null;
-        console.log(
-          "------------ AXIOS ---- Post has been streamed successfully using api call ---------------",
-          response.data.code
-        );
+        // Call function directly instead of HTTP
+        const mockReq = { body: inputObj, session: req.session };
+        const mockRes = { 
+          json: (data) => {
+            console.log(`✅ KeyPost function call successful, response code:`, data.code);
+            return data;
+          }
+        };
+        await journalController.streamPage__WithSelectedBlendCase(mockReq, mockRes);
       }
     } else {
       if (postObj.SelectedBlendImages.length) {
@@ -933,18 +994,15 @@ async function __streamPagePostNow(
           inputObj.PostImage &&
           inputObj.SurpriseSelectedWords
         ) {
-          //now call the api.
-          var request_url =
-            "https://www.scrpt.com/journal/streamPage__WithSelectedBlendCase";
-          //var request_url = 'https://www.scrpt.com/journal/streamPage';
-          var response = await axios.post(request_url, inputObj);
-          response = response || {};
-          response.data = response.data ? response.data : {};
-          response.data.code = response.data.code ? response.data.code : null;
-          console.log(
-            "------------ AXIOS ---- Post has been streamed successfully using api call ---------------",
-            response.data.code
-          );
+          // Call function directly instead of HTTP
+          const mockReq = { body: inputObj, session: req.session };
+          const mockRes = { 
+            json: (data) => {
+              console.log(`✅ KeyPost blend function call successful, response code:`, data.code);
+              return data;
+            }
+          };
+          await journalController.streamPage__WithSelectedBlendCase(mockReq, mockRes);
         }
       } else {
         if (
@@ -956,31 +1014,26 @@ async function __streamPagePostNow(
           inputObj.PostImage &&
           inputObj.SurpriseSelectedWords
         ) {
-          //now call the api.
-          var request_url = "https://www.scrpt.com/journal/streamPage";
-          var response = await axios.post(request_url, inputObj);
-          response = response || {};
-          response.data = response.data ? response.data : {};
-          response.data.code = response.data.code ? response.data.code : null;
-          console.log(
-            "------------ AXIOS ---- Post has been streamed successfully using api call ---------------",
-            response.data.code
-          );
+          // Call function directly instead of HTTP
+          const mockReq = { body: inputObj, session: req.session };
+          const mockRes = { 
+            json: (data) => {
+              console.log(`✅ KeyPost streamPost function call successful, response code:`, data.code);
+              return data;
+            }
+          };
+          await journalController.streamPost(mockReq, mockRes);
         }
       }
     }
   }
 
-  console.log(
-    "----------------- __streamPagePostNow COMPLETED now actually making the map as per settings ----------------------------"
-  );
-
   if (await mapPostsAsPerSettings(CapsuleData, firstTimeFlag)) {
-    console.log(
-      "----------------- __streamPagePostNow SUCCESSFULLY COMPLETED for NORMAL Stream Case - BUY_NOW Case ----------------------------"
-    );
+    // Check final SyncedPosts count
+    const finalSyncedPosts = await SyncedPost.find({ CapsuleId: new ObjectId(CapsuleData._id) });
+    console.log(`✅ Stream setup complete. Final SyncedPosts count: ${finalSyncedPosts.length}`);
   } else {
-    console.log("__streamPagePostNow Final Step - Something went wrong");
+    console.log("❌ Stream setup failed");
   }
 }
 
@@ -1340,7 +1393,7 @@ var createCelebrityInstance = async function (req, res) {
   var conditions_celebrity = {
     CreaterId: OwnerId,
     OwnerId: OwnerId,
-    OriginatedFrom: ObjectId(CapsuleId),
+    OriginatedFrom: new ObjectId(CapsuleId),
     "LaunchSettings.Audience": "CELEBRITY",
     "LaunchSettings.CapsuleFor": "Stream",
     "LaunchSettings.StreamType": "Group",
@@ -1360,7 +1413,7 @@ var createCelebrityInstance = async function (req, res) {
   }
 
   var conditions = {
-    _id: ObjectId(CapsuleId),
+    _id: new ObjectId(CapsuleId),
     CreaterId: OwnerId,
     OwnerId: OwnerId,
     "LaunchSettings.Audience": "BUYERS",
@@ -1369,7 +1422,7 @@ var createCelebrityInstance = async function (req, res) {
   };
 
   var CapsuleData = await Capsule.findOne(conditions);
-  var owner = await User.findOne({ _id: ObjectId(OwnerId) });
+  var owner = await User.findOne({ _id: new ObjectId(OwnerId) });
   CapsuleData = typeof CapsuleData == "object" ? CapsuleData : null;
   owner = typeof owner == "object" ? owner : null;
 
@@ -1575,8 +1628,8 @@ function capsule__createNewInstance_Celebrity(CapsuleData, owner, req) {
 
             //update store capsule with CelebrityInstanceId
             await Capsule.update(
-              { _id: ObjectId(__capsuleId) },
-              { $set: { CelebrityInstanceId: ObjectId(newCapsuleId) } }
+              { _id: new ObjectId(__capsuleId) },
+              { $set: { CelebrityInstanceId: new ObjectId(newCapsuleId) } }
             );
 
             Chapter.find(conditions, fields)

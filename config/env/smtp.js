@@ -6,66 +6,63 @@
 module.exports = {
   // Development SMTP Configuration
   development: {
-    // Primary SMTP Configuration (GoDaddy - Working)
+    // Primary SMTP Configuration (IONOS - From Dashboard)
     primary: {
-      host: process.env.SMTP_HOST || 'smtpout.secureserver.net',
+      host: process.env.SMTP_HOST || 'smtp.ionos.com',
       port: parseInt(process.env.SMTP_PORT) || 465,
-      secure: true, // true for 465, false for 587
+      secure: true, // true for port 465 (SSL/TLS)
       requireTLS: false,
       auth: {
-        user: process.env.SMTP_USER || 'darshan@scrpt.com',
-        pass: process.env.SMTP_PASS || 'I9QjSU9y&bqcEI83rq0d'
+        user: process.env.SMTP_USER || 'hello@lifeattimes.com',
+        pass: process.env.SMTP_PASS || 'B*T0XuwTtKN&kM@a'
       },
-      timeout: 30000, // 30 seconds timeout
-      connectionTimeout: 30000, // 30 seconds connection timeout
+      timeout: 30000,
+      connectionTimeout: 30000,
       tls: {
-        ciphers: 'SSLv3',
         rejectUnauthorized: false
       },
-      connectionTimeout: 60000, // 60 seconds
-      greetingTimeout: 30000,   // 30 seconds
-      socketTimeout: 60000      // 60 seconds
+      greetingTimeout: 30000,
+      socketTimeout: 60000
     },
 
     // Fallback SMTP Configuration (Gmail)
     fallback: {
       service: 'Gmail',
       auth: {
-        user: process.env.SMTP_GMAIL_USER || 'collabmedia.scrpt@gmail.com',
-        pass: process.env.SMTP_GMAIL_PASS || 'scrpt123_2014collabmedia#1909'
+        user: 'collabmedia.scrpt@gmail.com',
+        pass: 'scrpt123_2014collabmedia#1909'
       }
     },
 
     // Email settings
     email: {
-      from: process.env.SMTP_FROM || 'Scrpt <darshan@scrpt.com>',
-      replyTo: process.env.SMTP_REPLY_TO || 'darshan@scrpt.com',
-      senderLine: process.env.SMTP_SENDER_LINE || 'Scrpt <darshan@scrpt.com>'
+      from: process.env.SMTP_FROM || 'Scrpt <hello@lifeattimes.com>',
+      replyTo: process.env.SMTP_REPLY_TO || 'hello@lifeattimes.com',
+      senderLine: process.env.SMTP_FROM || 'Scrpt <hello@lifeattimes.com>'
     }
   },
 
   // Production SMTP Configuration
   production: {
     primary: {
-      host: process.env.SMTP_HOST || 'smtpout.secureserver.net',
+      host: process.env.SMTP_HOST || 'smtp.ionos.com',
       port: parseInt(process.env.SMTP_PORT) || 465,
-      secure: true, // true for 465, false for 587
+      secure: true, // true for port 465 (SSL/TLS)
       requireTLS: false,
       auth: {
-        user: process.env.SMTP_USER || 'darshan@scrpt.com',
-        pass: process.env.SMTP_PASS || 'I9QjSU9y&bqcEI83rq0d'
+        user: process.env.SMTP_USER || 'hello@lifeattimes.com',
+        pass: process.env.SMTP_PASS || 'B*T0XuwTtKN&kM@a'
       },
       timeout: 30000, // 30 seconds timeout
       connectionTimeout: 30000, // 30 seconds connection timeout
       tls: {
-        ciphers: 'SSLv3',
         rejectUnauthorized: false
       }
     },
     email: {
-      from: process.env.SMTP_FROM || 'Scrpt <darshan@scrpt.com>',
-      replyTo: process.env.SMTP_REPLY_TO || 'darshan@scrpt.com',
-      senderLine: process.env.SMTP_SENDER_LINE || 'Scrpt <darshan@scrpt.com>'
+      from: process.env.SMTP_FROM || 'Scrpt <hello@lifeattimes.com>',
+      replyTo: process.env.SMTP_REPLY_TO || 'hello@lifeattimes.com',
+      senderLine: process.env.SMTP_FROM || 'Scrpt <hello@lifeattimes.com>'
     }
   },
 

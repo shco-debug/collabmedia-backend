@@ -2300,51 +2300,244 @@ var InvitationEngineCron__API = function(req , res){
 }
 
 
+// Email sending helper function
+async function sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, newHtml, subject, EmailBeaconImg) {
+    const transporter = nodemailer.createTransport(process.EMAIL_ENGINE.info.smtpOptions);
+    const to = shareWithEmail;
+
+    newHtml = newHtml.replace(/{RecipientName}/g, RecipientName);
+    newHtml = newHtml.replace(/{EmailBeaconImg}/g, EmailBeaconImg);
+    newHtml = newHtml.replace(/{SubscriberId}/g, CommonAlgo.commonModule.strToCustomHash(to));
+    subject = subject.replace(/{RecipientName}/g, RecipientName);
+    subject = subject.replace(/{SharedByUserName}/g, SharedByUserName);
+    
+    const mailOptions = {
+        from: process.EMAIL_ENGINE.info.senderLine,
+        to: to,
+        subject: subject,
+        text: process.HOST_URL + '/login',
+        html: newHtml
+    };
+    
+    const info = await transporter.sendMail(mailOptions);
+    console.log('Message sent to: ' + to + (info.response || ''));
+}
+
 //SynedPostEmailCron();
 var SynedPostEmailCron = async function () {
     console.log("---------------------------------SynedPostEmailCron START----------------------------------------");
     try {
-        var conditions = {
-            "IsDeleted" : false,
-            "Status" : true,
-            "EmailEngineDataSets.Delivered" : false
+        const conditions = {
+            "IsDeleted": false,
+            "Status": true,
+            "EmailEngineDataSets.Delivered": false
         };
-        var todayStart = new Date();
-        todayStart.setHours(0,0,0,0);
+        
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
 
-        var todayEnd = new Date();
-        todayEnd.setHours(23,59,59,999);
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
 
         console.log("Cron job looking for emails with DateOfDelivery between:", todayStart, "and", todayEnd);
-        conditions["EmailEngineDataSets.DateOfDelivery"] = {$gte: todayStart, $lte : todayEnd};
-        console.log("Cron job conditions:", JSON.stringify(conditions));
 
-        try {
             const syncedPostsResults = await SyncedPost.aggregate([
                 { $match: conditions },
-                { $unwind : "$EmailEngineDataSets" },
-                { $match : { "EmailEngineDataSets.DateOfDelivery": {$gte: todayStart, $lte : todayEnd}, "EmailEngineDataSets.Delivered" : false } }
-            ]);
+            { $unwind: "$EmailEngineDataSets" },
+            {
+                $project: {
+                    _id: "$_id",
+                    CapsuleId: "$CapsuleId",
+                    PageId: "$PageId",
+                    PostId: "$PostId",
+                    PostStatement: "$PostStatement",
+                    SyncedBy: "$SyncedBy",
+                    ReceiverEmails: "$ReceiverEmails",
+                    CreatedOn: "$CreatedOn",
+                    Delivered: "$EmailEngineDataSets.Delivered",
+                    VisualUrls: "$EmailEngineDataSets.VisualUrls",
+                    SoundFileUrl: "$EmailEngineDataSets.SoundFileUrl",
+                    TextAboveVisual: "$EmailEngineDataSets.TextAboveVisual",
+                    TextBelowVisual: "$EmailEngineDataSets.TextBelowVisual",
+                    DateOfDelivery: "$EmailEngineDataSets.DateOfDelivery",
+                    BlendMode: "$EmailEngineDataSets.BlendMode",
+                    EmailTemplate: "$EmailTemplate",
+                    Subject: "$EmailSubject",
+                    IsOnetimeStream: "$IsOnetimeStream",
+                    IsOnlyPostImage: "$IsOnlyPostImage"
+                }
+            },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "SyncedBy",
+                    foreignField: "_id",
+                    as: "SharedByUser"
+                }
+            },
+            {
+                $lookup: {
+                    from: "capsules",
+                    localField: "CapsuleId",
+                    foreignField: "_id",
+                    as: "CapsuleData"
+                }
+            },
+            { $match: { DateOfDelivery: { $gte: todayStart, $lte: todayEnd }, Delivered: false } }
+        ]).allowDiskUse(true);
             
             console.log("Cron job query returned:", syncedPostsResults.length, "results");
 
             if (syncedPostsResults.length === 0) {
                 console.log("No SyncedPosts to process.");
+            console.log("---------------------------------SynedPostEmailCron END----------------------------------------");
+            return;
             }
 
             for (let loop = 0; loop < syncedPostsResults.length; loop++) {
-                var dataRecord = syncedPostsResults[loop];
-                console.log("Processing email record:", dataRecord._id, "for recipient:", dataRecord.ReceiverEmails);
+            const dataRecord = syncedPostsResults[loop];
+            
+            // Set defaults
+            dataRecord.VisualUrls = dataRecord.VisualUrls || [];
+            dataRecord.PostStatement = dataRecord.PostStatement || "";
+            dataRecord.Subject = dataRecord.Subject || null;
+            dataRecord.TextAboveVisual = dataRecord.TextAboveVisual || "";
+            dataRecord.TextBelowVisual = dataRecord.TextBelowVisual || "";
+            dataRecord.SoundFileUrl = dataRecord.SoundFileUrl || "";
+            dataRecord.BlendMode = dataRecord.BlendMode || 'hard-light';
+            dataRecord.EmailTemplate = dataRecord.EmailTemplate || 'ImaginativeThinker';
+            dataRecord.CapsuleData = Array.isArray(dataRecord.CapsuleData) && dataRecord.CapsuleData.length > 0 ? dataRecord.CapsuleData[0] : {};
+            dataRecord.CapsuleData.MetaData = dataRecord.CapsuleData.MetaData || {};
+            dataRecord.CapsuleData.MetaData.publisher = dataRecord.CapsuleData.MetaData.publisher || 'The Scrpt Co.';
 
-                try {
-                    var UserData = await User.find({ 'Email': {$in : dataRecord.ReceiverEmails}, Status: 1, IsDeleted : false }, { Name: true, Email : true, UnsubscribedStreams: true });
-                    console.log("Found", UserData.length, "users for recipients:", dataRecord.ReceiverEmails);
+            if (dataRecord.CapsuleData.IsDeleted) {
+                console.log("Skipping deleted capsule for SyncedPost:", dataRecord._id);
+                continue;
+            }
+
+            // Get blend images
+            let PostImage1 = "";
+            let PostImage2 = "";
+
+            if (dataRecord.VisualUrls.length == 1) {
+                PostImage1 = dataRecord.VisualUrls[0];
+                PostImage2 = dataRecord.VisualUrls[0];
+            } else if (dataRecord.VisualUrls.length == 2) {
+                PostImage1 = dataRecord.VisualUrls[0];
+                PostImage2 = dataRecord.VisualUrls[1];
+            }
+
+            // Clean PostStatement
+            let PostStatement = dataRecord.PostStatement;
+            PostStatement = PostStatement.replace(/style=/gi, '');
+            PostStatement = PostStatement.replace(/<h[1-6].*?(?=\>)\>/gi, '<span>');
+            PostStatement = PostStatement.replace(/<\/h[1-6].*?(?=\>)\>/gi, '</span>');
+            PostStatement = PostStatement.replace(/<strong.*?(?=\>)\>/gi, '<span>');
+            PostStatement = PostStatement.replace(/<\/strong.*?(?=\>)\>/gi, '</span>');
+            PostStatement = PostStatement.replace(/<a.*?(?=\>)\>/gi, '<span>');
+            PostStatement = PostStatement.replace(/<\/a.*?(?=\>)\>/gi, '</span>');
+
+            const $ = cheerio.load(PostStatement);
+            $('.post-tooltip-box').remove();
+            PostStatement = $.html();
+
+            // Get email template
+            let templateName = dataRecord.EmailTemplate == 'PracticalThinker' ? "Surprise__Post_2Image" : "Surprise__Post";
+            
+            // Check for blended image
+            const blendImage1 = PostImage1;
+            const blendImage2 = PostImage2;
+            const blendOption = dataRecord.BlendMode;
+            let blendedImage = null;
+
+            if (blendImage1 && blendImage2 && blendOption) {
+                const data = blendImage1 + blendImage2 + blendOption;
+                const hexcode = crypto.createHash('md5').update(data).digest("hex");
+                if (hexcode) {
+                    const file_name = hexcode + '.png';
+                    const uploadDir = __dirname + '/../../media-assets/streamposts';
+
+                    if (fs.existsSync(uploadDir + "/" + file_name)) {
+                        blendedImage = `https://www.scrpt.com/streamposts/${hexcode}.png`;
+                        templateName = templateName == "Surprise__Post_2Image" ? "Surprise__Post_2Image_OUTLOOK" : "Surprise__Post_OUTLOOK";
+                    }
+                }
+            }
+
+            if (!blendedImage && (blendImage1 == blendImage2)) {
+                blendedImage = blendImage1.replace('/Media/img/300/', '/Media/img/600/');
+                templateName = templateName == "Surprise__Post_2Image" ? "Surprise__Post_2Image_OUTLOOK" : "Surprise__Post_OUTLOOK";
+            }
+
+            // Try to find the template, with fallback to base template
+            let results = await EmailTemplate.find({ name: templateName }, {});
+            
+            // Fallback: if template not found, try without _OUTLOOK suffix
+            if (!results.length && templateName.includes('_OUTLOOK')) {
+                templateName = templateName.replace('_OUTLOOK', '');
+                console.log(`⚠️ Template not found, falling back to: ${templateName}`);
+                results = await EmailTemplate.find({ name: templateName }, {});
+            }
+            
+            // Fallback: if Surprise__Post_2Image not found, use Surprise__Post
+            if (!results.length && templateName.includes('_2Image')) {
+                templateName = templateName.replace('_2Image', '');
+                console.log(`⚠️ Template not found, falling back to: ${templateName}`);
+                results = await EmailTemplate.find({ name: templateName }, {});
+            }
+            
+            if (!results.length) {
+                console.log("❌ No email template found for:", templateName, "- skipping SyncedPost:", dataRecord._id);
+                continue;
+            }
+            
+            console.log(`✅ Using email template: ${templateName}`);
+
+            // Handle sound file
+            if (dataRecord.SoundFileUrl) {
+                dataRecord.SoundFileUrl = '<p style="display: block;"><span style="font-size: 18px;"><br></span></p><p style="clear: both;display: block;"><em style="font-size: 18px; background-color: transparent;"><video width="320" height="240" controls><source src="' + dataRecord.SoundFileUrl + '" type="video/mp4">Your browser does not support the video tag.</video></em></p>';
+            }
+
+            const SharedByUser = Array.isArray(dataRecord.SharedByUser) && dataRecord.SharedByUser.length > 0 ? dataRecord.SharedByUser[0] : {};
+            const SharedByUserName = SharedByUser.Name ? SharedByUser.Name.split(' ')[0] : "";
+            const PostURL = "https://www.scrpt.com/streams?pid=" + dataRecord.CapsuleData._id + '__' + dataRecord.PostId + '__' + blendedImage;
+
+            const PostImage1_600 = PostImage1.replace('/Media/img/300/', '/Media/img/600/');
+            const PostImage2_600 = PostImage2.replace('/Media/img/300/', '/Media/img/600/');
+
+            let newHtml = results[0].description.replace(/{SharedByUserName}/g, SharedByUserName);
+            newHtml = newHtml.replace(/{PostImage1}/g, PostImage1_600);
+            newHtml = newHtml.replace(/{PostImage2}/g, PostImage2_600);
+            newHtml = newHtml.replace(/{TextAboveVisual}/g, dataRecord.TextAboveVisual);
+            newHtml = newHtml.replace(/{TextBelowVisual}/g, dataRecord.TextBelowVisual);
+            newHtml = newHtml.replace(/{PostStatement}/g, PostStatement);
+            newHtml = newHtml.replace(/{PostURL}/g, PostURL);
+            newHtml = newHtml.replace(/{SoundFileUrl}/g, dataRecord.SoundFileUrl);
+            newHtml = newHtml.replace(/{BlendMode}/g, dataRecord.BlendMode);
+            newHtml = newHtml.replace(/{BlendedImage}/g, blendedImage || '');
+            newHtml = newHtml.replace(/{publisher}/g, dataRecord.CapsuleData.MetaData.publisher);
+
+            let subject = dataRecord.Subject || results[0].subject || 'Scrpt - ' + SharedByUserName + ' shared a post with you!';
+            const EmailBeaconImg = PostImage1_600 || 'https://www.scrpt.com/assets/Media/img/300/default.png';
+
+            // Find users and send emails
+            try {
+                const UserData = await User.find({ 
+                    'Email': { $in: dataRecord.ReceiverEmails }, 
+                    Status: 1, 
+                    IsDeleted: false 
+                }, { 
+                    Name: true, 
+                    Email: true, 
+                    UnsubscribedStreams: true 
+                });
 
                     if (UserData.length) {
-                        for (var i = 0; i < UserData.length; i++) {
-                            var RecipientName = UserData[i].Name ? UserData[i].Name.split(' ')[0] : "";
-                            var shareWithEmail = UserData[i].Email ? UserData[i].Email : null;
-                            var userUnsubscribedStreams = UserData[i].UnsubscribedStreams || [];
+                    for (let i = 0; i < UserData.length; i++) {
+                        const RecipientName = UserData[i].Name ? UserData[i].Name.split(' ')[0] : "";
+                        const shareWithEmail = UserData[i].Email || null;
+                        const userUnsubscribedStreams = UserData[i].UnsubscribedStreams || [];
+
                             if (shareWithEmail && (userUnsubscribedStreams.indexOf(String(dataRecord.CapsuleId)) < 0)) {
                                 console.log("Attempting to send scheduled email to:", shareWithEmail);
                                 try {
@@ -2362,26 +2555,22 @@ var SynedPostEmailCron = async function () {
                                             }
                                         }
                                     );
-                                    console.log("Marked as delivered for SyncedPost:", dataRecord._id, "Recipient:", shareWithEmail);
+                                console.log("Marked as delivered for SyncedPost:", dataRecord._id);
                                 } catch (sendError) {
                                     console.error("Failed to send email to", shareWithEmail, "for SyncedPost", dataRecord._id, ":", sendError);
                                 }
                             } else {
-                                console.log("Skipping email to", shareWithEmail, "- either no email or unsubscribed/deleted for SyncedPost:", dataRecord._id);
+                            console.log("Skipping email to", shareWithEmail, "- unsubscribed or no email");
                             }
                         }
                     } else {
-                        console.log("No active user found for recipients:", dataRecord.ReceiverEmails, "for SyncedPost:", dataRecord._id);
+                    console.log("No active user found for recipients:", dataRecord.ReceiverEmails);
                     }
                 } catch (userFindError) {
                     console.error("Error finding users for SyncedPost", dataRecord._id, ":", userFindError);
                 }
             }
             console.log("---------------------------------SynedPostEmailCron END----------------------------------------");
-        } catch (aggregateError) {
-            console.error("SynedPostEmailCron Error during aggregation:", aggregateError);
-            console.log("---------------------------------SynedPostEmailCron END WITH ERROR----------------------------------------");
-        }
     } catch (cronError) {
         console.error("SynedPostEmailCron CRITICAL Error:", cronError);
         console.log("---------------------------------SynedPostEmailCron END WITH CRITICAL ERROR----------------------------------------");
