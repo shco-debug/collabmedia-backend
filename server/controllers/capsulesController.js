@@ -25,6 +25,9 @@ var async = require("async");
 
 var counters = require("./../models/countersModel.js");
 
+// Modern page layout utilities
+var PageLayoutUtils = require("./../utilities/pageLayoutUtilities.js");
+
 var dateFormat = function () {
   var d = new Date(),
     dformat =
@@ -36,6 +39,254 @@ var dateFormat = function () {
       "" +
       [d.getHours(), d.getMinutes(), d.getSeconds()].join("");
   return dformat;
+};
+
+/*________________________________________________________________________
+   * @Date:      		2025-10-08
+   * @Method :   		createPageWithModernSchema
+   * Created By: 		AI Assistant
+   * Modified On:		-
+   * @Purpose:   		Helper to create a page using the new component-based schema
+   * @Param:     		pageData, components array
+   * @Return:    	 	Created page object
+   * @Access Category:	"Internal Helper"
+_________________________________________________________________________
+*/
+async function createPageWithModernSchema(pageData, components = []) {
+  const nowDate = Date.now();
+  
+  const data = {
+    ...pageData,
+    Content: components,
+    PageLayout: pageData.PageLayout || {
+      type: "stack",
+      columns: { mobile: 1, tablet: 2, desktop: 3 },
+      gap: "md",
+      maxWidth: "1200px"
+    },
+    PageBackground: pageData.PageBackground || {
+      type: "color",
+      value: "#ffffff",
+      opacity: 1
+    },
+    CreatedOn: nowDate,
+    UpdatedOn: nowDate
+  };
+  
+  return await Page(data).save();
+}
+
+/*________________________________________________________________________
+   * @Date:      		2025-10-08
+   * @Method :   		createQuestionPage
+   * Created By: 		AI Assistant
+   * Modified On:		-
+   * @Purpose:   		Create a question page for streams (simplified for birthday/event streams)
+   * @Param:     		chapterId, questionText, options
+   * @Return:    	 	Created page object
+   * @Access Category:	"Internal Helper"
+_________________________________________________________________________
+*/
+async function createQuestionPage(chapterId, userId, questionText, options = {}) {
+  const questionComponent = PageLayoutUtils.createQuestionComponent(questionText, options);
+  
+  const pageData = {
+    CreaterId: userId,
+    OwnerId: userId,
+    ChapterId: chapterId,
+    Title: options.title || questionText.substring(0, 50),
+    PageType: "content",
+    Order: options.order || 0,
+    Origin: options.origin || "created"
+  };
+  
+  return await createPageWithModernSchema(pageData, [questionComponent]);
+}
+
+/*________________________________________________________________________
+   * @Date:      		2025-10-08
+   * @Method :   		addComponentToPage
+   * Created By: 		AI Assistant
+   * Modified On:		-
+   * @Purpose:   		Add a component to an existing page
+   * @Param:     		pageId, component
+   * @Return:    	 	Updated page
+   * @Access Category:	"Internal Helper"
+_________________________________________________________________________
+*/
+async function addComponentToPage(pageId, component) {
+  const page = await Page.findById(pageId);
+  if (!page) {
+    throw new Error('Page not found');
+  }
+  
+  // Initialize Content array if it doesn't exist
+  if (!page.Content) {
+    page.Content = [];
+  }
+  
+  // Ensure component has an ID
+  if (!component.id) {
+    component.id = new mongoose.Types.ObjectId().toString();
+  }
+  
+  page.Content.push(component);
+  page.UpdatedOn = Date.now();
+  
+  return await page.save();
+}
+
+/*________________________________________________________________________
+   * @Date:      		2025-10-08
+   * @Method :   		inspectPageContent
+   * Created By: 		AI Assistant
+   * Modified On:		-
+   * @Purpose:   		Debug endpoint to inspect page widgets/components
+   * @Param:     		page_id in query params
+   * @Return:    	 	Detailed page content analysis
+   * @Access Category:	"Debug Helper"
+_________________________________________________________________________
+*/
+var debugSession = function (req, res) {
+  const sessionData = {
+    hasSession: !!req.session,
+    hasUser: !!(req.session && req.session.user),
+    hasAdmin: !!(req.session && req.session.admin),
+    hasSubAdmin: !!(req.session && req.session.subadmin),
+    
+    currentUser: req.session?.user ? {
+      _id: req.session.user._id,
+      Email: req.session.user.Email,
+      Name: req.session.user.Name
+    } : null,
+    
+    currentAdmin: req.session?.admin ? {
+      _id: req.session.admin._id,
+      email: req.session.admin.email,
+      name: req.session.admin.name
+    } : null,
+    
+    currentSubAdmin: req.session?.subadmin ? {
+      _id: req.session.subadmin._id,
+      email: req.session.subadmin.email,
+      name: req.session.subadmin.name
+    } : null
+  };
+  
+  res.json({
+    code: 200,
+    message: "Session debug info",
+    session: sessionData
+  });
+};
+
+var inspectPageContent = async function (req, res) {
+  try {
+    const pageId = req.query.page_id || req.body.page_id || req.headers.page_id;
+    
+    if (!pageId) {
+      return res.json({
+        code: 400,
+        message: "page_id is required"
+      });
+    }
+
+    const page = await Page.findById(pageId);
+    
+    if (!page) {
+      return res.json({
+        code: 404,
+        message: "Page not found"
+      });
+    }
+
+    // Analyze page structure
+    const analysis = {
+      pageId: page._id,
+      title: page.Title,
+      pageType: page.PageType,
+      origin: page.Origin,
+      originatedFrom: page.OriginatedFrom,
+      
+      // Check which format this page uses
+      schemaFormat: {
+        hasNewContent: !!(page.Content && page.Content.length > 0),
+        hasOldViewports: !!(page.ViewportDesktopSections || page.ViewportTabletSections || page.ViewportMobileSections)
+      },
+      
+      // New format analysis
+      newFormat: page.Content ? {
+        componentCount: page.Content.length,
+        componentTypes: page.Content.map(c => c.type),
+        qaReferences: page.Content
+          .filter(c => c.type === 'qa')
+          .map(c => ({
+            componentId: c.id,
+            referencedPageId: c.data?.qaPageId || c.data?.qaPageRef
+          })),
+        components: page.Content.map(c => ({
+          id: c.id,
+          type: c.type,
+          hasData: !!c.data,
+          dataKeys: c.data ? Object.keys(c.data) : [],
+          layout: c.layout,
+          hasResponsive: !!c.responsive,
+          style: c.style
+        })),
+        pageLayout: page.PageLayout,
+        pageBackground: page.PageBackground
+      } : null,
+      
+      // Old format analysis
+      oldFormat: {
+        desktop: page.ViewportDesktopSections ? {
+          widgetCount: page.ViewportDesktopSections.Widgets?.length || 0,
+          widgetTypes: page.ViewportDesktopSections.Widgets?.map(w => w.Type) || [],
+          qaWidgets: page.ViewportDesktopSections.Widgets
+            ?.filter(w => w.Type === 'questAnswer')
+            .map(w => ({
+              widgetIndex: w.SrNo,
+              referencedPageId: w.QAWidObj?.PageId
+            })) || [],
+          background: page.ViewportDesktopSections.Background
+        } : null,
+        
+        tablet: page.ViewportTabletSections ? {
+          widgetCount: page.ViewportTabletSections.Widgets?.length || 0,
+          widgetTypes: page.ViewportTabletSections.Widgets?.map(w => w.Type) || []
+        } : null,
+        
+        mobile: page.ViewportMobileSections ? {
+          widgetCount: page.ViewportMobileSections.Widgets?.length || 0,
+          widgetTypes: page.ViewportMobileSections.Widgets?.map(w => w.Type) || []
+        } : null
+      },
+      
+      // Other page properties
+      otherData: {
+        selectedMedia: page.SelectedMedia,
+        headerImage: page.HeaderImage,
+        backgroundMusic: page.BackgroundMusic,
+        createdOn: page.CreatedOn,
+        updatedOn: page.UpdatedOn
+      }
+    };
+
+    res.json({
+      code: 200,
+      message: "Page content analysis",
+      analysis: analysis,
+      rawPage: page  // Full page object for detailed inspection
+    });
+
+  } catch (error) {
+    console.error("Inspect page error:", error);
+    res.json({
+      code: 500,
+      message: "Error inspecting page",
+      error: error.message
+    });
+  }
 };
 
 /*________________________________________________________________________
@@ -424,9 +675,15 @@ _________________________________________________________________________
 
 var find = async function (req, res) {
   try {
+    if (!req.headers.capsule_id) {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required in headers.",
+      });
+    }
+
     var conditions = {
-      //CreaterId : req.session.user._id,
-      _id: req.headers.capsule_id ? req.headers.capsule_id : 0,
+      _id: req.headers.capsule_id,
       Status: 1,
       IsDeleted: 0,
     };
@@ -732,7 +989,10 @@ var findAllPaginated = async function (req, res) {
           IsPublished: true,
           "LaunchSettings.Audience": "OTHERS",
         },
-        { OwnerId: myself._id, IsPublished: true },
+        {
+          OwnerId: myself._id,
+          IsPublished: true
+        }
       ],
       Status: true,
       IsDeleted: false,
@@ -890,151 +1150,136 @@ var findAllPaginated = async function (req, res) {
 _________________________________________________________________________
 */
 
-var createdByMe = function (req, res) {
-  var limit = req.body.perPage ? req.body.perPage : 0;
-  var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
+var createdByMe = async function (req, res) {
+  try {
+    var limit = req.body.perPage ? req.body.perPage : 0;
+    var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-  /*
-	var conditions = {
-		$or : [{Origin : "created"},{Origin : "duplicated"},{Origin : "addedFromLibrary"}],
-		CreaterId : req.session.user._id,
-		Status : 1,
-		IsDeleted : 0
-	};
-	*/
-  var conditions = {
-    $or: [
-      {
-        CreaterId: req.session.user._id,
-        Origin: "created",
-        IsPublished: true,
-        "LaunchSettings.Audience": "ME",
-      },
-      {
-        CreaterId: req.session.user._id,
-        Origin: "duplicated",
-        IsPublished: true,
-        "LaunchSettings.Audience": "ME",
-      },
-      {
-        CreaterId: req.session.user._id,
-        Origin: "addedFromLibrary",
-        IsPublished: true,
-        "LaunchSettings.Audience": "ME",
-      },
-      {
-        CreaterId: req.session.user._id,
-        IsPublished: true,
-        "LaunchSettings.Audience": "OTHERS",
-      }, //made for other - skeleton - this should have the option for addOther user
-      { OwnerId: req.session.user._id, IsPublished: true }, // SIMPLE: All capsules owned by user (purchased/shared)
-    ],
-    Status: true,
-    IsDeleted: false,
-  };
+    var conditions = {
+      $or: [
+        {
+          CreaterId: req.session.user._id,
+          Origin: "created",
+          IsPublished: true,
+          "LaunchSettings.Audience": "ME",
+        },
+        {
+          CreaterId: req.session.user._id,
+          Origin: "duplicated",
+          IsPublished: true,
+          "LaunchSettings.Audience": "ME",
+        },
+        {
+          CreaterId: req.session.user._id,
+          Origin: "addedFromLibrary",
+          IsPublished: true,
+          "LaunchSettings.Audience": "ME",
+        },
+        {
+          CreaterId: req.session.user._id,
+          IsPublished: true,
+          "LaunchSettings.Audience": "OTHERS",
+        },
+        {
+          OwnerId: req.session.user._id,
+          IsPublished: true
+        }
+      ],
+      Status: true,
+      IsDeleted: false,
+    };
 
-  var sortObj = {
-    //Order : 1,
-    ModifiedOn: -1,
-  };
+    var sortObj = {
+      ModifiedOn: -1,
+    };
 
-  var fields = {};
+    var fields = {};
 
-  Capsule.find(conditions, fields)
-    .sort(sortObj)
-    .skip(offset)
-    .limit(limit)
-    .exec(async function (err, results) {
-      if (!err) {
-        // 🎯 Populate CreaterId for createdByMe results
-        const populatedResults = await Promise.all(
-          results.map(async (capsule) => {
-            if (capsule.CreaterId) {
-              try {
-                // Try to find in User collection first
-                const user = await User.findById(capsule.CreaterId)
-                  .select("Name ProfilePic")
-                  .exec();
-                if (user) {
-                  capsule.CreaterId = {
-                    _id: user._id,
-                    Name: user.Name,
-                    ProfilePic: user.ProfilePic,
-                  };
-                  return capsule;
-                }
+    const results = await Capsule.find(conditions, fields)
+      .sort(sortObj)
+      .skip(offset)
+      .limit(limit)
+      .exec();
 
-                // Try to find in Admin collection
-                const admin = await Admin.findById(capsule.CreaterId)
-                  .select("name ProfilePic")
-                  .exec();
-                if (admin) {
-                  capsule.CreaterId = {
-                    _id: admin._id,
-                    Name: admin.name,
-                    ProfilePic: admin.ProfilePic,
-                  };
-                  return capsule;
-                }
+    const resultsLength = await Capsule.countDocuments(conditions).exec();
 
-                // Try to find in SubAdmin collection
-                const subAdmin = await SubAdmin.findById(capsule.CreaterId)
-                  .select("name ProfilePic")
-                  .exec();
-                if (subAdmin) {
-                  capsule.CreaterId = {
-                    _id: subAdmin._id,
-                    Name: subAdmin.name,
-                    ProfilePic: subAdmin.ProfilePic,
-                  };
-                  return capsule;
-                }
-
-                // If not found in any collection, set default values
-                capsule.CreaterId = {
-                  _id: capsule.CreaterId,
-                  Name: "Unknown User",
-                  ProfilePic: "/assets/users/default.png",
-                };
-              } catch (error) {
-                capsule.CreaterId = {
-                  _id: capsule.CreaterId,
-                  Name: "Unknown User",
-                  ProfilePic: "/assets/users/default.png",
-                };
-              }
-            }
-            return capsule;
-          })
-        );
-
-        Capsule.find(conditions, fields)
-          .count()
-          .exec(function (errr, resultsLength) {
-            if (!errr) {
-              var response = {
-                count: resultsLength,
-                status: 200,
-                message: "Capsules listing",
-                results: populatedResults,
+    // Populate CreaterId for createdByMe results
+    const populatedResults = await Promise.all(
+      results.map(async (capsule) => {
+        if (capsule.CreaterId) {
+          try {
+            // Try to find in User collection first
+            const user = await User.findById(capsule.CreaterId)
+              .select("Name ProfilePic")
+              .exec();
+            if (user) {
+              capsule.CreaterId = {
+                _id: user._id,
+                Name: user.Name,
+                ProfilePic: user.ProfilePic,
               };
-              res.json(response);
-            } else {
-              var response = {
-                status: 501,
-                message: "Something went wrong.",
-              };
-              res.json(response);
+              return capsule;
             }
-          });
-      } else {
-        var response = {
-          status: 501,
-          message: "Something went wrong.",
-        };
-        res.json(response);
-      }
-    });
+
+            // Try to find in Admin collection
+            const admin = await Admin.findById(capsule.CreaterId)
+              .select("name ProfilePic")
+              .exec();
+            if (admin) {
+              capsule.CreaterId = {
+                _id: admin._id,
+                Name: admin.name,
+                ProfilePic: admin.ProfilePic,
+              };
+              return capsule;
+            }
+
+            // Try to find in SubAdmin collection
+            const subAdmin = await SubAdmin.findById(capsule.CreaterId)
+              .select("name ProfilePic")
+              .exec();
+            if (subAdmin) {
+              capsule.CreaterId = {
+                _id: subAdmin._id,
+                Name: subAdmin.name,
+                ProfilePic: subAdmin.ProfilePic,
+              };
+              return capsule;
+            }
+
+            // If not found in any collection, set default values
+            capsule.CreaterId = {
+              _id: capsule.CreaterId,
+              Name: "Unknown User",
+              ProfilePic: "/assets/users/default.png",
+            };
+          } catch (error) {
+            capsule.CreaterId = {
+              _id: capsule.CreaterId,
+              Name: "Unknown User",
+              ProfilePic: "/assets/users/default.png",
+            };
+          }
+        }
+        return capsule;
+      })
+    );
+
+    var response = {
+      count: resultsLength,
+      status: 200,
+      message: "Capsules listing",
+      results: populatedResults,
+    };
+    res.json(response);
+  } catch (error) {
+    console.log(error);
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+    };
+    res.json(response);
+  }
 };
 
 /*________________________________________________________________________
@@ -1049,71 +1294,48 @@ var createdByMe = function (req, res) {
 _________________________________________________________________________
 */
 
-var sharedWithMe = function (req, res) {
-  var limit = req.body.perPage ? req.body.perPage : 0;
-  var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
+var sharedWithMe = async function (req, res) {
+  try {
+    var limit = req.body.perPage ? req.body.perPage : 0;
+    var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-  /*
-	var conditions = {
-		Origin : "shared",
-		CreaterId : {$ne:req.session.user._id},
-		OwnerId : req.session.user._id,
-		Status : 1,
-		IsDeleted : 0
-	};
-	*/
-  var conditions = {
-    $or: [
-      {
-        CreaterId: { $ne: req.session.user._id },
-        OwnerId: req.session.user._id,
-        Origin: "shared",
-      },
-    ],
-    Status: true,
-    IsDeleted: false,
-  };
+    var conditions = {
+      CreaterId: { $ne: req.session.user._id },
+      OwnerId: req.session.user._id,
+      Origin: "shared",
+      Status: true,
+      IsDeleted: false,
+    };
 
-  var sortObj = {
-    //Order : 1,
-    ModifiedOn: -1,
-  };
+    var sortObj = {
+      ModifiedOn: -1,
+    };
 
-  var fields = {};
+    var fields = {};
 
-  Capsule.find(conditions, fields)
-    .sort(sortObj)
-    .skip(offset)
-    .limit(limit)
-    .exec(function (err, results) {
-      if (!err) {
-        Capsule.find(conditions, fields)
-          .count()
-          .exec(function (errr, resultsLength) {
-            if (!errr) {
-              var response = {
-                count: resultsLength,
-                status: 200,
-                message: "Capsules listing",
-                results: results,
-              };
-              res.json(response);
-            } else {
-              var response = {
-                status: 501,
-                message: "Something went wrong.",
-              };
-              res.json(response);
-            }
-          });
-      } else {
-        var response = {
-          status: 501,
-          message: "Something went wrong.",
-        };
-        res.json(response);
-      }
-    });
+    const results = await Capsule.find(conditions, fields)
+      .sort(sortObj)
+      .skip(offset)
+      .limit(limit)
+      .exec();
+
+    const resultsLength = await Capsule.countDocuments(conditions).exec();
+
+    var response = {
+      count: resultsLength,
+      status: 200,
+      message: "Capsules listing",
+      results: results,
+    };
+    res.json(response);
+  } catch (error) {
+    console.log(error);
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+    };
+    res.json(response);
+  }
 };
 
 /*________________________________________________________________________
@@ -1128,56 +1350,47 @@ var sharedWithMe = function (req, res) {
 _________________________________________________________________________
 */
 
-var byTheHouse = function (req, res) {
-  var limit = req.body.perPage ? req.body.perPage : 0;
-  var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
+var byTheHouse = async function (req, res) {
+  try {
+    var limit = req.body.perPage ? req.body.perPage : 0;
+    var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-  var conditions = {
-    Origin: "byTheHouse",
-    CreaterId: req.session.user._id,
-    Status: 1,
-    IsDeleted: 0,
-  };
-  var sortObj = {
-    //Order : 1,
-    ModifiedOn: -1,
-  };
+    var conditions = {
+      Origin: "byTheHouse",
+      CreaterId: req.session.user._id,
+      Status: true,
+      IsDeleted: false,
+    };
+    
+    var sortObj = {
+      ModifiedOn: -1,
+    };
 
-  var fields = {};
+    var fields = {};
 
-  Capsule.find(conditions, fields)
-    .sort(sortObj)
-    .skip(offset)
-    .limit(limit)
-    .exec(function (err, results) {
-      if (!err) {
-        Capsule.find(conditions, fields)
-          .count()
-          .exec(function (errr, resultsLength) {
-            if (!errr) {
-              var response = {
-                count: resultsLength,
-                status: 200,
-                message: "Capsules listing",
-                results: results,
-              };
-              res.json(response);
-            } else {
-              var response = {
-                status: 501,
-                message: "Something went wrong.",
-              };
-              res.json(response);
-            }
-          });
-      } else {
-        var response = {
-          status: 501,
-          message: "Something went wrong.",
-        };
-        res.json(response);
-      }
-    });
+    const results = await Capsule.find(conditions, fields)
+      .sort(sortObj)
+      .skip(offset)
+      .limit(limit)
+      .exec();
+
+    const resultsLength = await Capsule.countDocuments(conditions).exec();
+
+    var response = {
+      count: resultsLength,
+      status: 200,
+      message: "Capsules listing",
+      results: results,
+    };
+    res.json(response);
+  } catch (error) {
+    console.log(error);
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+    };
+    res.json(response);
+  }
 };
 
 /*________________________________________________________________________
@@ -1644,90 +1857,65 @@ var allDashboardCapsules = function (req, res) {
 _________________________________________________________________________
 */
 
-var publishedByMe = function (req, res) {
-  var limit = req.body.perPage ? req.body.perPage : 0;
-  var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
+var publishedByMe = async function (req, res) {
+  try {
+    var limit = req.body.perPage ? req.body.perPage : 0;
+    var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-  /*
-	var conditions = {
-		CreaterId : req.session.user._id,
-		"LaunchSettings.Audience" : "ME",
-		$or : [
-			{Origin:"created"},
-			{Origin:"duplicated"},
-			{Origin:"addedFromLibrary"}
-		],
-		IsPublished : true,
-		Status : true,
-		IsDeleted : false
-	};
-	*/
-  var conditions = {
-    $or: [
-      {
-        CreaterId: req.session.user._id,
-        Origin: "created",
-        IsPublished: true,
-        "LaunchSettings.Audience": "ME",
-      },
-      {
-        CreaterId: req.session.user._id,
-        Origin: "duplicated",
-        IsPublished: true,
-        "LaunchSettings.Audience": "ME",
-      },
-      {
-        CreaterId: req.session.user._id,
-        Origin: "addedFromLibrary",
-        IsPublished: true,
-        "LaunchSettings.Audience": "ME",
-      },
-    ],
-    Status: true,
-    IsDeleted: false,
-  };
+    var conditions = {
+      $or: [
+        {
+          CreaterId: req.session.user._id,
+          Origin: "created",
+          IsPublished: true,
+          "LaunchSettings.Audience": "ME",
+        },
+        {
+          CreaterId: req.session.user._id,
+          Origin: "duplicated",
+          IsPublished: true,
+          "LaunchSettings.Audience": "ME",
+        },
+        {
+          CreaterId: req.session.user._id,
+          Origin: "addedFromLibrary",
+          IsPublished: true,
+          "LaunchSettings.Audience": "ME",
+        },
+      ],
+      Status: true,
+      IsDeleted: false,
+    };
 
-  var sortObj = {
-    //Order : 1,
-    ModifiedOn: -1,
-  };
+    var sortObj = {
+      ModifiedOn: -1,
+    };
 
-  var fields = {};
+    var fields = {};
 
-  Capsule.find(conditions, fields)
-    .sort(sortObj)
-    .skip(offset)
-    .limit(limit)
-    .exec(function (err, results) {
-      if (!err) {
-        //Capsule.find(conditions , fields).exec(function( errr , results2 ){
-        Capsule.find(conditions, fields)
-          .count()
-          .exec(function (err, results2count) {
-            if (!err) {
-              var response = {
-                count: results2count,
-                status: 200,
-                message: "Capsules listing",
-                results: results,
-              };
-              res.json(response);
-            } else {
-              var response = {
-                status: 501,
-                message: "Something went wrong.",
-              };
-              res.json(response);
-            }
-          });
-      } else {
-        var response = {
-          status: 501,
-          message: "Something went wrong.",
-        };
-        res.json(response);
-      }
-    });
+    const results = await Capsule.find(conditions, fields)
+      .sort(sortObj)
+      .skip(offset)
+      .limit(limit)
+      .exec();
+
+    const resultsLength = await Capsule.countDocuments(conditions).exec();
+
+    var response = {
+      count: resultsLength,
+      status: 200,
+      message: "Capsules listing",
+      results: results,
+    };
+    res.json(response);
+  } catch (error) {
+    console.log(error);
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+    };
+    res.json(response);
+  }
 };
 
 /*________________________________________________________________________
@@ -2076,151 +2264,10 @@ const create = async function (req, res) {
       CreaterId: req.session.user._id,
       OwnerId: req.session.user._id,
     };
-
-    // Accept basic data from request body with fallbacks to defaults
-    if (req.body.title && req.body.title.trim() !== "") {
-      data.Title = req.body.title;
-    } else {
-      data.Title = "Untitled Capsule"; // Default fallback
-    }
-
-    if (req.body.description && req.body.description.trim() !== "") {
-      data.MetaData = {
-        description: req.body.description,
-      };
-    }
-
-    // Validate origin against enum values
-    const validOrigins = [
-      "created",
-      "shared",
-      "byTheHouse",
-      "duplicated",
-      "addedFromLibrary",
-      "createdForMe",
-      "published",
-      "purchased",
-      "gifted",
-      "journal",
-    ];
-    if (req.body.origin && validOrigins.includes(req.body.origin)) {
-      data.Origin = req.body.origin;
-    } else {
-      data.Origin = "created"; // Default fallback
-    }
-
-    if (req.body.order !== undefined && !isNaN(req.body.order)) {
-      data.Order = parseInt(req.body.order);
-    } else {
-      data.Order = 0; // Default fallback
-    }
-
-    // Validate frequency against enum values
-    const validFrequencies = ["high", "medium", "low"];
-    if (req.body.frequency && validFrequencies.includes(req.body.frequency)) {
-      data.Frequency = req.body.frequency;
-    }
-
-    if (
-      req.body.frequencyInDays !== undefined &&
-      !isNaN(req.body.frequencyInDays) &&
-      req.body.frequencyInDays > 0
-    ) {
-      data.FrequencyInDays = parseInt(req.body.frequencyInDays);
-    } else {
-      data.FrequencyInDays = 2; // Default fallback
-    }
-
-    // Validate emailTemplate against enum values
-    const validEmailTemplates = ["ImaginativeThinker", "PracticalThinker"];
-    if (
-      req.body.emailTemplate &&
-      validEmailTemplates.includes(req.body.emailTemplate)
-    ) {
-      data.EmailTemplate = req.body.emailTemplate;
-    } else {
-      data.EmailTemplate = "PracticalThinker"; // Default fallback
-    }
-
-    // Validate streamFlow against enum values
-    const validStreamFlows = ["Birthday", "Event", "Topic"];
-    if (req.body.streamFlow && validStreamFlows.includes(req.body.streamFlow)) {
-      data.StreamFlow = req.body.streamFlow;
-    } else {
-      data.StreamFlow = "Birthday"; // Default fallback
-    }
-
-    // Handle Price fields
-    if (
-      req.body.price !== undefined &&
-      !isNaN(req.body.price) &&
-      req.body.price >= 0
-    ) {
-      data.Price = parseFloat(req.body.price);
-    }
-
-    if (
-      req.body.discountPrice !== undefined &&
-      !isNaN(req.body.discountPrice) &&
-      req.body.discountPrice >= 0
-    ) {
-      data.DiscountPrice = parseFloat(req.body.discountPrice);
-    }
-
-    // Handle launchSettings with validation
-    if (
-      req.body.launchSettings &&
-      typeof req.body.launchSettings === "object"
-    ) {
-      data.LaunchSettings = {};
-
-      // Validate Audience
-      const validAudiences = [
-        "ME",
-        "OTHERS",
-        "BUYERS",
-        "SUBSCRIBERS",
-        "CELEBRITY",
-      ];
-      if (
-        req.body.launchSettings.Audience &&
-        validAudiences.includes(req.body.launchSettings.Audience)
-      ) {
-        data.LaunchSettings.Audience = req.body.launchSettings.Audience;
-      } else {
-        data.LaunchSettings.Audience = "ME"; // Default fallback
-      }
-
-      // Validate ShareMode
-      if (
-        req.body.launchSettings.ShareMode &&
-        typeof req.body.launchSettings.ShareMode === "string"
-      ) {
-        data.LaunchSettings.ShareMode = req.body.launchSettings.ShareMode;
-      } else {
-        data.LaunchSettings.ShareMode = "private"; // Default fallback
-      }
-
-      // Validate CapsuleFor
-      const validCapsuleFor = ["Birthday", "Theme", "Stream"];
-      if (
-        req.body.launchSettings.CapsuleFor &&
-        validCapsuleFor.includes(req.body.launchSettings.CapsuleFor)
-      ) {
-        data.LaunchSettings.CapsuleFor = req.body.launchSettings.CapsuleFor;
-      }
-
-      // Validate StreamType
-      if (
-        req.body.launchSettings.StreamType &&
-        typeof req.body.launchSettings.StreamType === "string"
-      ) {
-        data.LaunchSettings.StreamType = req.body.launchSettings.StreamType;
-      }
-    }
-
+    console.log("data = ", data);
+    
     const result = await Capsule(data).save();
-
+    
     var response = {
       status: 200,
       message: "Capsule created successfully.",
@@ -2228,6 +2275,7 @@ const create = async function (req, res) {
     };
     res.json(response);
   } catch (error) {
+    console.log(error);
     var response = {
       status: 501,
       message: "Something went wrong.",
@@ -2248,157 +2296,540 @@ const create = async function (req, res) {
 _________________________________________________________________________
 */
 
-var duplicate = function (req, res) {
-  //res.json({"status":"20000"});
-  //console.log("status","20000");//return;
+var duplicate = async function (req, res) {
+  try {
+    //check isMyCapsule( req.headers.capsule_id ) - Middle-ware Authorization check
+    if (!req.headers.capsule_id) {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required in headers.",
+      });
+    }
 
+    const capsuleId = req.headers.capsule_id;
+    const userId = req.session.user._id;
+    const nowDate = Date.now();
+
+    // Step 1: Find and duplicate the original capsule
+    const originalCapsule = await Capsule.findById(capsuleId).select('Title CoverArt');
+    
+    if (!originalCapsule) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found.",
+      });
+    }
+
+    const capsuleData = {
+      Origin: "duplicated",
+      OriginatedFrom: capsuleId,
+      CreaterId: userId,
+      OwnerId: userId,
+      Title: originalCapsule.Title,
+      CoverArt: originalCapsule.CoverArt,
+      CreatedOn: nowDate,
+      ModifiedOn: nowDate,
+    };
+
+    const newCapsule = await Capsule(capsuleData).save();
+    const newCapsuleId = newCapsule._id;
+
+    // Step 2: Find and duplicate all chapters
+    const chapters = await Chapter.find({
+      CapsuleId: capsuleId,
+      OwnerId: userId,
+      IsDeleted: false,
+    })
+    .select('Title CoverArt Order CoverArtFirstPage ChapterPlaylist')
+    .sort({ Order: 1, ModifiedOn: -1 });
+
+    // Array to track new chapter IDs for the capsule
+    const newChapterIds = [];
+
+    // Step 3: Duplicate each chapter and its pages
+    for (const chapter of chapters) {
+      const chapterData = {
+        Origin: "duplicated",
+        OriginatedFrom: chapter._id,
+        CreaterId: userId,
+        OwnerId: userId,
+        Title: chapter.Title,
+        CoverArt: chapter.CoverArt,
+        CapsuleId: newCapsuleId,
+        Order: chapter.Order,
+        CoverArtFirstPage: chapter.CoverArtFirstPage || "",
+        ChapterPlaylist: chapter.ChapterPlaylist || [],
+        CreatedOn: nowDate,
+        ModifiedOn: nowDate,
+      };
+
+      const newChapter = await Chapter(chapterData).save();
+      const newChapterId = newChapter._id;
+      
+      // Add new chapter ID to the capsule's Chapters array
+      newChapterIds.push(newChapterId);
+
+      // Step 4: Find all pages for this chapter
+      const pages = await Page.find({
+        ChapterId: chapter._id,
+        OwnerId: userId,
+        IsDeleted: false,
+      }).sort({ Order: 1, UpdatedOn: -1 });
+
+      // Step 5: First pass - identify all pages and Q&A references
+      const pageIdMap = {}; // Map: oldPageId -> newPageId
+      const pagesWithQA = []; // Pages that have Q&A components
+      
+      // Collect all Q&A references
+      pages.forEach(page => {
+        let hasQA = false;
+        
+        // Check new Content format
+        if (page.Content && page.Content.length > 0) {
+          page.Content.forEach(component => {
+            if (component.type === 'qa' && component.data?.qaPageId) {
+              hasQA = true;
+            }
+          });
+        }
+        
+        // Check old Viewport format
+        if (page.ViewportDesktopSections?.Widgets) {
+          page.ViewportDesktopSections.Widgets.forEach(widget => {
+            if (widget.Type === 'questAnswer' && widget.QAWidObj?.PageId) {
+              hasQA = true;
+            }
+          });
+        }
+        
+        if (hasQA) {
+          pagesWithQA.push(page._id.toString());
+        }
+      });
+
+      // Step 6: Duplicate all pages (first pass - create pages)
+      for (const page of pages) {
+        const newPage = await PageLayoutUtils.duplicatePageWithComponents(
+          Page, 
+          page._id, 
+          newChapterId, 
+          userId, 
+          {}  // Empty map for first pass
+        );
+        pageIdMap[page._id.toString()] = newPage._id.toString();
+      }
+
+      // Step 7: Update Q&A references in duplicated pages (second pass)
+      if (pagesWithQA.length > 0) {
+        for (const pageId of pagesWithQA) {
+          const newPageId = pageIdMap[pageId];
+          if (!newPageId) continue;
+          
+          const newPage = await Page.findById(newPageId);
+          if (!newPage) continue;
+          
+          let updated = false;
+          
+          // Update new Content format
+          if (newPage.Content && newPage.Content.length > 0) {
+            newPage.Content.forEach(component => {
+              if (component.type === 'qa' && component.data?.qaPageId) {
+                const oldQAPageId = component.data.qaPageId.toString();
+                const newQAPageId = pageIdMap[oldQAPageId];
+                if (newQAPageId) {
+                  component.data.qaPageId = newQAPageId;
+                  updated = true;
+                }
+              }
+            });
+          }
+          
+          if (updated) {
+            await newPage.save();
+          }
+        }
+      }
+    }
+
+    // Step 8: Update capsule's Chapters array with all new chapter IDs
+    if (newChapterIds.length > 0) {
+      await Capsule.updateOne(
+        { _id: newCapsuleId },
+        { $set: { Chapters: newChapterIds } }
+      );
+    }
+
+    // Step 9: Fetch the updated capsule to return
+    const updatedCapsule = await Capsule.findById(newCapsuleId);
+
+    // Step 10: Return success response
+    res.json({
+      status: 200,
+      message: "Capsule duplicated successfully.",
+      result: updatedCapsule,
+    });
+
+  } catch (err) {
+    console.log("Duplicate error:", err);
+    res.json({
+      status: 501,
+      message: "Something went wrong.",
+      error: err.message
+    });
+  }
+};
+
+/*________________________________________________________________________
+   * @Date:      		07 September 2015
+   * @Method :   		deleteCapsule
+   * Created By: 		smartData Enterprises Ltd
+   * Modified On:		-
+   * @Purpose:   	
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR + CR (req.headers.capsule_id)"
+_________________________________________________________________________
+*/
+
+var remove = function (req, res) {
   //check isMyCapsule( req.headers.capsule_id ) - Middle-ware Authorization check
+
   var conditions = {};
-  var fields = {
-    Title: 1,
-    CoverArt: 1,
-  };
+  var data = {};
+  //console.log("req.headers = " , req.headers)
 
   conditions._id = req.headers.capsule_id;
+  data.IsDeleted = 1;
+  data.ModifiedOn = Date.now();
+  //if this is called from member's dashboard then just unfollow him from the all chapters of the capsule
+  //case pending ...
+  //end
 
-  Capsule.findOne(conditions, fields, function (err, result) {
+  //Capsule.update(query , $set:data , function( err , result ){
+  Capsule.update(conditions, { $set: data }, function (err, result) {
     if (!err) {
-      var data = {};
-      data.Origin = "duplicated";
-      data.OriginatedFrom = conditions._id;
+    var response = {
+      status: 200,
+        message: "Capsule removed successfully.",
+      result: result,
+    };
+    res.json(response);
+    } else {
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+    };
+    res.json(response);
+  }
+  });
+};
 
+//Capsule library Apis
+
+/*________________________________________________________________________
+   * @Date:      		31 Aug 2015
+   * @Method :   		addFromLibrary
+   * Created By: 		smartData Enterprises Ltd
+   * Modified On:		-
+   * @Purpose:   	
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR + CR"
+_________________________________________________________________________
+*/
+
+var addFromLibrary = async function (req, res) {
+  try {
+    if (!req.headers.capsule_id) {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required in headers.",
+      });
+    }
+
+    const capsuleId = req.headers.capsule_id;
+    const userId = req.session.user._id;
+    const nowDate = Date.now();
+
+    // Step 1: Find the library capsule
+    const originalCapsule = await Capsule.findById(capsuleId).select('Title CoverArt');
+    
+    if (!originalCapsule) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found in library.",
+      });
+    }
+
+    const capsuleData = {
+      Origin: "addedFromLibrary",
+      OriginatedFrom: capsuleId,
+      CreaterId: userId,
+      OwnerId: userId,
+      Title: originalCapsule.Title,
+      CoverArt: originalCapsule.CoverArt,
+      CreatedOn: nowDate,
+      ModifiedOn: nowDate,
+    };
+
+    const newCapsule = await Capsule(capsuleData).save();
+    const newCapsuleId = newCapsule._id;
+
+    // Step 2: Find and copy all chapters
+    const chapters = await Chapter.find({
+      CapsuleId: capsuleId,
+      IsDeleted: false,
+    })
+    .select('Title CoverArt Order CoverArtFirstPage ChapterPlaylist')
+    .sort({ Order: 1, ModifiedOn: -1 });
+
+    const newChapterIds = [];
+
+    // Step 3: Copy each chapter and its pages
+    for (const chapter of chapters) {
+      const chapterData = {
+        Origin: "addedFromLibrary",
+        OriginatedFrom: chapter._id,
+        CreaterId: userId,
+        OwnerId: userId,
+        Title: chapter.Title,
+        CoverArt: chapter.CoverArt,
+        CapsuleId: newCapsuleId,
+        Order: chapter.Order,
+        CoverArtFirstPage: chapter.CoverArtFirstPage || "",
+        ChapterPlaylist: chapter.ChapterPlaylist || [],
+        CreatedOn: nowDate,
+        ModifiedOn: nowDate,
+      };
+
+      const newChapter = await Chapter(chapterData).save();
+      const newChapterId = newChapter._id;
+      newChapterIds.push(newChapterId);
+
+      // Step 4: Find and copy all pages for this chapter
+      const pages = await Page.find({
+        ChapterId: chapter._id,
+        IsDeleted: false,
+      }).sort({ Order: 1, UpdatedOn: -1 });
+
+      const pageIdMap = {};
+      const pagesWithQA = [];
+      
+      // Collect Q&A references
+      pages.forEach(page => {
+        let hasQA = false;
+        if (page.Content && page.Content.length > 0) {
+          page.Content.forEach(component => {
+            if (component.type === 'qa' && component.data?.qaPageId) {
+              hasQA = true;
+            }
+          });
+        }
+        if (hasQA) {
+          pagesWithQA.push(page._id.toString());
+        }
+      });
+
+      // Step 5: Copy all pages
+      for (const page of pages) {
+        const newPage = await PageLayoutUtils.duplicatePageWithComponents(
+          Page, 
+          page._id, 
+          newChapterId, 
+          userId, 
+          {}
+        );
+        pageIdMap[page._id.toString()] = newPage._id.toString();
+      }
+
+      // Step 6: Update Q&A references
+      if (pagesWithQA.length > 0) {
+        for (const pageId of pagesWithQA) {
+          const newPageId = pageIdMap[pageId];
+          if (!newPageId) continue;
+          
+          const newPage = await Page.findById(newPageId);
+          if (!newPage || !newPage.Content) continue;
+          
+          let updated = false;
+          newPage.Content.forEach(component => {
+            if (component.type === 'qa' && component.data?.qaPageId) {
+              const oldQAPageId = component.data.qaPageId.toString();
+              const newQAPageId = pageIdMap[oldQAPageId];
+              if (newQAPageId) {
+                component.data.qaPageId = newQAPageId;
+                updated = true;
+              }
+            }
+          });
+          
+          if (updated) {
+            await newPage.save();
+          }
+        }
+      }
+    }
+
+    // Step 7: Update capsule's Chapters array
+    if (newChapterIds.length > 0) {
+      await Capsule.updateOne(
+        { _id: newCapsuleId },
+        { $set: { Chapters: newChapterIds } }
+      );
+    }
+
+    // Step 8: Fetch updated capsule
+    const updatedCapsule = await Capsule.findById(newCapsuleId);
+
+    res.json({
+      status: 200,
+      message: "Capsule added from library successfully.",
+      result: updatedCapsule,
+    });
+
+  } catch (err) {
+    console.log("AddFromLibrary error:", err);
+    res.json({
+      status: 501,
+      message: "Something went wrong.",
+      error: err.message
+    });
+  }
+};
+
+/*________________________________________________________________________
+   * @Date:      		15 September 2015
+   * @Method :   		preview
+   * Created By: 		smartData Enterprises Ltd
+   * Modified On:		-
+   * @Purpose:   	
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR + CR"
+_________________________________________________________________________
+*/
+
+var preview = async function (req, res) {
+  try {
+    var query = {};
+    var fields = {};
+    query._id = req.header.capsule_id;
+
+    const result = await Capsule.findOne(query, fields).exec();
+    
+    var response = {
+      status: 200,
+      message: "Capsule preview",
+      result: result
+    };
+    res.json(response);
+  } catch (err) {
+    console.log(err);
+    var response = {
+      status: 501,
+      message: "Something went wrong."
+    };
+    res.json(response);
+  }
+};
+
+/*________________________________________________________________________
+   * @Date:      		07 September 2015
+   * @Method :   		shareCapsule
+   * Created By: 		smartData Enterprises Ltd
+   * Modified On:		-
+   * @Purpose:   	
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR + CR"
+_________________________________________________________________________
+*/
+
+var share = async function (req, res) {
+  try {
+    if (!req.headers.capsule_id) {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required in headers."
+      });
+    }
+
+    var init_conditions = {};
+    var fields = {
+      Title: 1,
+      CoverArt: 1,
+    };
+
+    init_conditions._id = req.headers.capsule_id;
+
+    const capsule = await Capsule.findOne(init_conditions, fields).exec();
+    
+    if (!capsule) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found."
+      });
+    }
+
+    var shareWithEmail = req.body.share_with_email ? req.body.share_with_email : false;
+    var shareWithName = req.body.share_with_name ? req.body.share_with_name : "";
+
+    if (!shareWithEmail) {
+      return res.json({
+        status: 400,
+        message: "Email is required to share capsule."
+      });
+    }
+
+    // Find user by email
+    var conditions = { Email: shareWithEmail };
+    const UserData = await User.find(conditions).exec();
+
+    if (UserData.length) {
+      // User exists - create shared instance
+      var data = {};
+      data.Origin = "shared";
+      data.OriginatedFrom = init_conditions._id;
       data.CreaterId = req.session.user._id;
-      data.OwnerId = req.session.user._id;
-      data.Title = result.Title;
-      data.CoverArt = result.CoverArt;
+      data.OwnerId = UserData[0]._id;
+      data.OwnerEmail = shareWithEmail;
+      data.Title = capsule.Title;
+      data.CoverArt = capsule.CoverArt;
 
       var nowDate = Date.now();
       data.CreatedOn = nowDate;
       data.ModifiedOn = nowDate;
 
-      Capsule(data).save(function (err, result) {
-        if (!err) {
-          //console.log("==========CAPSULE INSTANCE : SUCCESS==================", result);
+      const newCapsule = await Capsule(data).save();
 
-          //chapters under capsule
-          var conditions = {
-            CapsuleId: req.headers.capsule_id ? req.headers.capsule_id : 0,
-            OwnerId: req.session.user._id,
-            IsDeleted: false,
-          };
-          var sortObj = {
-            Order: 1,
-            ModifiedOn: -1,
-          };
-          var fields = {
-            _id: true,
-          };
+      var response = {
+        status: 200,
+        message: "Capsule shared successfully.",
+        result: newCapsule,
+      };
+      res.json(response);
+    } else {
+      // User not found
+      var response = {
+        status: 404,
+        message: "User with this email not found."
+      };
+      res.json(response);
+    }
+  } catch (err) {
+    console.log("Share error:", err);
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+      error: err.message
+    };
+    res.json(response);
+  }
+};
 
-          var newCapsuleId = result._id;
-          //console.log("&&&&&&&&&&&&&&&conditions = ",conditions);
-          //Chapter.find(conditions , fields).sort(sortObj).exec(function( err , results ){
-          Chapter.find(conditions, fields, function (err, results) {
-            if (!err) {
-              for (var loop = 0; loop < results.length; loop++) {
-                var conditions = {};
-                var fields = {
-                  Title: true,
-                  CoverArt: true,
-                  CapsuleId: true,
-                  Order: true,
-                  CoverArtFirstPage: true,
-                  ChapterPlaylist: true,
-                };
-
-                conditions._id = results[loop]._id;
-
-                Chapter.findOne(conditions, fields, function (err, result) {
-                  if (!err) {
-                    var data = {};
-                    data.Origin = "duplicated";
-                    data.OriginatedFrom = conditions._id;
-
-                    data.CreaterId = req.session.user._id;
-                    data.OwnerId = req.session.user._id;
-                    data.Title = result.Title;
-                    data.CoverArt = result.CoverArt;
-                    data.CapsuleId = newCapsuleId;
-                    data.Order = result.Order;
-                    data.CoverArtFirstPage = result.CoverArtFirstPage
-                      ? result.CoverArtFirstPage
-                      : "";
-                    data.ChapterPlaylist = result.ChapterPlaylist
-                      ? result.ChapterPlaylist
-                      : [];
-
-                    var nowDate = Date.now();
-                    data.CreatedOn = nowDate;
-                    data.ModifiedOn = nowDate;
-
-                    //console.log("Chapter under loop%%%%%%%%%%%%%%%%%%%%%%%%%%%%%data = ",data);
-                    var oldChapterId = result._id;
-                    //var Chapter = new Chapter(data);
-                    Chapter(data).save(function (err, result) {
-                      //Chapter.save(function( err , result ){
-                      if (!err) {
-                        //console.log("new chapter saved ------",result);
-                        //pages under chapters duplication will be implemented later
-                        var conditions = {
-                          ChapterId: oldChapterId,
-                          OwnerId: req.session.user._id,
-                          IsDeleted: false,
-                          PageType: { $in: ["gallery", "content"] },
-                        };
-                        var sortObj = {
-                          Order: 1,
-                          UpdatedOn: -1,
-                        };
-                        var fields = {
-                          _id: true,
-                        };
-
-                        var newChapterId = result._id;
-                        Page.find(conditions, fields)
-                          .sort(sortObj)
-                          .exec(function (err, results) {
-                            if (!err) {
-                              //console.log("@@@@@@@@@@@PAGE COUNT = ",results.length);
-                              var fields = {
-                                _id: true,
-                                Title: true,
-                                PageType: true,
-                                Order: true,
-                                HeaderImage: true,
-                                BackgroundMusic: true,
-                                CommonParams: true,
-                                ViewportDesktopSections: true,
-                                ViewportTabletSections: true,
-                                ViewportMobileSections: true,
-                                SelectedMedia: true,
-                                SelectedCriteria: true,
-                                HeaderBlurValue: true,
-                                HeaderTransparencyValue: true,
-                              };
-                              for (
-                                var loop = 0;
-                                loop < results.length;
-                                loop++
-                              ) {
-                                var conditions = {};
-                                conditions._id = results[loop]._id;
-                                Page.findOne(
-                                  conditions,
-                                  fields,
-                                  function (err, result) {
-                                    //delete result._id;
-                                    var data = {};
-                                    data.Origin = "duplicated";
-                                    data.OriginatedFrom = conditions._id;
-
-                                    data.CreaterId = req.session.user._id;
-                                    data.OwnerId = req.session.user._id;
-                                    data.ChapterId = newChapterId;
-                                    data.Title = result.Title;
+/*________________________________________________________________________
+   * @Date:      		07 September 2015
+   * @Method :   		uploadCover
                                     data.PageType = result.PageType;
                                     data.Order = result.Order;
                                     data.HeaderImage = result.HeaderImage
@@ -3228,40 +3659,36 @@ function getObjArrayIdxByKey(ObjArr, matchKey, matchVal) {
   return idx;
 }
 
-var reorder = function (req, res) {
+var reorder = async function (req, res) {
+  try {
   //check isMyCapsule( req.headers.capsule_id ) - Middle-ware Authorization check
   var CapsuleIds = req.body.capsule_ids ? req.body.capsule_ids : [];
-  //console.log("CapsuleIds = ",CapsuleIds);
-  var resultCount = 0;
-  for (var loop = 0; loop < CapsuleIds.length; loop++, resultCount++) {
-    var CapsuleId = CapsuleIds[loop];
-    var conditions = {};
-    var data = {};
-    //console.log("req.headers = " , req.headers)
-    conditions._id = CapsuleId;
-    //console.log("conditions = ",conditions);
-    findAndUpdate(conditions, loop + 1);
-  }
-
-  function findAndUpdate(conditions, order) {
-    Capsule.findOne(conditions, function (err, result) {
-      if (!err) {
-        result.Order = order;
-        //console.log("result = ",result);
-        result.save(function (err, result) {
-          //console.log("Reordered = ",result);
-        });
-      }
+    
+    if (!CapsuleIds.length) {
+      return res.json({
+        status: 501,
+        message: "No capsule IDs provided.",
+      });
+    }
+    
+    // Update all capsules in parallel
+    const updatePromises = CapsuleIds.map((capsuleId, index) => {
+      return Capsule.findByIdAndUpdate(
+        capsuleId,
+        { Order: index + 1 },
+        { new: true }
+      );
     });
-  }
-
-  if (CapsuleIds.length > 0 && resultCount == CapsuleIds.length) {
+    
+    await Promise.all(updatePromises);
+    
     var response = {
       status: 200,
       message: "Capsules reordered successfully.",
     };
     res.json(response);
-  } else {
+  } catch (error) {
+    console.log("Reorder error:", error);
     var response = {
       status: 501,
       message: "Something went wrong.",
@@ -3282,12 +3709,19 @@ var reorder = function (req, res) {
 _________________________________________________________________________
 */
 
-var updateCapsuleName = function (req, res) {
+var updateCapsuleName = async function (req, res) {
+  try {
   //check isMyCapsule( req.headers.capsule_id ) - Middle-ware Authorization check
+    
+    if (!req.headers.capsule_id) {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required in headers.",
+      });
+    }
 
   var conditions = {};
   var data = {};
-  //console.log("req.headers = " , req.headers)
 
   conditions._id = req.headers.capsule_id;
   data.Title = req.body.Capsule_name
@@ -3295,30 +3729,36 @@ var updateCapsuleName = function (req, res) {
     : "Untitled Capsule";
   data.ModifiedOn = Date.now();
 
-  //Capsule.update(query , $set:data , function( err , result ){
-  Capsule.update(conditions, { $set: data }, function (err, result) {
-    if (!err) {
+    const result = await Capsule.updateOne(conditions, { $set: data });
+    
+    if (result.matchedCount === 0) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found.",
+      });
+    }
+
       var response = {
         status: 200,
         message: "Capsule name updated successfully.",
         result: result,
       };
       res.json(response);
-    } else {
+  } catch (err) {
+    console.log(err);
       var response = {
         status: 501,
         message: "Something went wrong.",
       };
       res.json(response);
     }
-  });
 };
 
 //Capsule library Apis
 
 /*________________________________________________________________________
-   * @Date:      		31 Aug 2015
-   * @Method :   		addFromLibrary
+   * @Date:      		25 Aug 2015
+   * @Method :   		uploadCover
    * Created By: 		smartData Enterprises Ltd
    * Modified On:		-
    * @Purpose:   	
@@ -3328,102 +3768,224 @@ var updateCapsuleName = function (req, res) {
 _________________________________________________________________________
 */
 
-var addFromLibrary = function (req, res) {
+var uploadCover = async function (req, res) {
+  var form = new formidable.IncomingForm();
+  form.uploadDir = __dirname + "/../../media-assets/capsule/covers/";
+  form.keepExtensions = true;
+
+  form.parse(req, async function (err, fields, files) {
+    if (err) {
+      return res.json({
+        code: "500",
+        message: "Error parsing form data",
+        error: err.message
+      });
+    }
+
+    const capsuleId =
+      fields.capsule_id ||
+      fields.capsuleId ||
+      req.headers.capsule_id ||
+      req.headers["capsule_id"];
+
+    if (!capsuleId) {
+      return res.json({
+        code: "400",
+        message: "capsule_id is required in form data or headers."
+      });
+    }
+
+    const uploadedFile = files.file || files.coverImage || files.image;
+
+    if (!uploadedFile) {
+      return res.json({
+        code: "400",
+        message: "No file uploaded."
+      });
+    }
+
+    // Simple local file handling (can be replaced with S3 upload)
+    const fileName = `${capsuleId}_${Date.now()}.jpg`;
+    const newPath = form.uploadDir + fileName;
+
+    fs.rename(uploadedFile.filepath, newPath, async function (err) {
+      if (err) {
+        return res.json({
+          code: "500",
+          message: "Error saving file",
+          error: err.message
+        });
+      }
+
+      // Update capsule with cover art path
+      await Capsule.updateOne(
+        { _id: capsuleId },
+        { $set: { CoverArt: `/assets/capsule/covers/${fileName}`, ModifiedOn: Date.now() } }
+      );
+
+      res.json({
+        code: "200",
+        message: "Cover image uploaded successfully",
+        result: { coverArt: `/assets/capsule/covers/${fileName}` }
+      });
+    });
+  });
+};
+
+/*________________________________________________________________________
+   * @Date:      		07 September 2015
+   * @Method :   		saveSettings
+   * Created By: 		smartData Enterprises Ltd
+   * Modified On:		-
+   * @Purpose:   	
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR + CR (req.headers.capsule_id)"
+_________________________________________________________________________
+*/
+
+var saveSettings = async function (req, res) {
+  try {
+    if (!req.headers.capsule_id) {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required in headers."
+      });
+    }
+
+    var condition = {};
+    condition._id = req.headers.capsule_id;
+    
+    var makingFor = req.body.makingFor ? req.body.makingFor : 'ME';
+    var CapsuleFor = req.body.CapsuleFor ? req.body.CapsuleFor : 'Stream';
+    var StreamType = req.body.StreamType ? req.body.StreamType : null;
+    var participation = req.body.participation ? req.body.participation : 'private';
+    var price = req.body.price ? parseFloat(req.body.price) : 0;
+    var DiscountPrice = req.body.DiscountPrice ? parseFloat(req.body.DiscountPrice) : 0;
+
+    req.body.LaunchSettings = req.body.LaunchSettings ? req.body.LaunchSettings : {};
+    var OwnerBirthday = req.body.LaunchSettings.OwnerBirthday ? req.body.LaunchSettings.OwnerBirthday : null;
+
+    var StreamFlow = req.body.StreamFlow ? req.body.StreamFlow : 'Birthday';
+    var OwnerAnswer = req.body.OwnerAnswer ? req.body.OwnerAnswer : false;
+    var IsOwnerPostsForMember = req.body.IsOwnerPostsForMember ? req.body.IsOwnerPostsForMember : false;
+    var IsPurchaseNeededForAllPosts = req.body.IsPurchaseNeededForAllPosts ? req.body.IsPurchaseNeededForAllPosts : false;
+
+    var Frequency = req.body.Frequency ? req.body.Frequency : 'medium';
+    var MonthFor = req.body.MonthFor ? req.body.MonthFor : 'M12';
+
+    if (req.body.title) {
+      var title = req.body.title;
+
+      var setObj = {
+        'LaunchSettings.Audience': makingFor,
+        'LaunchSettings.CapsuleFor': CapsuleFor,
+        'LaunchSettings.ShareMode': participation,
+        'Title': title,
+        'ModifiedOn': Date.now()
+      };
+
+      if (setObj['LaunchSettings.CapsuleFor'] == 'Stream') {
+        setObj['LaunchSettings.StreamType'] = StreamType ? StreamType : '';
+        setObj['StreamFlow'] = StreamFlow;
+        setObj['OwnerAnswer'] = OwnerAnswer;
+        setObj['IsOwnerPostsForMember'] = IsOwnerPostsForMember;
+        setObj['IsPurchaseNeededForAllPosts'] = IsPurchaseNeededForAllPosts;
+
+        setObj['Frequency'] = Frequency;
+        setObj['MonthFor'] = MonthFor;
+      }
+
+      if (OwnerBirthday) {
+        setObj['LaunchSettings.OwnerBirthday'] = OwnerBirthday;
+      }
+
+      if (makingFor == 'BUYERS' && price == 0) {
+        // Skip price update if BUYERS but price is 0
+      } else {
+        setObj.Price = price;
+      }
+
+      setObj.DiscountPrice = DiscountPrice;
+
+      const result = await Capsule.updateOne(condition, { $set: setObj });
+
+      if (result.matchedCount === 0) {
+        return res.json({
+          status: 404,
+          message: "Capsule not found."
+        });
+      }
+
+      // Fetch the updated capsule to return
+      const updatedCapsule = await Capsule.findById(req.headers.capsule_id);
+
+      var response = {
+        status: 200,
+        message: "Capsule settings updated successfully.",
+        result: updatedCapsule
+      };
+      res.json(response);
+    } else {
+      var response = {
+        status: 400,
+        message: "Title is required."
+      };
+      res.json(response);
+    }
+  } catch (err) {
+    console.log(err);
+    var response = {
+      status: 501,
+      message: "Something went wrong."
+    };
+    res.json(response);
+  }
+};
+
+/*________________________________________________________________________
+   * @Date:      		26 Aug 2015
+   * @Method :   		invite
+   * Created By: 		smartData Enterprises Ltd
+   * Modified On:		-
+   * @Purpose:   	
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR + CR (req.headers.capsule_id)"
+_________________________________________________________________________
+*/
+
+var invite = function (req, res) {
   //check isMyCapsule( req.headers.capsule_id ) - Middle-ware Authorization check
-  var conditions = {};
-  var fields = {
-    Title: 1,
-    CoverArt: 1,
-  };
+  var Invitees = req.body.invitees ? req.body.invitees : [];
+  var conditions = { _id: req.headers.capsule_id };
 
-  conditions._id = req.headers.capsule_id;
+  Capsule.update(
+    conditions,
+    { $addToSet: { "LaunchSettings.Invitees": { $each: Invitees } } },
+    { multi: false },
+    function (err, numAffected) {
+      if (!err) {
+        var response = {
+          status: 200,
+          message: "Invitee added successfully.",
+          result: numAffected
+        };
+        res.json(response);
+      } else {
+        var response = {
+          status: 501,
+          message: "Something went wrong."
+        };
+        res.json(response);
+      }
+    }
+  );
+};
 
-  Capsule.findOne(conditions, fields, function (err, result) {
-    if (!err) {
-      var data = {};
-      data.Origin = "addedFromLibrary";
-      data.OriginatedFrom = conditions._id;
-
-      data.CreaterId = req.session.user._id;
-      data.OwnerId = req.session.user._id;
-      data.Title = result.Title;
-      data.CoverArt = result.CoverArt;
-
-      var nowDate = Date.now();
-      data.CreatedOn = nowDate;
-      data.ModifiedOn = nowDate;
-
-      Capsule(data).save(function (err, result) {
-        if (!err) {
-          //chapters under capsule
-          var conditions = {
-            CapsuleId: req.headers.capsule_id ? req.headers.capsule_id : 0,
-            OwnerId: req.session.user._id,
-            IsDeleted: false,
-          };
-          var sortObj = {
-            Order: 1,
-            ModifiedOn: -1,
-          };
-          var fields = {
-            _id: true,
-          };
-
-          var newCapsuleId = result._id;
-
-          //Chapter.find(conditions , fields).sort(sortObj).exec(function( err , results ){
-          Chapter.find(conditions, fields, function (err, results) {
-            if (!err) {
-              for (var loop = 0; loop < results.length; loop++) {
-                var conditions = {};
-                var fields = {
-                  Title: true,
-                  CoverArt: true,
-                  CapsuleId: true,
-                  Order: true,
-                  CoverArtFirstPage: true,
-                  ChapterPlaylist: true,
-                };
-
-                conditions._id = results[loop]._id;
-
-                Chapter.findOne(conditions, fields, function (err, result) {
-                  if (!err) {
-                    var data = {};
-                    data.Origin = "addedFromLibrary";
-                    data.OriginatedFrom = conditions._id;
-
-                    data.CreaterId = req.session.user._id;
-                    data.OwnerId = req.session.user._id;
-                    data.Title = result.Title;
-                    data.CoverArt = result.CoverArt;
-                    data.CapsuleId = newCapsuleId;
-                    data.Order = result.Order;
-                    data.CoverArtFirstPage = result.CoverArtFirstPage
-                      ? result.CoverArtFirstPage
-                      : "";
-                    data.ChapterPlaylist = result.ChapterPlaylist
-                      ? result.ChapterPlaylist
-                      : [];
-
-                    var nowDate = Date.now();
-                    data.CreatedOn = nowDate;
-                    data.ModifiedOn = nowDate;
-
-                    var oldChapterId = result._id;
-                    //var Chapter = new Chapter(data);
-                    Chapter(data).save(function (err, result) {
-                      //Chapter.save(function( err , result ){
-                      if (!err) {
-                        //pages under chapters duplication will be implemented later
-                        /*
-												var conditions = {
-													ChapterId : oldChapterId, 
-													OwnerId : req.session.user._id,
-													IsDeleted : false
-												};
-												*/
-                        var conditions = {
+/*________________________________________________________________________
+   * @Date:      		26 Aug 2015
+   * @Method :   		inviteMember
                           Origin: { $ne: "publishNewChanges" },
                           ChapterId: oldChapterId,
                           OwnerId: req.session.user._id,
@@ -5129,95 +5691,7 @@ var uploadCover = async function (req, res) {
   }
 };
 
-/*________________________________________________________________________
-   * @Date:      		17 sep 2015
-   * @Method :   		saveSettings
-   * Created By: 		smartData Enterprises Ltd
-   * Modified On:		-
-   * @Purpose:   	
-   * @Param:     		2
-   * @Return:    	 	yes
-   * @Access Category:	"UR + CR"
-_________________________________________________________________________
-*/
-var saveSettings = function (req, res) {
-  var condition = {};
-  condition._id = req.headers.capsule_id ? req.headers.capsule_id : "0";
-  var makingFor = req.body.makingFor ? req.body.makingFor : "ME";
-  var participation = req.body.participation
-    ? req.body.participation
-    : "private";
-  var price = req.body.price ? parseFloat(req.body.price) : 0;
-  if (req.body.title) {
-    var title = req.body.title;
-
-    var setObj = {
-      "LaunchSettings.Audience": makingFor,
-      "LaunchSettings.ShareMode": participation,
-      Title: title,
-      ModifiedOn: Date.now(),
-    };
-
-    if (makingFor == "BUYERS" && price == 0) {
-      //setObj.Price = price;
-    } else {
-      setObj.Price = price;
-    }
-
-    Capsule.update(
-      condition,
-      { $set: setObj },
-      { multi: false },
-      function (err, numAffected) {
-        if (!err) {
-          var response = {
-            status: 200,
-            message: "Capsule settings updated successfully.",
-            result: numAffected,
-          };
-          res.json(response);
-        } else {
-          var response = {
-            status: 501,
-            message: "Something went wrong.",
-            error: err,
-          };
-          res.json(response);
-        }
-      }
-    );
-  } else {
-    Capsule.update(
-      condition,
-      {
-        $set: {
-          "LaunchSettings.Audience": makingFor,
-          Price: price,
-          "LaunchSettings.ShareMode": participation,
-          ModifiedOn: Date.now(),
-        },
-      },
-      { multi: false },
-      function (err, numAffected) {
-        if (!err) {
-          var response = {
-            status: 200,
-            message: "Capsule settings updated successfully.",
-            result: numAffected,
-          };
-          res.json(response);
-        } else {
-          var response = {
-            status: 501,
-            message: "Something went wrong.",
-            error: err,
-          };
-          res.json(response);
-        }
-      }
-    );
-  }
-};
+// saveSettings function removed - duplicate found at line 3847 (modernized version)
 
 /*________________________________________________________________________
    * @Date:      		26 Aug 2015
@@ -5898,82 +6372,102 @@ var getIds = function (req, res) {
   });
 };
 
-var saveMetaDataSettings = function (req, res) {
-  var condition = {};
-  condition._id = req.headers.capsule_id ? req.headers.capsule_id : "0";
-  if (req.body.MetaData) {
+var saveMetaDataSettings = async function (req, res) {
+  try {
+    if (!req.headers.capsule_id) {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required in headers."
+      });
+    }
+
+    if (!req.body.MetaData) {
+      return res.json({
+        status: 400,
+        message: "MetaData is required in body."
+      });
+    }
+
+    var condition = { _id: req.headers.capsule_id };
     var metadata = req.body.MetaData;
-    Capsule.update(
+
+    const result = await Capsule.updateOne(
       condition,
-      { $set: { MetaData: metadata } },
-      { multi: false },
-      function (err, numAffected) {
-        if (!err) {
-          Capsule.findOne(condition, function (err, capsule) {
-            if (!err) {
-              var response = {
-                status: 200,
-                message: "Capsule settings updated successfully.",
-                result: capsule.MetaData,
-              };
-              res.json(response);
-            } else {
-              var response = {
-                status: 501,
-                message: "Something went wrong.",
-              };
-              res.json(response);
-            }
-          });
-        } else {
-          var response = {
-            status: 501,
-            message: "Something went wrong.",
-          };
-          res.json(response);
-        }
-      }
+      { $set: { MetaData: metadata, ModifiedOn: Date.now() } }
     );
+
+    if (result.matchedCount === 0) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found."
+      });
+    }
+
+    const updatedCapsule = await Capsule.findById(req.headers.capsule_id).select('MetaData');
+
+    var response = {
+      status: 200,
+      message: "Capsule metadata updated successfully.",
+      result: updatedCapsule ? updatedCapsule.MetaData : metadata
+    };
+    res.json(response);
+  } catch (err) {
+    console.log(err);
+    var response = {
+      status: 501,
+      message: "Something went wrong."
+    };
+    res.json(response);
   }
 };
 
-var saveMetaDataFsg = function (req, res) {
-  var condition = {};
-  condition._id = req.body.capsuleId ? req.body.capsuleId : "0";
-  //console.log('******************************',req.body);
-  if (req.body.temp) {
+var saveMetaDataFsg = async function (req, res) {
+  try {
+    var capsuleId = req.body.capsuleId || req.headers.capsule_id;
+    
+    if (!capsuleId) {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required in body or headers."
+      });
+    }
+
+    if (!req.body.temp || !req.body.temp.FSGsArr) {
+      return res.json({
+        status: 400,
+        message: "FSGsArr is required in body.temp"
+      });
+    }
+
+    var condition = { _id: capsuleId };
     var metadata = req.body.temp;
-    Capsule.update(
+
+    const result = await Capsule.updateOne(
       condition,
-      { $set: { "MetaData.Fsg": metadata.FSGsArr } },
-      { multi: false },
-      function (err, numAffected) {
-        if (!err) {
-          Capsule.findOne(condition, function (err, capsule) {
-            if (!err) {
-              var response = {
-                status: 200,
-                message: "Capsule settings updated successfully.",
-                result: capsule.MetaData,
-              };
-              res.json(response);
-            }
-          });
-        } else {
-          var response = {
-            status: 501,
-            message: "Something went wrong.",
-            error: err,
-          };
-          res.json(response);
-        }
-      }
+      { $set: { "MetaData.Fsg": metadata.FSGsArr, ModifiedOn: Date.now() } }
     );
-  } else {
+
+    if (result.matchedCount === 0) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found."
+      });
+    }
+
+    const updatedCapsule = await Capsule.findById(capsuleId).select('MetaData');
+
+    var response = {
+      status: 200,
+      message: "Capsule FSG tags updated successfully.",
+      result: updatedCapsule ? updatedCapsule.MetaData : metadata.FSGsArr
+    };
+    res.json(response);
+  } catch (err) {
+    console.log(err);
     var response = {
       status: 501,
       message: "Something went wrong.",
-      error: err,
+      error: err.message
     };
     res.json(response);
   }
@@ -6197,6 +6691,20 @@ var allPublicCapsules = function (req, res) {
 
   const fields = {};
 
+  // Special users who can see all capsules including restricted ones
+  const specialUsers = [
+    "manishpodiyal@gmail.com",
+    "manishpodiyal@yopmail.com",
+    "darshanchitrabhanu@gmail.com",
+    "scrptco@gmail.com",
+    "darshannyc@gmail.com"
+  ];
+
+  // Don't show "The Elements" capsule to regular users (non-special users)
+  if (req.session && req.session.user && specialUsers.indexOf(req.session.user.Email) < 0) {
+    conditions._id = { $nin: [mongoose.Types.ObjectId("60749d76d308334419f2fcf1")] };
+  }
+
   Capsule.find(conditions, fields)
     .sort(sortObj)
     .skip(offset)
@@ -6378,9 +6886,19 @@ var getCapsulePosts = async function (req, res) {
             },
           ]
         : []),
-      // Project media document as root
+      // Project media document as root with pageId included
       {
-        $replaceRoot: { newRoot: "$mediaDoc" },
+        $replaceRoot: { 
+          newRoot: {
+            $mergeObjects: [
+              "$mediaDoc",
+              { 
+                pageId: "$pageDoc._id",
+                pageTitle: "$pageDoc.Title"
+              }
+            ]
+          }
+        },
       },
       // Sort by upload date (newest first)
       {
@@ -7318,7 +7836,14 @@ var transferCartToCurrentUser = async function (req, res) {
 
 var getCart = async function (req, res) {
   try {
-    // Debug session information
+    // Validate session exists
+    if (!req.session || !req.session.user || !req.session.user._id) {
+      return res.status(401).json({
+        status: 401,
+        message: "User session not found. Please login.",
+        results: null,
+      });
+    }
 
     // Find cart with populated capsule data
     const recordLatest = await Cart.findOne({
@@ -7375,7 +7900,12 @@ var getCart = async function (req, res) {
     };
     res.json(response);
   } catch (err) {
-    var response = { status: 501, message: "Error!", results: err };
+    console.error("Error in getCart:", err);
+    var response = {
+      status: 501,
+      message: "Error retrieving cart. Please try again.",
+      results: null,
+    };
     res.json(response);
   }
 };
@@ -8781,8 +9311,34 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
     const countResult = await Chapter.aggregate(countPipeline).exec();
     const totalCount = countResult.length > 0 ? countResult[0].total : 0;
 
-    // Remove allBlendConfigurations from BlendSettings before sending response
+    // Calculate hexcode_blendedImage and clean BlendSettings before sending response
+    const crypto = require('crypto');
     const cleanedPosts = posts.map(post => {
+      // Calculate hexcode_blendedImage for blended posts
+      let hexcode_blendedImage = null;
+      if (post.BlendSettings) {
+        const blendImage1 = post.BlendSettings.blendImage1 || post.BlendSettings.image1Url;
+        const blendImage2 = post.BlendSettings.blendImage2 || post.BlendSettings.image2Url;
+        const blendMode = post.BlendSettings.blendMode;
+        
+        if (blendImage1 && blendImage2 && blendMode && blendImage1 !== blendImage2) {
+          const data = blendImage1 + blendImage2 + blendMode;
+          const hexcode = crypto.createHash("md5").update(data).digest("hex");
+          if (hexcode) {
+            hexcode_blendedImage = `/streamposts/${hexcode}.png`;
+          }
+        } else if (blendImage1 === blendImage2 && blendImage1) {
+          // For single image posts, use the image itself
+          hexcode_blendedImage = blendImage1.replace("/Media/img/300/", "/Media/img/600/");
+        }
+      }
+      
+      // Add hexcode_blendedImage to post
+      if (hexcode_blendedImage) {
+        post.hexcode_blendedImage = hexcode_blendedImage;
+      }
+      
+      // Remove allBlendConfigurations from BlendSettings
       if (post.BlendSettings && post.BlendSettings.allBlendConfigurations) {
         const { allBlendConfigurations, ...cleanedBlendSettings } = post.BlendSettings;
         post.BlendSettings = cleanedBlendSettings;
@@ -9286,6 +9842,13 @@ var getCapsuleBuyers = async function (req, res) {
 exports.getCapsuleBuyers = getCapsuleBuyers;
 
 exports.approveCapsuleForSales = approveCapsuleForSales;
+
+// Modern schema helper functions
+exports.createPageWithModernSchema = createPageWithModernSchema;
+exports.createQuestionPage = createQuestionPage;
+exports.addComponentToPage = addComponentToPage;
+exports.inspectPageContent = inspectPageContent;
+exports.debugSession = debugSession;
 
 //Buy Now From Public Gallery - Shoping Cart Apis
 exports.getCartCapsule = getCartCapsule;

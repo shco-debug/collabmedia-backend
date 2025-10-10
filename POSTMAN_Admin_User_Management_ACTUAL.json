@@ -1,0 +1,509 @@
+{
+	"info": {
+		"name": "Admin - User Management (Actual Routes)",
+		"description": "User management endpoints that actually exist in the codebase",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{admin_jwt_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "1. Authentication",
+			"item": [
+				{
+					"name": "Admin Login",
+					"event": [
+						{
+							"listen": "test",
+							"script": {
+								"exec": [
+									"if (pm.response.code === 200) {",
+									"    const response = pm.response.json();",
+									"    if (response.token) {",
+									"        pm.collectionVariables.set('admin_jwt_token', response.token);",
+									"        console.log('✅ Admin JWT token saved');",
+									"    }",
+									"}"
+								],
+								"type": "text/javascript"
+							}
+						}
+					],
+					"request": {
+						"auth": {
+							"type": "noauth"
+						},
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@scrpt.com\",\n  \"password\": \"your_admin_password\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/login",
+							"host": ["{{base_url}}"],
+							"path": ["user", "login"]
+						},
+						"description": "Login with admin user (Role: admin)"
+					}
+				}
+			]
+		},
+		{
+			"name": "2. List Users",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/view",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "view"]
+						},
+						"description": "Get all users (no pagination)"
+					}
+				},
+				{
+					"name": "Get Users (Paginated)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"skip\": 0,\n  \"limit\": 50,\n  \"sortBy\": \"CreatedOn\",\n  \"sortOrder\": -1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/view",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "view"]
+						},
+						"description": "Get paginated users with sorting"
+					}
+				},
+				{
+					"name": "Search Users",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"searchText\": \"john\",\n  \"skip\": 0,\n  \"limit\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/search",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "search"]
+						},
+						"description": "Search users by name, email, or username"
+					}
+				}
+			]
+		},
+		{
+			"name": "3. Create User",
+			"item": [
+				{
+					"name": "Add New User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"John Doe\",\n  \"Email\": \"john@example.com\",\n  \"Password\": \"password123\",\n  \"UserName\": \"johndoe\",\n  \"Role\": \"user\",\n  \"AllowCreate\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/add",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "add"]
+						},
+						"description": "Create new user account"
+					}
+				},
+				{
+					"name": "Add Admin User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"Admin User\",\n  \"Email\": \"newadmin@scrpt.com\",\n  \"Password\": \"securePassword123\",\n  \"UserName\": \"adminuser\",\n  \"Role\": \"admin\",\n  \"Permissions\": [\n    \"user_management\",\n    \"content_moderation\",\n    \"system_settings\",\n    \"analytics\",\n    \"billing\"\n  ],\n  \"AllowCreate\": true,\n  \"EmailConfirmationStatus\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/add",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "add"]
+						},
+						"description": "Create new admin with full permissions"
+					}
+				},
+				{
+					"name": "Add SubAdmin User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"SubAdmin User\",\n  \"Email\": \"subadmin@scrpt.com\",\n  \"Password\": \"password123\",\n  \"UserName\": \"subadminuser\",\n  \"Role\": \"subadmin\",\n  \"Permissions\": [\n    \"content_moderation\",\n    \"basic_analytics\",\n    \"content_editing\"\n  ],\n  \"Supervisor\": \"ADMIN_USER_ID_HERE\",\n  \"AllowCreate\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/add",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "add"]
+						},
+						"description": "Create new subadmin with limited permissions"
+					}
+				}
+			]
+		},
+		{
+			"name": "4. Update User",
+			"item": [
+				{
+					"name": "Edit User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID_HERE\",\n  \"Name\": \"Updated Name\",\n  \"Email\": \"updated@example.com\",\n  \"UserName\": \"updatedusername\",\n  \"Role\": \"user\",\n  \"ProfilePic\": \"/assets/users/pic.jpg\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/edit",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "edit"]
+						},
+						"description": "Update user information"
+					}
+				},
+				{
+					"name": "Promote User to SubAdmin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID_HERE\",\n  \"Role\": \"subadmin\",\n  \"Permissions\": [\n    \"content_moderation\",\n    \"basic_analytics\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/edit",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "edit"]
+						},
+						"description": "Change user role to subadmin"
+					}
+				},
+				{
+					"name": "Promote User to Admin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID_HERE\",\n  \"Role\": \"admin\",\n  \"Permissions\": [\n    \"user_management\",\n    \"content_moderation\",\n    \"system_settings\",\n    \"analytics\",\n    \"billing\"\n  ]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/edit",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "edit"]
+						},
+						"description": "Change user role to admin with full permissions"
+					}
+				}
+			]
+		},
+		{
+			"name": "5. User Status",
+			"item": [
+				{
+					"name": "Activate User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/activateUser",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "activateUser"]
+						},
+						"description": "Activate user account (Status: true)"
+					}
+				},
+				{
+					"name": "Deactivate User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/deactivateUser",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "deactivateUser"]
+						},
+						"description": "Deactivate/block user account (Status: false)"
+					}
+				},
+				{
+					"name": "Delete User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/delete",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "delete"]
+						},
+						"description": "Soft delete user (IsDeleted: true)"
+					}
+				}
+			]
+		},
+		{
+			"name": "6. Create Permissions",
+			"item": [
+				{
+					"name": "Enable/Disable Content Creation",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID_HERE\",\n  \"AllowCreate\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/setUnsetCreate",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "setUnsetCreate"]
+						},
+						"description": "Toggle user's ability to create content"
+					}
+				}
+			]
+		},
+		{
+			"name": "7. Invitation Management",
+			"item": [
+				{
+					"name": "Get Invitation Requests",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"skip\": 0,\n  \"limit\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/viewRequestInvitation",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "viewRequestInvitation"]
+						},
+						"description": "Get all pending invitation requests"
+					}
+				},
+				{
+					"name": "Search Invitation Requests",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"searchText\": \"john@example.com\",\n  \"skip\": 0,\n  \"limit\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/searchRequestInvitation",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "searchRequestInvitation"]
+						},
+						"description": "Search invitation requests"
+					}
+				}
+			]
+		},
+		{
+			"name": "8. Sales & Analytics",
+			"item": [
+				{
+					"name": "Get User Sales",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID_HERE\",\n  \"skip\": 0,\n  \"limit\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/getMySales",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "getMySales"]
+						},
+						"description": "Get sales made by specific user"
+					}
+				}
+			]
+		},
+		{
+			"name": "9. Reports",
+			"item": [
+				{
+					"name": "Get All Reports",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/getAllReports",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "getAllReports"]
+						},
+						"description": "Get all user reports/analytics"
+					}
+				}
+			]
+		},
+		{
+			"name": "10. Profile Management",
+			"item": [
+				{
+					"name": "Upload User Avatar",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "avatar",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "userId",
+									"value": "USER_ID_HERE",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/uploadAvatar",
+							"host": ["{{base_url}}"],
+							"path": ["userManagement", "uploadAvatar"]
+						},
+						"description": "Upload profile picture for user"
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://www.scrpt.com",
+			"type": "string"
+		},
+		{
+			"key": "admin_jwt_token",
+			"value": "",
+			"type": "string",
+			"description": "JWT token for admin. Auto-saved on login."
+		}
+	]
+}
+

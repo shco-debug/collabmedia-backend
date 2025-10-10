@@ -1,0 +1,529 @@
+{
+	"info": {
+		"name": "getCurrentBoardDetails - Test Collection",
+		"description": "Test cases for modernized getCurrentBoardDetails endpoint. Supports both JWT and Session authentication.",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{jwt_token}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "1. Get All Posts (Basic Test)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text",
+						"description": "Your Chapter/Capsule ID"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text",
+						"description": "Your Page/Board ID"
+					},
+					{
+						"key": "is_journal",
+						"value": "true",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"perPage\": 20,\n  \"pageNo\": 1,\n  \"searchByTagName\": null,\n  \"searchByTagId\": null,\n  \"filterByUserId\": null,\n  \"searchByLabel\": null,\n  \"post_id\": null,\n  \"IsAddedFromStream\": false,\n  \"IsPostForUser\": false,\n  \"IsPostForTeam\": false,\n  \"SelectedUser\": null,\n  \"StreamId\": null,\n  \"criteria\": \"All\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Basic test - Get all posts from a page with default settings"
+			},
+			"response": []
+		},
+		{
+			"name": "2. Get Single Post by ID",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text"
+					},
+					{
+						"key": "is_journal",
+						"value": "true",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"post_id\": \"YOUR_SPECIFIC_POST_ID_HERE\",\n  \"perPage\": 1,\n  \"pageNo\": 1\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Fetch a specific single post by its ID"
+			},
+			"response": []
+		},
+		{
+			"name": "3. Search by Tag Name",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"perPage\": 20,\n  \"pageNo\": 1,\n  \"searchByTagName\": \"YourTagName\",\n  \"criteria\": \"All\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Filter posts by tag name (theme)"
+			},
+			"response": []
+		},
+		{
+			"name": "4. Search by Label",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"perPage\": 20,\n  \"pageNo\": 1,\n  \"searchByLabel\": \"YourLabel\",\n  \"criteria\": \"All\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Filter posts by label"
+			},
+			"response": []
+		},
+		{
+			"name": "5. Filter by User ID",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"perPage\": 20,\n  \"pageNo\": 1,\n  \"filterByUserId\": \"USER_ID_HERE\",\n  \"criteria\": \"All\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Show only posts by a specific user"
+			},
+			"response": []
+		},
+		{
+			"name": "6. Filter Stream Posts Only",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"perPage\": 20,\n  \"pageNo\": 1,\n  \"IsAddedFromStream\": true,\n  \"criteria\": \"All\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Show only posts that came from streams"
+			},
+			"response": []
+		},
+		{
+			"name": "7. Filter by Specific Stream ID",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"perPage\": 20,\n  \"pageNo\": 1,\n  \"StreamId\": \"YOUR_STREAM_ID_HERE\",\n  \"criteria\": \"All\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Filter posts from a specific stream"
+			},
+			"response": []
+		},
+		{
+			"name": "8. Filter User-Specific Posts",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"perPage\": 20,\n  \"pageNo\": 1,\n  \"IsPostForUser\": true,\n  \"criteria\": \"All\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Show only posts marked for specific users"
+			},
+			"response": []
+		},
+		{
+			"name": "9. Filter Team Posts",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"perPage\": 20,\n  \"pageNo\": 1,\n  \"IsPostForTeam\": true,\n  \"criteria\": \"All\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Show only posts marked for teams"
+			},
+			"response": []
+		},
+		{
+			"name": "10. Pagination - Page 2",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"perPage\": 10,\n  \"pageNo\": 2,\n  \"criteria\": \"All\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Test pagination - get page 2 with 10 items per page"
+			},
+			"response": []
+		},
+		{
+			"name": "11. Combined Filters (Tag + Label)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "Content-Type",
+						"value": "application/json;charset=UTF-8",
+						"type": "text"
+					},
+					{
+						"key": "chapter_id",
+						"value": "5f4835e67a5d1b040c632380",
+						"type": "text"
+					},
+					{
+						"key": "page_id",
+						"value": "5f4835e67a5d1b040c632387",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n  \"id\": \"5f4835e67a5d1b040c632387\",\n  \"perPage\": 20,\n  \"pageNo\": 1,\n  \"searchByTagName\": \"YourTag\",\n  \"searchByLabel\": \"YourLabel\",\n  \"criteria\": \"All\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/boards/getCurrentBoardDetails",
+					"host": [
+						"{{base_url}}"
+					],
+					"path": [
+						"boards",
+						"getCurrentBoardDetails"
+					]
+				},
+				"description": "Test multiple filters at once"
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://www.scrpt.com",
+			"type": "string"
+		},
+		{
+			"key": "jwt_token",
+			"value": "YOUR_JWT_TOKEN_HERE",
+			"type": "string",
+			"description": "JWT token from login response. Get from /user/login endpoint."
+		}
+	]
+}
+

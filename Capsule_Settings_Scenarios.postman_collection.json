@@ -1,0 +1,341 @@
+{
+	"info": {
+		"_postman_id": "capsule-settings-scenarios-2025",
+		"name": "Capsule Settings - All Scenarios",
+		"description": "Complete collection for testing different capsule settings scenarios (ME, BUYERS, OTHERS, PUBLIC, PRIVATE)",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+	},
+	"item": [
+		{
+			"name": "0. Setup - Create New Capsule",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"url": {
+					"raw": "{{base_url}}/capsules/create",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "create"]
+				},
+				"description": "Creates a new capsule. Save the capsule_id from response for next requests."
+			},
+			"response": []
+		},
+		{
+			"name": "0. Setup - Get All Capsules",
+			"request": {
+				"method": "POST",
+				"header": [],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"perPage\": 50,\n    \"pageNo\": 1,\n    \"qc\": \"all\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules",
+					"host": ["{{base_url}}"],
+					"path": ["capsules"]
+				},
+				"description": "Get all capsules to see the results after settings changes."
+			},
+			"response": []
+		},
+		{
+			"name": "1. Private Personal Stream (ME + Private)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "capsule_id",
+						"value": "{{capsule_id}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"My Personal Journal\",\n    \"makingFor\": \"ME\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"\",\n    \"participation\": \"private\",\n    \"StreamFlow\": \"Birthday\",\n    \"OwnerAnswer\": false,\n    \"IsOwnerPostsForMember\": false,\n    \"IsPurchaseNeededForAllPosts\": false,\n    \"Frequency\": \"medium\",\n    \"MonthFor\": \"M12\",\n    \"price\": 0,\n    \"DiscountPrice\": 0\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/saveSettings",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "saveSettings"]
+				},
+				"description": "**Scenario:** Private personal stream for yourself only.\n\n**Use Case:** Personal journals, private collections, self-reflection streams.\n\n**Settings:**\n- Audience: ME\n- Visibility: Private\n- Only you can see and edit\n- Not in public gallery"
+			},
+			"response": []
+		},
+		{
+			"name": "2. Public Stream for Sale (BUYERS + Public)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "capsule_id",
+						"value": "{{capsule_id}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"Professional Development Stream\",\n    \"makingFor\": \"BUYERS\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"Career Growth\",\n    \"participation\": \"public\",\n    \"StreamFlow\": \"Topic\",\n    \"OwnerAnswer\": false,\n    \"IsOwnerPostsForMember\": false,\n    \"IsPurchaseNeededForAllPosts\": false,\n    \"Frequency\": \"high\",\n    \"MonthFor\": \"M12\",\n    \"price\": 20.5,\n    \"DiscountPrice\": 15.0\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/saveSettings",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "saveSettings"]
+				},
+				"description": "**Scenario:** Paid stream for public purchase.\n\n**Use Case:** Online courses, premium content, paid memberships.\n\n**Settings:**\n- Audience: BUYERS\n- Visibility: Public\n- Price: $20.50 (Discounted to $15.00)\n- Appears in public gallery\n- Users can purchase access"
+			},
+			"response": []
+		},
+		{
+			"name": "3. Birthday Stream for Someone Else (OTHERS)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "capsule_id",
+						"value": "{{capsule_id}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"Happy Birthday Sarah!\",\n    \"makingFor\": \"OTHERS\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"\",\n    \"participation\": \"friend-group\",\n    \"StreamFlow\": \"Birthday\",\n    \"OwnerAnswer\": true,\n    \"IsOwnerPostsForMember\": false,\n    \"IsPurchaseNeededForAllPosts\": false,\n    \"Frequency\": \"medium\",\n    \"MonthFor\": \"M1\",\n    \"price\": 0,\n    \"DiscountPrice\": 0,\n    \"LaunchSettings\": {\n        \"OwnerBirthday\": \"1990-05-15\"\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/saveSettings",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "saveSettings"]
+				},
+				"description": "**Scenario:** Creating a birthday stream for someone else.\n\n**Use Case:** Birthday celebrations, gift streams, tribute collections.\n\n**Settings:**\n- Audience: OTHERS\n- Visibility: Friend Group\n- Birthday: May 15, 1990\n- Creator ≠ Owner (you create, they receive)\n- Friends can contribute\n- Recipient becomes owner when published"
+			},
+			"response": []
+		},
+		{
+			"name": "4. Public Personal Stream (ME + Public)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "capsule_id",
+						"value": "{{capsule_id}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"My Travel Adventures\",\n    \"makingFor\": \"ME\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"Travel\",\n    \"participation\": \"public\",\n    \"StreamFlow\": \"Topic\",\n    \"OwnerAnswer\": false,\n    \"IsOwnerPostsForMember\": false,\n    \"IsPurchaseNeededForAllPosts\": false,\n    \"Frequency\": \"low\",\n    \"MonthFor\": \"M12\",\n    \"price\": 0,\n    \"DiscountPrice\": 0\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/saveSettings",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "saveSettings"]
+				},
+				"description": "**Scenario:** Public stream you own and share with everyone.\n\n**Use Case:** Travel blogs, public portfolios, social sharing.\n\n**Settings:**\n- Audience: ME\n- Visibility: Public\n- You own it\n- Publicly visible (no purchase needed)\n- Others can view but not edit"
+			},
+			"response": []
+		},
+		{
+			"name": "5. Friend Group Collaboration (ME + Friend Group)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "capsule_id",
+						"value": "{{capsule_id}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"Our Group Memories\",\n    \"makingFor\": \"ME\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"Group\",\n    \"participation\": \"friend-group\",\n    \"StreamFlow\": \"Topic\",\n    \"OwnerAnswer\": false,\n    \"IsOwnerPostsForMember\": false,\n    \"IsPurchaseNeededForAllPosts\": false,\n    \"Frequency\": \"medium\",\n    \"MonthFor\": \"M12\",\n    \"price\": 0,\n    \"DiscountPrice\": 0\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/saveSettings",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "saveSettings"]
+				},
+				"description": "**Scenario:** Collaborative stream with friend group.\n\n**Use Case:** Group memories, team projects, friend circles.\n\n**Settings:**\n- Audience: ME\n- Visibility: Friend Group\n- Invite friends to collaborate\n- Shared contribution\n- Private to invited members only"
+			},
+			"response": []
+		},
+		{
+			"name": "6. BONUS - Paid Membership (Gated Content)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "capsule_id",
+						"value": "{{capsule_id}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"Premium Fitness Course\",\n    \"makingFor\": \"BUYERS\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"Fitness\",\n    \"participation\": \"public\",\n    \"StreamFlow\": \"Topic\",\n    \"OwnerAnswer\": false,\n    \"IsOwnerPostsForMember\": false,\n    \"IsPurchaseNeededForAllPosts\": true,\n    \"Frequency\": \"high\",\n    \"MonthFor\": \"M3\",\n    \"price\": 49.99,\n    \"DiscountPrice\": 39.99\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/saveSettings",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "saveSettings"]
+				},
+				"description": "**Scenario:** Premium gated content requiring purchase for all posts.\n\n**Use Case:** Exclusive courses, premium memberships, VIP content.\n\n**Settings:**\n- Audience: BUYERS\n- Visibility: Public\n- Price: $49.99 (Discounted to $39.99)\n- **IsPurchaseNeededForAllPosts: true** (Paywall)\n- All posts require purchase to view"
+			},
+			"response": []
+		},
+		{
+			"name": "7. BONUS - Anniversary Stream (Recurring)",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "capsule_id",
+						"value": "{{capsule_id}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"title\": \"Our Anniversary Stream\",\n    \"makingFor\": \"OTHERS\",\n    \"CapsuleFor\": \"Stream\",\n    \"StreamType\": \"\",\n    \"participation\": \"friend-solo\",\n    \"StreamFlow\": \"Birthday\",\n    \"OwnerAnswer\": true,\n    \"IsOwnerPostsForMember\": true,\n    \"IsPurchaseNeededForAllPosts\": false,\n    \"Frequency\": \"high\",\n    \"MonthFor\": \"M1\",\n    \"price\": 0,\n    \"DiscountPrice\": 0,\n    \"LaunchSettings\": {\n        \"OwnerBirthday\": \"2020-06-20\"\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/saveSettings",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "saveSettings"]
+				},
+				"description": "**Scenario:** Anniversary or special date stream for someone.\n\n**Use Case:** Anniversaries, special occasions, recurring celebrations.\n\n**Settings:**\n- Audience: OTHERS\n- Visibility: Friend Solo\n- Anniversary Date: June 20, 2020\n- Owner posts for member\n- Owner responds to Q&A"
+			},
+			"response": []
+		},
+		{
+			"name": "Utility - Update Capsule Name",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "capsule_id",
+						"value": "{{capsule_id}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"Capsule_name\": \"Updated Capsule Name\"\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/updateCapsuleName",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "updateCapsuleName"]
+				},
+				"description": "Update just the capsule name without changing other settings."
+			},
+			"response": []
+		},
+		{
+			"name": "Utility - Save Metadata Settings",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "capsule_id",
+						"value": "{{capsule_id}}",
+						"type": "text"
+					}
+				],
+				"body": {
+					"mode": "raw",
+					"raw": "{\n    \"MetaData\": {\n        \"description\": \"This is my stream description\",\n        \"phase\": [\"planning\", \"execution\"],\n        \"focus\": [\"career\", \"development\"]\n    }\n}",
+					"options": {
+						"raw": {
+							"language": "json"
+						}
+					}
+				},
+				"url": {
+					"raw": "{{base_url}}/capsules/saveMetaDataSettings",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "saveMetaDataSettings"]
+				},
+				"description": "Save additional metadata for the capsule (description, tags, categories)."
+			},
+			"response": []
+		},
+		{
+			"name": "Utility - Duplicate Capsule",
+			"request": {
+				"method": "POST",
+				"header": [
+					{
+						"key": "capsule_id",
+						"value": "{{capsule_id}}",
+						"type": "text"
+					}
+				],
+				"url": {
+					"raw": "{{base_url}}/capsules/duplicate",
+					"host": ["{{base_url}}"],
+					"path": ["capsules", "duplicate"]
+				},
+				"description": "Duplicate an existing capsule with all its chapters and pages."
+			},
+			"response": []
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "http://localhost:3000",
+			"type": "string"
+		},
+		{
+			"key": "capsule_id",
+			"value": "YOUR_CAPSULE_ID_HERE",
+			"type": "string"
+		}
+	]
+}
+

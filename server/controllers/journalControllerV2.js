@@ -89,36 +89,58 @@ async function __getKeywordIdsByNames_CMIDW(selectedWords) {
   };
 
   if (selectedWords.length) {
-    conditions["$or"] = [{ GroupTagTitle: { $in: selectedWords } }];
+    conditions["$or"] = [
+      //{ GroupTagTitle : {$in : selectedWords} },  // ❌ Skip GroupTagTitle (like SCRPT)
+      { "Tags.TagTitle": { $in: selectedWords } }  // ✅ ONLY search Tags array (like alltags.MainGroupTagTitle)
+    ];
   }
 
   var fields = {
     GroupTagTitle: 1,
+    Tags: 1,  // ✅ Include Tags array in results
     _id: 1,
   };
-  console.log("   - Executing groupTags.find()...");
+  console.log("   - Executing groupTags.find() with Tags array search...");
+  console.log("   - Searching for keywords:", selectedWords);
 
   var results = await groupTags.find(conditions, fields); //.limit(10);
   results = Array.isArray(results) ? results : [];
   
   console.log("   - Database query results count:", results.length);
-  console.log("   - Database query results:", results);
+  // Full results log removed for cleaner output
 
   var keywordIds = [];
   var secondaryKeywordsMap = {};
+  
   for (var i = 0; i < results.length; i++) {
-    if (keywordIds.indexOf(String(results[i]._id)) < 0) {
-      keywordIds.push(String(results[i]._id));
-      secondaryKeywordsMap[String(results[i]._id)] =
-        typeof results[i].GroupTagTitle === "string"
+    var groupTagId = String(results[i]._id);
+    
+    if (keywordIds.indexOf(groupTagId) < 0) {
+      keywordIds.push(groupTagId);
+      
+      var matchedKeyword = "";
+      
+      // Find which Tag matched (like alltags.MainGroupTagTitle)
+      var tags = results[i].Tags || [];
+      for (var j = 0; j < tags.length; j++) {
+        if (tags[j].TagTitle && selectedWords.includes(tags[j].TagTitle) && tags[j].status === 1) {
+          matchedKeyword = tags[j].TagTitle.toLowerCase().trim();
+          break;  // Use first match (like SCRPT uses MainGroupTagTitle)
+        }
+      }
+      
+      // Fallback to GroupTagTitle if no Tag matched (shouldn't happen with current query)
+      if (!matchedKeyword) {
+        matchedKeyword = typeof results[i].GroupTagTitle === "string"
           ? results[i].GroupTagTitle.toLowerCase().trim()
           : "";
+      }
+      
+      secondaryKeywordsMap[groupTagId] = matchedKeyword;
     }
   }
   
-  console.log("   - Final keywordIds:", keywordIds);
-  console.log("   - Final secondaryKeywordsMap:", secondaryKeywordsMap);
-  console.log("🔍 __getKeywordIdsByNames_CMIDW - END");
+  // Keyword logs removed for cleaner output
   
   return {
     keywordIds: keywordIds,
@@ -134,32 +156,34 @@ async function __getKeywordIdsByNames(selectedWordsArr) {
     return [];
   }
   var selectedWords = selectedWordsArr.map((obj) => obj.trim());
+  
   var conditions = {
     status: { $in: [1, 3] },
     //MetaMetaTagID : { $nin : process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase }
   };
   if (selectedWords.length) {
     conditions["$or"] = [
-      { GroupTagTitle: { $in: selectedWords } },
-      { MainGroupTagTitle: { $in: selectedWords } },
+      //{ GroupTagTitle: { $in: selectedWords } },  // ❌ Skip GroupTagTitle (like SCRPT)
+      { "Tags.TagTitle": { $in: selectedWords } }   // ✅ ONLY search Tags array (like alltags.MainGroupTagTitle)
     ];
   }
 
   var fields = {
     GroupTagTitle: 1,
-    MainGroupTagTitle: 1,
-    gt_id: 1,
+    Tags: 1,
+    _id: 1,
   };
 
-  var results = await keywordModel_allTags.find(conditions, fields);
+  var results = await groupTags.find(conditions, fields);
   results = Array.isArray(results) ? results : [];
 
   var keywordIds = [];
   for (var i = 0; i < results.length; i++) {
-    if (keywordIds.indexOf(String(results[i].gt_id)) < 0) {
-      keywordIds.push(String(results[i].gt_id));
+    if (keywordIds.indexOf(String(results[i]._id)) < 0) {
+      keywordIds.push(String(results[i]._id));
     }
   }
+  
   //console.log("keywordIds.length = ", keywordIds.length);
   return keywordIds;
 }
@@ -801,7 +825,7 @@ async function fetchKeywordsFromText_PrimarySecondary(text) {
     Secondary: secondaryKeywords,
     Secondary2: secondary2Keywords,
   };
-  console.log("🤖 PARSED Keywords:", { Primary: primaryKeywords, Secondary: secondaryKeywords, Secondary2: secondary2Keywords });
+  // Keyword parsing log removed for cleaner output
   
   response.data = response.data ? response.data : {};
   var keywordResult = response.data ? response.data : {};
@@ -5637,7 +5661,9 @@ var getMediaFromSet = async function (req, callback) {
   req.session = req.session ? req.session : {};
   req.session.user = req.session.user ? req.session.user : {};
   var reqObj = req.body ? req.body : {};
+  console.log("\n🎨 ========================================");
   console.log("🎨 === IMAGE 1 FILTERING START ===");
+  console.log("🎨 ========================================");
   var sec = 0;
 
   var timer = setInterval(function () {
@@ -5816,21 +5842,24 @@ var getMediaFromSet = async function (req, callback) {
       })
     );
     
-    console.log("🎯 Total sets after ObjectId extraction:", totalSets);
+    // Log removed
 
     // Extract ObjectIds from totalSets for querying
     var objectIdsFromTotalSets = totalSets.flat().filter(item => 
       typeof item === 'string' && item.length === 24 && /^[0-9a-fA-F]{24}$/.test(item)
     );
-    console.log("🎯 ObjectIds extracted for querying:", objectIdsFromTotalSets);
+    // Log removed
     
-    // CRITICAL FIX: Only add GroupTags filter if we have valid ObjectIds
-    // Otherwise rely on Media Selection Criteria alone
-    if (objectIdsFromTotalSets.length > 0) {
-      conditions["GroupTags.GroupTagID"] = { $in: objectIdsFromTotalSets };
-      console.log("✅ Using keyword filter + Media Selection Criteria");
+    // ✅ CRITICAL FIX: Use ONLY selectedKeywords (primary keywords) for IMAGE 1 filtering
+    // selectedKeywords = generatedKeywords = [keywords[0]] for Image 1 (e.g., ["awareness"])
+    // objectIdsFromTotalSets contains ALL keywords which would include secondary keywords
+    // We should ONLY filter by primary keywords, not secondary!
+    if (selectedKeywords.length > 0) {
+      conditions["GroupTags.GroupTagID"] = { $in: selectedKeywords };
+      console.log("✅ IMAGE 1: Using PRIMARY keyword filter ONLY:", selectedKeywords);
+      console.log("✅ IMAGE 1: Secondary keywords will be used for SCORING, not filtering");
     } else {
-      console.log("⚠️ No valid keyword ObjectIds - using ONLY Media Selection Criteria");
+      console.log("⚠️ No primary keyword IDs - using ONLY Media Selection Criteria");
     }
 
     var maxRank = totalSets.length;
@@ -5943,11 +5972,11 @@ var getMediaFromSet = async function (req, callback) {
                   {
                     $and: [
                       {
-                        $in: ["$GroupTags", SecondaryKeywords],
+                        $in: ["$GroupTags.GroupTagID", SecondaryKeywords],
                       },
                     ],
                   },
-                  "$GroupTags",
+                  "$GroupTags.GroupTagID",
                   "$$REMOVE",
                 ],
               },
@@ -6042,7 +6071,10 @@ var getMediaFromSet = async function (req, callback) {
     SecondaryKeywords: { $ifNull: ["$SecondaryKeywords", []] },
     SecondaryKeywordsCount: { $size: { $ifNull: ["$SecondaryKeywords", []] } },
   };
-  console.log("mediaSelectionCriteria - ", mediaSelectionCriteria);
+  console.log("🎨 ===== MEDIA SELECTION CRITERIA DEBUG =====");
+  console.log("🎨 mediaSelectionCriteria received:", JSON.stringify(mediaSelectionCriteria, null, 2));
+  console.log("🎨 mediaSelectionCriteriaKeyArr:", mediaSelectionCriteriaKeyArr);
+  
   if (mediaSelectionCriteria !== null) {
     let tmpProjectObj = {
       MetaData: null,
@@ -6052,6 +6084,8 @@ var getMediaFromSet = async function (req, callback) {
     };
     for (let i = 0; i < mediaSelectionCriteriaKeyArr.length; i++) {
       const property = mediaSelectionCriteriaKeyArr[i];
+      console.log(`🎨 Processing property: ${property}, initial value:`, mediaSelectionCriteria[property]);
+      
       mediaSelectionCriteria[property] =
         typeof mediaSelectionCriteria[property] === "string"
           ? mediaSelectionCriteria[property].split(",")
@@ -6072,6 +6106,7 @@ var getMediaFromSet = async function (req, callback) {
       console.log(`🎨 MediaCriteria - ${property}: ${JSON.stringify(mediaSelectionCriteria[property])}`);
 
       if (!mediaSelectionCriteria[property]) {
+        console.log(`🎨 ⚠️ Skipping ${property} - value is falsy`);
         continue;
       }
 
@@ -6134,8 +6169,7 @@ var getMediaFromSet = async function (req, callback) {
       });
     }
     //console.log("projectPipeline_1 ------------ ", projectPipeline_1);
-    console.log("tmpProjectObj ------------ ", tmpProjectObj);
-    //console.log("tmpProjectObj[MediaSelectionCriteriaArr][setUnion][0][$cond] ------------ ", tmpProjectObj["MediaSelectionCriteriaArr"]["$setUnion"][0]["$cond"]);
+    // Log removed
     projectPipeline_1 = {
       ...projectPipeline_1,
       ...tmpProjectObj,
@@ -6197,6 +6231,7 @@ var getMediaFromSet = async function (req, callback) {
 
   // Use dynamic sorting from database (like old code)
   sortObj = await getStreamMediaFilterSortingOrder();
+  console.log("🔄 Sorting order being used:", JSON.stringify(sortObj, null, 2));
 
   //aggregateStages.push ({ $match : {"value.Ranks" : {$ne : 0}} });
   aggregateStages.push({ $sort: sortObj });
@@ -6211,11 +6246,11 @@ var getMediaFromSet = async function (req, callback) {
 
   var returnObj = {};
   // console.log("aggregateStages - ", JSON.stringify(aggregateStages, null, 5));
-  console.log("🎯 Starting MongoDB aggregation...");
+  console.log("\n🎯 ========== MONGODB AGGREGATION START ==========");
   console.log("🎯 Selected keywords:", selectedKeywords);
-  console.log("🎯 Total sets length:", totalSets ? totalSets.length : 0);
-  console.log("🎯 Total sets structure:", totalSets);
-  console.log("🎯 Switch branches count:", switchBranches ? switchBranches.length : 0);
+  // Log removed
+  // Log removed
+  // Log removed
   
   try {
     const aggregationStartTime = Date.now();
@@ -6224,24 +6259,8 @@ var getMediaFromSet = async function (req, callback) {
     console.log("✅ MongoDB aggregation completed in", (aggregationEndTime - aggregationStartTime) / 1000, "seconds");
     console.log("✅ Results count:", results ? results.length : 0);
     
-    // Log detailed results with ranks and filters
-    // if (results && results.length > 0) {
-    //   console.log("📊 DETAILED RESULTS WITH RANKS:");
-    //   results.forEach((media, index) => {
-    //     console.log(`📊 Media ${index + 1}:`);
-    //     console.log(`   - Media ID: ${media._id}`);
-    //     console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
-    //     console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
-    //     console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
-    //     console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
-    //     console.log(`   - Random Sort ID: ${media.value?.RandomSortId || 'N/A'}`);
-    //     console.log(`   - Uploaded On: ${media.value?.UploadedOn || 'N/A'}`);
-    //     console.log(`   - Media Type: ${media.value?.MediaType || 'N/A'}`);
-    //     console.log(`   - Is Unsplash: ${media.value?.IsUnsplashImage || false}`);
-    //     console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
-    //     console.log("   ---");
-    //   });
-    // }
+    // Log detailed results with ranks and filters (only for dual image posts)
+    // Skip logging for 1UnsplashPost to reduce noise
     
     // CRITICAL FIX: Exit if no results found to prevent infinite loop
     if (!results || results.length === 0) {
@@ -6260,8 +6279,8 @@ var getMediaFromSet = async function (req, callback) {
     
     var local_map_selectedgtValues = local_map_selectedgt ? Object.values(local_map_selectedgt) : [];
     var gtArr = [];
-    console.log("🔍 local_map_selectedgt:", local_map_selectedgt);
-    console.log("🔍 local_map_selectedgtValues:", local_map_selectedgtValues);
+    // Log removed
+    // Log removed
     for( var loop = 0; loop < local_map_selectedgtValues.length; loop++ ){
       // Extract ObjectId - check if already an ObjectId or has __ separator
       for (let item of local_map_selectedgtValues[loop]) {
@@ -6279,17 +6298,17 @@ var getMediaFromSet = async function (req, callback) {
         }
       }
     }
-    console.log("🔍 gtArr:", gtArr);
+    // Log removed
 
     //get all selected gt titles map
     var selectedGtResults = await groupTags.find({_id : {$in : gtArr}}, {GroupTagTitle : 1, _id: 1});
     selectedGtResults = selectedGtResults ? selectedGtResults : [];
-    console.log("🔍 selectedGtResults:", selectedGtResults);
+    // Log removed
     var gtTitleMap = {};
     for( var loop = 0; loop < selectedGtResults.length; loop++ ){
       gtTitleMap[selectedGtResults[loop]._id] = selectedGtResults[loop].GroupTagTitle ? selectedGtResults[loop].GroupTagTitle : '';
     }
-    console.log("🔍 gtTitleMap:", gtTitleMap);
+    // Log removed
 
     //console.log("$$$$$$$$$$$$$$$$$$$$$$ ----------------results ----------------------------- ", results);
     for( var loop = 0; loop < results.length; loop++ ){
@@ -6325,10 +6344,10 @@ var getMediaFromSet = async function (req, callback) {
         }
       }
       tempObj.value.SecondaryKeywordsMap = getKeywordNamesByKeywordMap(tempObj.value.SecondaryKeywords, SecondaryKeywordsMap);
-      if (loop < 2) console.log(`🔍 Media ${loop}: Rank=${tempObj.value.Ranks}, SelectedGtTitle="${tempObj.value.SelectedGtTitle}", SecondaryKeywordsCount=${tempObj.value.SecondaryKeywordsCount}`);
+      // Media debug log removed
       outputRecords.push(tempObj);
     }
-    console.log("🔍 Total outputRecords with SelectedGtTitle populated:", outputRecords.filter(r => r.value.SelectedGtTitle).length, "/", outputRecords.length);
+    // Log removed
 
     if(timer) {
       clearInterval(timer);
@@ -6374,7 +6393,9 @@ var getMediaFromSet = async function (req, callback) {
 // Duplicate function removed
 
 var getMediaFromSet2 = async function (req, callback) {
+  console.log("\n🎨 ========================================");
   console.log("🎨 === IMAGE 2 FILTERING START ===");
+  console.log("🎨 ========================================");
 
   req.session = req.session ? req.session : {};
   req.session.user = req.session.user ? req.session.user : {};
@@ -6398,6 +6419,9 @@ var getMediaFromSet2 = async function (req, callback) {
     
   var SecondaryKeywords = reqObj.SecondaryKeywords2 || [];
   var SecondaryKeywordsMap = reqObj.SecondaryKeywordsMap2 || {};
+  
+  console.log("✅ IMAGE 2: Using PRIMARY keyword filter ONLY:", selectedKeywords);
+  console.log("✅ IMAGE 2: Secondary keywords will be used for SCORING, not filtering");
   
   // CRITICAL FIX: Check if subsetByRank is empty or not an array
   if (!subsetByRank || !Array.isArray(subsetByRank) || subsetByRank.length === 0) {
@@ -6546,21 +6570,24 @@ var getMediaFromSet2 = async function (req, callback) {
       })
     );
     
-    console.log("🎯 Total sets after ObjectId extraction:", totalSets);
+    // Log removed
 
     // Extract ObjectIds from totalSets for querying
     var objectIdsFromTotalSets = totalSets.flat().filter(item => 
       typeof item === 'string' && item.length === 24 && /^[0-9a-fA-F]{24}$/.test(item)
     );
-    console.log("🎯 ObjectIds extracted for querying:", objectIdsFromTotalSets);
+    // Log removed
     
-    // CRITICAL FIX: Only add GroupTags filter if we have valid ObjectIds
-    // Otherwise rely on Media Selection Criteria alone
-    if (objectIdsFromTotalSets.length > 0) {
-      conditions["GroupTags.GroupTagID"] = { $in: objectIdsFromTotalSets };
-      console.log("✅ Using keyword filter + Media Selection Criteria");
+    // ✅ CRITICAL FIX: Use ONLY selectedKeywords (primary keywords) for IMAGE 2 filtering
+    // selectedKeywords = generatedKeywords2 = [keywords[1]] for Image 2 (e.g., ["judgment"])
+    // objectIdsFromTotalSets contains ALL keywords which would include Image 1's keywords
+    // We should ONLY filter by the second primary keyword, not others!
+    if (selectedKeywords.length > 0) {
+      conditions["GroupTags.GroupTagID"] = { $in: selectedKeywords };
+      console.log("✅ IMAGE 2: Using PRIMARY keyword filter ONLY:", selectedKeywords);
+      console.log("✅ IMAGE 2: Secondary keywords will be used for SCORING, not filtering");
     } else {
-      console.log("⚠️ No valid keyword ObjectIds - using ONLY Media Selection Criteria");
+      console.log("⚠️ No primary keyword IDs - using ONLY Media Selection Criteria");
     }
 
     var maxRank = totalSets.length;
@@ -6671,11 +6698,11 @@ var getMediaFromSet2 = async function (req, callback) {
                   {
                     $and: [
                       {
-                        $in: ["$GroupTags", SecondaryKeywords],
+                        $in: ["$GroupTags.GroupTagID", SecondaryKeywords],
                       },
                     ],
                   },
-                  "$GroupTags",
+                  "$GroupTags.GroupTagID",
                   "$$REMOVE",
                 ],
               },
@@ -6888,6 +6915,7 @@ var getMediaFromSet2 = async function (req, callback) {
 
   // Use dynamic sorting from database (like old code)
   sortObj = await getStreamMediaFilterSortingOrder();
+  console.log("🔄 Sorting order being used:", JSON.stringify(sortObj, null, 2));
 
   //aggregateStages.push ({ $match : {"value.Ranks" : {$ne : 0}} });
   aggregateStages.push({ $sort: sortObj });
@@ -6902,11 +6930,11 @@ var getMediaFromSet2 = async function (req, callback) {
 
   var returnObj = {};
   // console.log("aggregateStages - ", JSON.stringify(aggregateStages, null, 5));
-  console.log("🎯 Starting MongoDB aggregation...");
+  console.log("\n🎯 ========== MONGODB AGGREGATION START ==========");
   console.log("🎯 Selected keywords:", selectedKeywords);
-  console.log("🎯 Total sets length:", totalSets ? totalSets.length : 0);
-  console.log("🎯 Total sets structure:", totalSets);
-  console.log("🎯 Switch branches count:", switchBranches ? switchBranches.length : 0);
+  // Log removed
+  // Log removed
+  // Log removed
   
   try {
     const aggregationStartTime = Date.now();
@@ -6915,24 +6943,8 @@ var getMediaFromSet2 = async function (req, callback) {
     console.log("✅ MongoDB aggregation completed in", (aggregationEndTime - aggregationStartTime) / 1000, "seconds");
     console.log("✅ Results count:", results ? results.length : 0);
     
-    // Log detailed results with ranks and filters
-    // if (results && results.length > 0) {
-    //   console.log("📊 DETAILED RESULTS WITH RANKS:");
-    //   results.forEach((media, index) => {
-    //     console.log(`📊 Media ${index + 1}:`);
-    //     console.log(`   - Media ID: ${media._id}`);
-    //     console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
-    //     console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
-    //     console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
-    //     console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
-    //     console.log(`   - Random Sort ID: ${media.value?.RandomSortId || 'N/A'}`);
-    //     console.log(`   - Uploaded On: ${media.value?.UploadedOn || 'N/A'}`);
-    //     console.log(`   - Media Type: ${media.value?.MediaType || 'N/A'}`);
-    //     console.log(`   - Is Unsplash: ${media.value?.IsUnsplashImage || false}`);
-    //     console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
-    //     console.log("   ---");
-    //   });
-    // }
+    // Log detailed results with ranks and filters (only for dual image posts)
+    // Skip logging for 1UnsplashPost to reduce noise
     
     // CRITICAL FIX: Exit if no results found to prevent infinite loop
     if (!results || results.length === 0) {
@@ -6951,8 +6963,8 @@ var getMediaFromSet2 = async function (req, callback) {
     
     var local_map_selectedgtValues = local_map_selectedgt ? Object.values(local_map_selectedgt) : [];
     var gtArr = [];
-    console.log("🔍 local_map_selectedgt:", local_map_selectedgt);
-    console.log("🔍 local_map_selectedgtValues:", local_map_selectedgtValues);
+    // Log removed
+    // Log removed
     for( var loop = 0; loop < local_map_selectedgtValues.length; loop++ ){
       // Extract ObjectId - check if already an ObjectId or has __ separator
       for (let item of local_map_selectedgtValues[loop]) {
@@ -6970,17 +6982,17 @@ var getMediaFromSet2 = async function (req, callback) {
         }
       }
     }
-    console.log("🔍 gtArr:", gtArr);
+    // Log removed
 
     //get all selected gt titles map
     var selectedGtResults = await groupTags.find({_id : {$in : gtArr}}, {GroupTagTitle : 1, _id: 1});
     selectedGtResults = selectedGtResults ? selectedGtResults : [];
-    console.log("🔍 selectedGtResults:", selectedGtResults);
+    // Log removed
     var gtTitleMap = {};
     for( var loop = 0; loop < selectedGtResults.length; loop++ ){
       gtTitleMap[selectedGtResults[loop]._id] = selectedGtResults[loop].GroupTagTitle ? selectedGtResults[loop].GroupTagTitle : '';
     }
-    console.log("🔍 gtTitleMap:", gtTitleMap);
+    // Log removed
 
     //console.log("$$$$$$$$$$$$$$$$$$$$$$ ----------------results ----------------------------- ", results);
     for( var loop = 0; loop < results.length; loop++ ){
@@ -7016,10 +7028,10 @@ var getMediaFromSet2 = async function (req, callback) {
         }
       }
       tempObj.value.SecondaryKeywordsMap = getKeywordNamesByKeywordMap(tempObj.value.SecondaryKeywords, SecondaryKeywordsMap);
-      if (loop < 2) console.log(`🔍 Media ${loop}: Rank=${tempObj.value.Ranks}, SelectedGtTitle="${tempObj.value.SelectedGtTitle}", SecondaryKeywordsCount=${tempObj.value.SecondaryKeywordsCount}`);
+      // Media debug log removed
       outputRecords.push(tempObj);
     }
-    console.log("🔍 Total outputRecords with SelectedGtTitle populated:", outputRecords.filter(r => r.value.SelectedGtTitle).length, "/", outputRecords.length);
+    // Log removed
 
     if(timer) {
       clearInterval(timer);
@@ -14726,8 +14738,29 @@ var addCommentOnSocialPost = async function (req, res) {
 
   var loginUserId = req.session.user._id;
   var loginUserName = req.session.user.Name;
+  
+  // ✅ NEW: Automatically fetch stream members if StreamId is provided
   var Members = req.body.Members ? req.body.Members : [];
   var memberIds = [];
+  
+  // If StreamId is provided and Members array is empty, fetch from database
+  if (streamId && Members.length === 0) {
+    try {
+      var streamMembers = await StreamMembers.findOne({
+        StreamId: ObjectId(streamId),
+        IsDeleted: false
+      }).select('Members');
+      
+      if (streamMembers && streamMembers.Members && streamMembers.Members.length > 0) {
+        Members = streamMembers.Members.map(m => String(m));
+        console.log('✅ Auto-fetched stream members:', Members.length);
+      }
+    } catch (err) {
+      console.error('⚠️ Error fetching stream members:', err);
+      // Continue with empty Members array
+    }
+  }
+  
   for (var i = 0; i < Members.length; i++) {
     memberIds.push(ObjectId(Members[i]));
   }
@@ -14913,8 +14946,30 @@ var getStreamComments = async function (req, res) {
   };
 
   var loginUserId = req.session.user._id;
+  var streamId = req.body.StreamId ? req.body.StreamId : null;
+  
+  // ✅ NEW: Automatically fetch stream members if StreamId is provided
   var Members = req.body.Members ? req.body.Members : [];
   var memberIds = [];
+  
+  // If StreamId is provided and Members array is empty, fetch from database
+  if (streamId && Members.length === 0) {
+    try {
+      var streamMembers = await StreamMembers.findOne({
+        StreamId: ObjectId(streamId),
+        IsDeleted: false
+      }).select('Members');
+      
+      if (streamMembers && streamMembers.Members && streamMembers.Members.length > 0) {
+        Members = streamMembers.Members.map(m => String(m));
+        console.log('✅ Auto-fetched stream members for getStreamComments:', Members.length);
+      }
+    } catch (err) {
+      console.error('⚠️ Error fetching stream members:', err);
+      // Continue with empty Members array
+    }
+  }
+  
   for (var i = 0; i < Members.length; i++) {
     memberIds.push(ObjectId(Members[i]));
   }
@@ -17651,8 +17706,30 @@ var addCommentOnComment = async function (req, res) {
   }
 
   var loginUserId = req.session.user._id;
+  var streamId = req.body.StreamId ? req.body.StreamId : null;
+  
+  // ✅ NEW: Automatically fetch stream members if StreamId is provided
   var Members = req.body.Members ? req.body.Members : [];
   var memberIds = [];
+  
+  // If StreamId is provided and Members array is empty, fetch from database
+  if (streamId && Members.length === 0) {
+    try {
+      var streamMembers = await StreamMembers.findOne({
+        StreamId: ObjectId(streamId),
+        IsDeleted: false
+      }).select('Members');
+      
+      if (streamMembers && streamMembers.Members && streamMembers.Members.length > 0) {
+        Members = streamMembers.Members.map(m => String(m));
+        console.log('✅ Auto-fetched stream members for addCommentOnComment:', Members.length);
+      }
+    } catch (err) {
+      console.error('⚠️ Error fetching stream members:', err);
+      // Continue with empty Members array
+    }
+  }
+  
   for (var i = 0; i < Members.length; i++) {
     memberIds.push(ObjectId(Members[i]));
   }
@@ -18941,6 +19018,10 @@ async function sendMembersInvitationEmail(users, OwnerDetails, StreamId) {
       /{RecipientName}/g,
       body.Name.split(" ")[0]
     );
+    results[0].subject = results[0].subject.replace(
+      /{CapsuleName}/g,
+      CapsuleName
+    );
 
     var transporter = nodemailer.createTransport(
       process.EMAIL_ENGINE.info.smtpOptions
@@ -19199,6 +19280,10 @@ async function createMembersUserAccount(newUsers, OwnerDetails, StreamId) {
         /{OwnerName}/g,
         OwnerDetails.Name.split(" ")[0]
       );
+      results[0].subject = results[0].subject.replace(
+        /{CapsuleName}/g,
+        CapsuleName
+      );
 
       var transporter = nodemailer.createTransport(
         process.EMAIL_ENGINE.info.smtpOptions
@@ -19329,16 +19414,158 @@ var stream__addMembers = async function (req, res) {
     return res.json({ code: 501, message: "Wrong input." });
   }
 
+  // Check if stream exists and get stream details
+  var streamDetails = await Capsule.findOne(
+    { _id: StreamId, IsDeleted: 0 },
+    { Title: 1, OwnerId: 1, CreatedBy: 1 }
+  );
+  
+  if (!streamDetails) {
+    console.log('❌ Stream not found for ID:', StreamId);
+    return res.json({ code: 404, message: "Stream not found." });
+  }
+  
+  console.log('📋 Stream details:', { 
+    Title: streamDetails.Title, 
+    OwnerId: streamDetails.OwnerId, 
+    CreatedBy: streamDetails.CreatedBy 
+  });
+
   var membersToAdd = [];
   var membersEmailArr = [];
+  var ownerEmails = [];
+  var creatorEmails = [];
+  var alreadyMemberEmails = [];
+  var validMembers = [];
+  
+  // Get owner and creator emails for comparison
+  var ownerUser = await User.findOne(
+    { _id: streamDetails.OwnerId, IsDeleted: 0 },
+    { Email: 1, Name: 1 }
+  );
+  
+  var creatorUser = await User.findOne(
+    { _id: streamDetails.CreatedBy, IsDeleted: 0 },
+    { Email: 1, Name: 1 }
+  );
+  
+  if (ownerUser) {
+    ownerEmails.push(ownerUser.Email.toLowerCase());
+    console.log('👑 Stream owner:', { Email: ownerUser.Email, Name: ownerUser.Name });
+  }
+  
+  if (creatorUser && creatorUser._id.toString() !== streamDetails.OwnerId.toString()) {
+    creatorEmails.push(creatorUser.Email.toLowerCase());
+    console.log('🎨 Stream creator:', { Email: creatorUser.Email, Name: creatorUser.Name });
+  }
+  
+  // Get existing members
+  var existingStreamMembers = await StreamMembers.findOne(
+    { StreamId: StreamId, OwnerId: OwnerId, IsDeleted: false }
+  );
+  
+  var existingMemberIds = [];
+  if (existingStreamMembers && existingStreamMembers.Members) {
+    existingMemberIds = existingStreamMembers.Members.map(id => id.toString());
+    console.log('👥 Existing member IDs:', existingMemberIds);
+  }
+  
+  // Get existing member emails
+  if (existingMemberIds.length > 0) {
+    var existingMembers = await User.find(
+      { _id: { $in: existingMemberIds }, IsDeleted: 0 },
+      { Email: 1, Name: 1 }
+    );
+    alreadyMemberEmails = existingMembers.map(user => user.Email.toLowerCase());
+    console.log('👥 Already member emails:', alreadyMemberEmails);
+  }
+  
   for (var i = 0; i < members.length; i++) {
     members[i].Email = members[i].Email ? members[i].Email.toLowerCase() : null;
     if (members[i].Email) {
-      if (members[i].Email.toLowerCase() == OwnerDetails.Email.toLowerCase()) {
+      // Check if email is the owner
+      if (ownerEmails.includes(members[i].Email)) {
+        console.log('⚠️ Skipping owner email:', members[i].Email);
         continue;
       }
+      
+      // Check if email is the creator
+      if (creatorEmails.includes(members[i].Email)) {
+        console.log('⚠️ Skipping creator email:', members[i].Email);
+        continue;
+      }
+      
+      // Check if email is already a member
+      if (alreadyMemberEmails.includes(members[i].Email)) {
+        console.log('⚠️ Skipping already member email:', members[i].Email);
+        continue;
+      }
+      
+      // Valid member to add
+      validMembers.push(members[i]);
       membersEmailArr.push(new RegExp("^" + members[i].Email + "$", "i"));
     }
+  }
+  
+  console.log('✅ Valid members to process:', validMembers.length);
+  console.log('📋 Valid members:', validMembers.map(m => ({ Email: m.Email, Name: m.Name })));
+  
+  // Update members array to only include valid members
+  members = validMembers;
+  
+  // If no valid members after filtering, return early with detailed response
+  if (members.length === 0) {
+    var skippedEmails = [];
+    var originalMembersCount = req.body.members ? req.body.members.length : 0;
+    
+    // Add owner emails to skipped
+    for (var i = 0; i < ownerEmails.length; i++) {
+      skippedEmails.push({
+        email: ownerEmails[i],
+        reason: "owner",
+        message: "Cannot invite the stream owner"
+      });
+    }
+    
+    // Add creator emails to skipped
+    for (var i = 0; i < creatorEmails.length; i++) {
+      skippedEmails.push({
+        email: creatorEmails[i],
+        reason: "creator", 
+        message: "Cannot invite the stream creator"
+      });
+    }
+    
+    // Add already member emails to skipped
+    for (var i = 0; i < alreadyMemberEmails.length; i++) {
+      skippedEmails.push({
+        email: alreadyMemberEmails[i],
+        reason: "already_member",
+        message: "User is already a member of this stream"
+      });
+    }
+    
+    var responseData = {
+      newInvites: 0,
+      alreadyInvited: 0,
+      skipped: originalMembersCount,
+      newInviteUsers: [],
+      alreadyInvitedUsers: [],
+      skippedEmails: skippedEmails,
+      totalRequested: originalMembersCount,
+      totalProcessed: 0
+    };
+    
+    var responseMessage = `All ${originalMembersCount} user(s) were skipped (owner/creator/already member).`;
+    
+    console.log('⚠️ No valid members to process after filtering');
+    console.log('📊 Early return response:', responseData);
+    
+    return res.json({ 
+      code: 200, 
+      message: responseMessage,
+      data: responseData
+    });
   }
 
   var conditions = {
@@ -19516,23 +19743,68 @@ var stream__addMembers = async function (req, res) {
   );
   console.log('✅ Capsule updated successfully');
   
+  // Calculate skipped emails with reasons
+  var skippedEmails = [];
+  var originalMembersCount = req.body.members ? req.body.members.length : 0;
+  var processedMembersCount = members.length;
+  var skippedCount = originalMembersCount - processedMembersCount;
+  
+  // Add owner emails to skipped
+  for (var i = 0; i < ownerEmails.length; i++) {
+    skippedEmails.push({
+      email: ownerEmails[i],
+      reason: "owner",
+      message: "Cannot invite the stream owner"
+    });
+  }
+  
+  // Add creator emails to skipped
+  for (var i = 0; i < creatorEmails.length; i++) {
+    skippedEmails.push({
+      email: creatorEmails[i],
+      reason: "creator", 
+      message: "Cannot invite the stream creator"
+    });
+  }
+  
+  // Add already member emails to skipped
+  for (var i = 0; i < alreadyMemberEmails.length; i++) {
+    skippedEmails.push({
+      email: alreadyMemberEmails[i],
+      reason: "already_member",
+      message: "User is already a member of this stream"
+    });
+  }
+  
   // Prepare response message with detailed feedback
   var responseMessage = "";
   var responseData = {
     newInvites: newInviteUsers.length,
     alreadyInvited: alreadyInvitedUsers.length,
+    skipped: skippedCount,
     newInviteUsers: newInviteUsers,
-    alreadyInvitedUsers: alreadyInvitedUsers
+    alreadyInvitedUsers: alreadyInvitedUsers,
+    skippedEmails: skippedEmails,
+    totalRequested: originalMembersCount,
+    totalProcessed: processedMembersCount
   };
   
-  if (newInviteUsers.length > 0 && alreadyInvitedUsers.length > 0) {
+  if (skippedCount > 0 && newInviteUsers.length > 0 && alreadyInvitedUsers.length > 0) {
+    responseMessage = `${newInviteUsers.length} new invitation(s) sent. ${alreadyInvitedUsers.length} user(s) were already invited. ${skippedCount} user(s) were skipped (owner/creator/already member).`;
+  } else if (skippedCount > 0 && newInviteUsers.length > 0) {
+    responseMessage = `${newInviteUsers.length} invitation(s) sent successfully. ${skippedCount} user(s) were skipped (owner/creator/already member).`;
+  } else if (skippedCount > 0 && alreadyInvitedUsers.length > 0) {
+    responseMessage = `${alreadyInvitedUsers.length} user(s) were already invited. ${skippedCount} user(s) were skipped (owner/creator/already member).`;
+  } else if (newInviteUsers.length > 0 && alreadyInvitedUsers.length > 0) {
     responseMessage = `${newInviteUsers.length} new invitation(s) sent. ${alreadyInvitedUsers.length} user(s) were already invited to this stream.`;
   } else if (newInviteUsers.length > 0) {
     responseMessage = `${newInviteUsers.length} invitation(s) sent successfully.`;
   } else if (alreadyInvitedUsers.length > 0) {
     responseMessage = `All ${alreadyInvitedUsers.length} user(s) were already invited to this stream.`;
+  } else if (skippedCount > 0) {
+    responseMessage = `All ${skippedCount} user(s) were skipped (owner/creator/already member).`;
   } else {
-    responseMessage = "Members added successfully.";
+    responseMessage = "No valid members to process.";
   }
   
   console.log('🎉 stream__addMembers COMPLETED SUCCESSFULLY');
@@ -20080,15 +20352,35 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
     // ===== KEYWORD SPLITTING LOGIC =====
     // Split primary keywords for each image to ensure different filtering criteria
     if (keywords && keywords.length >= 2) {
-      // Image 1: Use first primary keyword + secondary keywords
-      req.body.generatedKeywords = [keywords[0]]; // ['breath']
+      // ✅ FIXED: Filter existing generatedKeywords (ObjectId strings) to keep only the first primary keyword's ID
+      // generatedKeywords already contains ObjectId strings from addNewPost_INTERNAL_API (line 23245)
+      // We need to find which IDs correspond to keywords[0] and keywords[1]
       
-      // Image 2: Use second primary keyword + secondary2 keywords  
-      req.body.generatedKeywords2 = [keywords[1]]; // ['doubt']
+      // Query to get ObjectIds for the two primary keywords
+      var primaryKeywordConditions = {
+        status: { $in: [1, 3] },
+        GroupTagTitle: { $in: [keywords[0], keywords[1]] }
+      };
+      var primaryResults = await groupTags.find(primaryKeywordConditions, { GroupTagTitle: 1, _id: 1 });
       
-      console.log("🔑 Keyword splitting for dual image filtering:");
-      console.log("🔑 Image 1 primary keyword:", keywords[0]);
-      console.log("🔑 Image 2 primary keyword:", keywords[1]);
+      var keyword1Id = null;
+      var keyword2Id = null;
+      for (var pr = 0; pr < primaryResults.length; pr++) {
+        if (primaryResults[pr].GroupTagTitle && primaryResults[pr].GroupTagTitle.toLowerCase() === keywords[0].toLowerCase()) {
+          keyword1Id = String(primaryResults[pr]._id);
+        }
+        if (primaryResults[pr].GroupTagTitle && primaryResults[pr].GroupTagTitle.toLowerCase() === keywords[1].toLowerCase()) {
+          keyword2Id = String(primaryResults[pr]._id);
+        }
+      }
+      
+      // Image 1: Use only first primary keyword ID
+      req.body.generatedKeywords = keyword1Id ? [keyword1Id] : [];
+      
+      // Image 2: Use only second primary keyword ID
+      req.body.generatedKeywords2 = keyword2Id ? [keyword2Id] : [];
+      
+      // Keyword splitting logs removed for cleaner output
     } else {
       // Fallback: use all keywords for both images if not enough primary keywords
       req.body.generatedKeywords = keywords || [];
@@ -20151,19 +20443,35 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       //   });
       // }
       
-      // if (MediaSet2.length > 0) {
-      //   console.log("🏆 FINAL SELECTED MEDIA SET 2:");
-      //   MediaSet2.forEach((media, index) => {
-      //     console.log(`🏆 Media Set 2 - ${index + 1}:`);
-      //     console.log(`   - Media ID: ${media._id}`);
-      //     console.log(`   - Title: ${media.value?.Title || 'N/A'}`);
-      //     console.log(`   - Rank: ${media.value?.Ranks || 'N/A'}`);
-      //     console.log(`   - Secondary Keywords Count: ${media.value?.SecondaryKeywordsCount || 0}`);
-      //     console.log(`   - Media Selection Criteria Count: ${media.value?.MediaSelectionCriteriaCount || 0}`);
-      //     console.log(`   - Thumbnail: ${media.value?.thumbnail || 'N/A'}`);
-      //     console.log("   ---");
-      //   });
-      // }
+      // Log top 5 from each set for dual image posts
+      if (MediaSet1.length > 0 && MediaSet2.length > 0) {
+        console.log("\n📊 ========== IMAGE 1: TOP 5 SELECTED IMAGES ==========");
+        const top5Set1 = MediaSet1.slice(0, 5);
+        top5Set1.forEach((media, index) => {
+          console.log(`\n📊 IMAGE 1 - RANK #${index + 1}:`);
+          console.log(`   🆔 Media ID: ${media._id}`);
+          console.log(`   🏆 Ranks: ${media.value?.Ranks || 0}`);
+          console.log(`   🔑 SecondaryKeywordsCount: ${media.value?.SecondaryKeywordsCount || 0}`);
+          console.log(`   ✅ MediaSelectionCriteriaCount: ${media.value?.MediaSelectionCriteriaCount || 0}`);
+          if (media.value?.SecondaryKeywordsMap && media.value.SecondaryKeywordsMap.length > 0) {
+            console.log(`   🗝️  Matched Keywords: ${media.value.SecondaryKeywordsMap.slice(0, 3).join(', ')}...`);
+          }
+        });
+        
+        console.log("\n📊 ========== IMAGE 2: TOP 5 SELECTED IMAGES ==========");
+        const top5Set2 = MediaSet2.slice(0, 5);
+        top5Set2.forEach((media, index) => {
+          console.log(`\n📊 IMAGE 2 - RANK #${index + 1}:`);
+          console.log(`   🆔 Media ID: ${media._id}`);
+          console.log(`   🏆 Ranks: ${media.value?.Ranks || 0}`);
+          console.log(`   🔑 SecondaryKeywordsCount: ${media.value?.SecondaryKeywordsCount || 0}`);
+          console.log(`   ✅ MediaSelectionCriteriaCount: ${media.value?.MediaSelectionCriteriaCount || 0}`);
+          if (media.value?.SecondaryKeywordsMap && media.value.SecondaryKeywordsMap.length > 0) {
+            console.log(`   🗝️  Matched Keywords: ${media.value.SecondaryKeywordsMap.slice(0, 3).join(', ')}...`);
+          }
+        });
+        console.log("\n📊 ========================================\n");
+      }
 
       // CRITICAL FIX: Exit if no results found to prevent infinite loop
       if (MediaSet1.length === 0 && MediaSet2.length === 0) {
@@ -20366,12 +20674,28 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
               ? "https://www.scrpt.com/assets/Media/img/300/" + mediaUrl2_2
               : "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
 
+      // ✅ FIXED: For SelectedKeywords, use primary keywords based on post type
         var selectedKeywords = [];
+      
+      if (PostStreamType === "1UnsplashPost" || PostStreamType === "1MJPost") {
+        // For single image posts, only use first primary keyword
+        if (keywords && keywords.length > 0) {
+          selectedKeywords.push(keywords[0]);  // ✅ "awareness" only
+        }
+      } else {
+        // For dual image posts, use SelectedGtTitle from both sets
         if (set1[loop].SelectedGtTitle) {
           selectedKeywords.push(set1[loop].SelectedGtTitle);
         }
         if (set2[loop].SelectedGtTitle) {
           selectedKeywords.push(set2[loop].SelectedGtTitle);
+        }
+      }
+
+      // For 1UnsplashPost, only use the first primary keyword
+      var keywordsForBlend = keywords ? keywords : [];
+      if (PostStreamType === "1UnsplashPost" && keywordsForBlend.length > 0) {
+        keywordsForBlend = [keywordsForBlend[0]];  // ✅ Only "awareness" for 1Unsplash
         }
 
         var obj = {
@@ -20379,8 +20703,8 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
           blendImage2: blendImage2,
           isSelected: true,
           blendMode: "overlay",
-          Keywords: keywords ? keywords : [],
-          SelectedKeywords: selectedKeywords ? selectedKeywords : [],
+        Keywords: keywordsForBlend,  // ✅ Fixed: Only first keyword for 1Unsplash
+        SelectedKeywords: selectedKeywords ? selectedKeywords : [],  // ✅ Fixed: Only "awareness" for 1Unsplash
 
           SecondaryKeywordsCount_1: set1[loop].SecondaryKeywordsCount
             ? set1[loop].SecondaryKeywordsCount
@@ -20419,16 +20743,7 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
         selectedArr.push(obj);
 
         // Skip blended image generation - only store blend settings
-          console.log(
-          "✅ Blend settings determined:",
-          {
-            blendMode: obj.blendMode,
-            lightness1: set1[loop].Lightness || 0,
-            lightness2: set2[loop].Lightness || 0,
-            image1Url: obj.blendImage1,
-            image2Url: obj.blendImage2
-          }
-        );
+        // console.log removed for cleaner output
       }
 
       var SelectedBlendImages = selectedArr;
@@ -22296,7 +22611,12 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       return res.json({ code: 404, message: "Not Found" });
     }
 
-    req.body.MediaSelectionCriteria = MediaSelectionCriteria || null;
+    // Fetch MediaSelectionCriteria from API or Page document
+    req.body.MediaSelectionCriteria = MediaSelectionCriteria || result[0].MediaSelectionCriteria || null;
+    
+    // For dual-image posts, use the same criteria for both images
+    req.body.MediaSelectionCriteria1 = req.body.MediaSelectionCriteria || result[0].MediaSelectionCriteria1 || null;
+    req.body.MediaSelectionCriteria2 = req.body.MediaSelectionCriteria || result[0].MediaSelectionCriteria2 || null;
 
     let incNum = 0;
     let data = await Counters.findOneAndUpdate(
@@ -22963,8 +23283,10 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           }
         }
         
+        // ❌ REMOVED: Don't concatenate - this would add all keywords to generatedKeywords
+        // We need to keep only the primary keyword ID for proper image filtering
         // Concatenate selectedKeywords with generatedKeywords (like old code)
-        req.body.generatedKeywords = req.body.selectedKeywords.concat(req.body.generatedKeywords);
+        // req.body.generatedKeywords = req.body.selectedKeywords.concat(req.body.generatedKeywords);
       } catch (error) {
       }
     } else {
@@ -23000,8 +23322,10 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           continue;
         }
         
-        // Add to generatedKeywords (like old code)
-        req.body.generatedKeywords.push(keyword);
+        // ❌ REMOVED: Don't add to generatedKeywords here
+        // generatedKeywords is already set correctly for image filtering (line 20344)
+        // Adding all keywords here would break the Image 1/Image 2 split
+        // req.body.generatedKeywords.push(keyword);
         
         // Assign individual rank to each keyword (group multiple keywords per rank)
         if (!subsetByRankObj[rankCounter]) {
@@ -23034,7 +23358,8 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           if (!keyword || keyword === 'undefined') {
             continue;
           }
-          req.body.generatedKeywords.push(keyword);
+          // ❌ REMOVED: Don't add to generatedKeywords
+          // req.body.generatedKeywords.push(keyword);
           
           if (!subsetByRankObj[rankCounter]) {
             subsetByRankObj[rankCounter] = [];
@@ -23054,8 +23379,10 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         }
       }
       
+      // ❌ REMOVED: Don't concatenate - this would add all keywords to generatedKeywords
+      // We need to keep only the primary keyword ID for proper image filtering
       // Concatenate selectedKeywords with generatedKeywords (like old code)
-      req.body.generatedKeywords = req.body.selectedKeywords.concat(req.body.generatedKeywords);
+      // req.body.generatedKeywords = req.body.selectedKeywords.concat(req.body.generatedKeywords);
     }
     
     // Sort by rank keys and convert to arrays (like old code)

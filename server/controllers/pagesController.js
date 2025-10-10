@@ -58,46 +58,52 @@ var ContentPage = {
 _________________________________________________________________________
 */
 
-var getChapterName = function (req, res) {
-	var conditions = {
-		_id: req.headers.chapter_id ? req.headers.chapter_id : 0,
-		OwnerId: req.session.user._id,
-		IsDeleted: 0
-	};
+var getChapterName = async function (req, res) {
+	try {
+		if (!req.headers.chapter_id) {
+			return res.json({
+				status: 400,
+				message: "Chapter ID is required in headers."
+			});
+		}
 
-	var fields = {
-		Title: true
-	};
+		var conditions = {
+			_id: req.headers.chapter_id,
+			OwnerId: req.session.user._id,
+			IsDeleted: 0
+		};
 
-	Chapter.findOne(conditions, fields, function (err, result) {
-		if (!err) {
-			if (result) {
-				var response = {
-					status: 200,
-					message: "Chapter Title",
-					result: result.Title ? result.Title : "Chapter Title"
-				}
-				//res.json(response);
-			}
-			else {
-				console.log(result);
-				var response = {
-					status: 501,
-					message: "Something went wrong."
-				}
-			}
+		var fields = {
+			Title: true
+		};
+
+		const result = await Chapter.findOne(conditions, fields).exec();
+
+		if (result) {
+			var response = {
+				status: 200,
+				message: "Chapter Title",
+				result: result.Title ? result.Title : "Chapter Title"
+			};
 			res.json(response);
 		}
 		else {
-			console.log(err);
 			var response = {
-				status: 501,
-				message: "Something went wrong."
-			}
+				status: 404,
+				message: "Chapter not found."
+			};
 			res.json(response);
 		}
-	});
-}
+	}
+	catch (err) {
+		console.log(err);
+		var response = {
+			status: 501,
+			message: "Something went wrong."
+		};
+		res.json(response);
+	}
+};
 
 /*________________________________________________________________________
    * @Date:      		17 June 2015
@@ -330,87 +336,86 @@ var getPageLibrary = async function (req, res) {
 		const limit = req.body.perPage ? req.body.perPage : 0;
 		const offset = req.body.pageNo ? ((req.body.pageNo - 1) * limit) : 0;
 		
-		// Temporarily bypass session check for testing
-		const userId = "68a733773931522f1b7f4632"; // Hardcoded for testing
-		
 		const conditions = {
-		//ChapterId : req.headers.chapter_id ? req.headers.chapter_id : 0,
-		//Origin : {"$ne":"publishNewChanges"},
-			// Temporarily relaxed conditions for testing - remove user restrictions
-			// $or: [{ CreaterId: userId, Origin: "published" }, { OwnerId: userId, Origin: "shared" }],
-			// OwnerId : userId,
-		IsDeleted: 0,
-		PageType: { $in: ["gallery", "content"] },
-		IsDasheditpage : false,
-	};
+			$or: [
+				{ CreaterId: req.session.user._id, Origin: "published" }, 
+				{ OwnerId: req.session.user._id, Origin: "shared" }
+			],
+			IsDeleted: 0,
+			PageType: { $in: ["gallery", "content"] },
+			IsDasheditpage: false,
+		};
 
-	if (req.body.chapterCheck) {
-		conditions.ChapterId = req.body.chapterId ? req.body.chapterId : 0;
-	}
+		if (req.body.chapterCheck) {
+			conditions.ChapterId = req.body.chapterId ? req.body.chapterId : 0;
+		}
 
 		const sortObj = {
-		//Order : 1,
-		UpdatedOn: -1
-	};
+			UpdatedOn: -1
+		};
 
-	if (req.body.sortBy) {
+		if (req.body.sortBy) {
 			const sortObjBy = req.body.sortBy;
-		if (sortObjBy == "Title") {
+			if (sortObjBy == "Title") {
 				sortObj.Title = -1;
-		} else if (sortObjBy == "CreatedOn") {
+				delete sortObj.UpdatedOn;
+			} else if (sortObjBy == "CreatedOn") {
 				sortObj.CreatedOn = -1;
-		} else if (sortObjBy == "UpdatedOn") {
+				delete sortObj.UpdatedOn;
+			} else if (sortObjBy == "UpdatedOn") {
 				sortObj.UpdatedOn = -1;
-		} else if (sortObjBy == "CreatedOnAsc") {
+			} else if (sortObjBy == "CreatedOnAsc") {
 				sortObj.CreatedOn = 1;
-		} else if (sortObjBy == "UpdatedOnAsc") {
+				delete sortObj.UpdatedOn;
+			} else if (sortObjBy == "UpdatedOnAsc") {
 				sortObj.UpdatedOn = 1;
-		} else if (sortObjBy == "TitleAsc") {
+			} else if (sortObjBy == "TitleAsc") {
 				sortObj.Title = 1;
+				delete sortObj.UpdatedOn;
+			}
 		}
-	}
 
+		// Exclude old viewport data and large fields
 		const fields = {
-		SelectedMedia: 0,
-		SelectedKeywords: 0,
-		SelectedFilters: 0,
-		SelectedGts: 0,
-		AddAnotherGts: 0,
-		ExcludedGts: 0,
-		UploadedMedia: 0,
-		Medias: 0,
-		CommonParams: 0,
-		ViewportDesktopSections: 0,
-		ViewportTabletSections: 0,
-		ViewportMobileSections: 0
-	};
+			SelectedMedia: 0,
+			SelectedKeywords: 0,
+			SelectedFilters: 0,
+			SelectedGts: 0,
+			AddAnotherGts: 0,
+			ExcludedGts: 0,
+			UploadedMedia: 0,
+			Medias: 0,
+			CommonParams: 0,
+			ViewportDesktopSections: 0,
+			ViewportTabletSections: 0,
+			ViewportMobileSections: 0
+		};
 
-		// Debug: Log the query conditions
-		console.log("getPageLibrary - Query conditions:", JSON.stringify(conditions, null, 2));
-		
-		const results = await Page.find(conditions, fields).skip(offset).limit(limit).populate('ChapterId').sort(sortObj);
-		const resultsLength = await Page.find(conditions, fields).countDocuments();
-		
-		// Debug: Log the results
-		console.log("getPageLibrary - Found pages:", resultsLength);
-		console.log("getPageLibrary - Sample results:", results.slice(0, 2));
+		const results = await Page.find(conditions, fields)
+			.skip(offset)
+			.limit(limit)
+			.populate('ChapterId')
+			.sort(sortObj)
+			.exec();
+			
+		const resultsLength = await Page.countDocuments(conditions).exec();
 
 		const response = {
-						count: resultsLength,
-						status: 200,
-						message: "Pages listing",
-						results: results
+			count: resultsLength,
+			status: 200,
+			message: "Pages listing",
+			results: results
 		};
-					res.json(response);
+		res.json(response);
 	} catch (err) {
-					console.log(err);
+		console.log(err);
 		const response = {
 			status: 500,
-						message: "Something went wrong."
+			message: "Something went wrong."
 		};
-					res.json(response);
-				}
-}
+		res.json(response);
+	}
+};
 
 /*________________________________________________________________________
    * @Date:      		31 August 2015
@@ -763,19 +768,22 @@ _________________________________________________________________________
 
 var findAll = async function (req, res) {
 	var conditions = {};
-	console.log("------------ req.query ------------- ", req.query);
+	
+	// Support both header and query param for chapter_id
+	const chapterId = req.headers.chapter_id || req.query.chapter_id;
+	
 	var edit_mode = req.query.edit_mode ? req.query.edit_mode : "before_publish";
 	if (edit_mode == "after_publish") {
 		//console.log("IF   -------edit_mode-------",edit_mode);return;
 		conditions = {
 			//$or : [{Origin : "created"},{Origin : "duplicated"},{Origin : "addedFromLibrary"},{Origin : "published"}],
 			Origin: "publishNewChanges",
-			ChapterId: req.headers.chapter_id ? req.headers.chapter_id : 0,
+			ChapterId: chapterId ? chapterId : 0,
 			OwnerId: req.session.user._id,
 			IsDeleted: 0,
 			//IsDasheditpage:{$exists:true, IsDasheditpage: {$eq:true}}
 			IsDasheditpage: true,
-			PageType: { $in: ["gallery", "content"] }
+			PageType: { $in: ["gallery", "content", "qaw-gallery"] }
 		};
 	}
 	else if (edit_mode == "view_mode") {
@@ -784,24 +792,30 @@ var findAll = async function (req, res) {
 			//$or : [{Origin : "created"},{Origin : "duplicated"},{Origin : "addedFromLibrary"},{Origin : "published"}],
 			//Origin : "published",
 			//Origin : {$ne:"publishNewChanges"},
-			ChapterId: req.headers.chapter_id ? req.headers.chapter_id : 0,
+			ChapterId: chapterId ? chapterId : 0,
 			//OwnerId : req.session.user._id,
 			IsDeleted: 0,
 			//IsDasheditpage:{$exists:true, IsDasheditpage: {$eq:true}}
 			IsDasheditpage: { $ne: true },
-			PageType: { $in: ["gallery", "content"] }
+			PageType: { $in: ["gallery", "content", "qaw-gallery"] }
 		};
 	}
 	else {
 		//console.log("ELSE----------   -------edit_mode-------",edit_mode);return;
 		conditions = {
-			$or: [{ Origin: "created" }, { Origin: "duplicated" }, { Origin: "addedFromLibrary" }],
-			ChapterId: req.headers.chapter_id ? req.headers.chapter_id : 0,
-			CreaterId: req.session.user._id,
+			$or: [
+				{ Origin: "created", CreaterId: req.session.user._id },
+				{ Origin: "duplicated", CreaterId: req.session.user._id },
+				{ Origin: "addedFromLibrary", CreaterId: req.session.user._id },
+				{ Origin: "created", OwnerId: req.session.user._id },
+				{ Origin: "duplicated", OwnerId: req.session.user._id },
+				{ Origin: "addedFromLibrary", OwnerId: req.session.user._id }
+			],
+			ChapterId: chapterId ? chapterId : 0,
 			//IsDasheditpage: { $exists: false},
 			//IsLaunched : false,
 			IsDeleted: 0,
-			PageType: { $in: ["gallery", "content"] }
+			PageType: { $in: ["gallery", "content", "qaw-gallery"] }
 		};
 	}
 
@@ -963,49 +977,38 @@ _________________________________________________________________________
 */
 
 const create = async (req, res) => {
-	//check isMyChapter( req.headers.chapter_id ) - Middle-ware Authorization check 
-
-	//separate functionality of Search Gallery page & Content page
-	const pageType = req.body.page_type ? req.body.page_type : "";
-	console.log("page create called..........");
-	console.log("Request body:", req.body);
-	console.log("Page type received:", pageType);
-	console.log("Page type type:", typeof pageType);
-	
 	try {
-	switch (pageType) {
-		case "gallery":
-			console.log("calling ----- SearchGalleryPage.create(req , res)");
+		const pageType = req.body.page_type ? req.body.page_type : "";
+		
+		switch (pageType) {
+			case "gallery":
 				await SearchGalleryPage.create(req, res);
-			break;
+				break;
 
-		case "content":
-				console.log("calling ----- ContentPage.create(req , res)");
+			case "content":
 				await ContentPage.create(req, res);
-			break;
+				break;
 
-		case "qaw-gallery":				//question-answer-widget's hidden board. 
-				console.log("calling ----- ContentPage.create_QawGallery(req , res)");
+			case "qaw-gallery":
 				await ContentPage.create_QawGallery(req, res);
-			break;
+				break;
 
-		default:
-				console.log("No matching case found for pageType:", pageType);
+			default:
 				const response = {
-					status: 501,
-					message: "Something went wrong."
-				}
+					status: 400,
+					message: "Invalid page_type. Must be 'gallery', 'content', or 'qaw-gallery'."
+				};
 				res.json(response);
 		}
 	} catch (error) {
 		console.log("Error in page create:", error);
 		const response = {
-				status: 501,
-				message: "Something went wrong."
-			}
-			res.json(response);
+			status: 501,
+			message: "Something went wrong."
+		};
+		res.json(response);
 	}
-}
+};
 
 /*________________________________________________________________________
    * @Date:      		17 June 2015
@@ -1384,55 +1387,50 @@ var remove = async function (req, res) {
 _________________________________________________________________________
 */
 
-var reorder = function (req, res) {
-	//check isMyChapter( req.headers.chapter_id ) - Middle-ware Authorization check 
-	var pageIds = req.body.page_ids ? req.body.page_ids : [];
-	console.log("pageIds = ", pageIds);
-	var resultCount = 0;
-	for (var loop = 0; loop < pageIds.length; loop++ , resultCount++) {
-		var pageId = pageIds[loop];
-		var conditions = {};
-		var data = {};
-		console.log("req.headers = ", req.headers)
-		conditions._id = pageId;
-		console.log("conditions = ", conditions);
-		findAndUpdate(conditions, loop + 1);
-	}
+var reorder = async function (req, res) {
+	try {
+		var pageIds = req.body.page_ids ? req.body.page_ids : [];
 
-	function findAndUpdate(conditions, order) {
-		Page.findOne(conditions).exec(function (err, result) {
-			if (!err) {
-				result.Order = order;
-				console.log("result = ", result);
-				result.save(function (err, result) {
-					console.log("Reordered = ", result);
-				});
+		if (!pageIds.length) {
+			return res.json({
+				status: 501,
+				message: "No page IDs provided.",
+			});
+		}
 
-				//update chapter's default thumbanil - if chapter is not launched yet...
-				if (result.IsDasheditpage == false && order == 1) {
-					var ChapID = result.ChapterId;
-					__updateCoverArt__Chapter(ChapID, result.HeaderImage);	//no return ---- no wait ...
-				}
-			}
+		// Update all pages in parallel
+		const updatePromises = pageIds.map((pageId, index) => {
+			return Page.findByIdAndUpdate(
+				pageId,
+				{ Order: index + 1 },
+				{ new: true }
+			);
 		});
-	}
 
-	if (pageIds.length > 0 && resultCount == pageIds.length) {
+		const updatedPages = await Promise.all(updatePromises);
+
+		// Update chapter's default thumbnail if first page changed
+		if (updatedPages.length > 0 && updatedPages[0]) {
+			const firstPage = updatedPages[0];
+			if (firstPage.IsDasheditpage == false && firstPage.ChapterId && firstPage.HeaderImage) {
+				__updateCoverArt__Chapter(firstPage.ChapterId, firstPage.HeaderImage);
+			}
+		}
+
 		var response = {
 			status: 200,
-			message: "Pages reordered successfully."
-		}
+			message: "Pages reordered successfully.",
+		};
 		res.json(response);
-
-	}
-	else {
+	} catch (error) {
+		console.log("Reorder error:", error);
 		var response = {
 			status: 501,
-			message: "Something went wrong."
-		}
+			message: "Something went wrong.",
+		};
 		res.json(response);
 	}
-}
+};
 
 var reorder_V2 = function (req, res) {
 	//check isMyChapter( req.headers.chapter_id ) - Middle-ware Authorization check 
@@ -4963,26 +4961,37 @@ OriginatedFrom : {type:mongoose.Schema.Types.ObjectId},		//this is the id of the
 //move/copy feature keys
 */
 const copyPost = async function(req, res) {
-	const selectedPageId = req.body.selectedPageId ? req.body.selectedPageId : null;
-	const postId = req.body.post_id ? req.body.post_id : null;
-	
-	// Hardcoded user ID for testing (bypassing session)
-	const userId = "68a733773931522f1b7f4632";
-	
-	// Import shortid for generating unique IDs
-	const shortid = require("shortid");
-	
-	if (!selectedPageId || !postId) {
-		return res.json({ "code": "400", "msg": "Missing required parameters" });
-	}
-	
 	try {
+		const selectedPageId = req.body.selectedPageId ? req.body.selectedPageId : null;
+		const postId = req.body.post_id ? req.body.post_id : null;
+		
+		// Import shortid for generating unique IDs
+		const shortid = require("shortid");
+		
+		// Validate authentication (using session mapped from JWT)
+		if (!req.session || !req.session.user || !req.session.user._id) {
+			return res.status(401).json({
+				"code": "401",
+				"msg": "Unauthorized. Please login to continue."
+			});
+		}
+		
+		const userId = req.session.user._id;
+		
+		// Validate required parameters
+		if (!selectedPageId || !postId) {
+			return res.status(400).json({ 
+				"code": "400", 
+				"msg": "Missing required parameters. Both 'selectedPageId' and 'post_id' are required." 
+			});
+		}
+		
 		// First, find the original media in the Media collection
 		const Media = require('./../models/mediaModel.js');
 		const originalMedia = await Media.findById(postId);
 		
 		if (!originalMedia) {
-			return res.json({ "code": "404", "msg": "Media not found!" });
+			return res.status(404).json({ "code": "404", "msg": "Media not found!" });
 		}
 		
 		// Create a copy of the entire media object (same as before)
@@ -5024,21 +5033,26 @@ const copyPost = async function(req, res) {
 		);
 		
 		if (pushResult.modifiedCount === 0) {
-			return res.json({ "code": "404", "msg": "Target page not found!" });
+			return res.status(404).json({ "code": "404", "msg": "Target page not found!" });
 		}
 		
 		res.json({ 
 			"code": "200", 
 			"message": "Media copied successfully!",
 			"newMediaId": savedMedia._id,
-			"originalMediaId": originalMedia._id
+			"originalMediaId": originalMedia._id,
+			"copiedBy": userId
 		});
 		
 	} catch (err) {
-		console.log("Error in copyPost:", err);
-		res.json({ "code": "500", "message": "Something went wrong", error: err.message });
+		console.error("Error in copyPost:", err);
+		res.status(500).json({ 
+			"code": "500", 
+			"message": "Error copying post. Please try again.", 
+			"error": err.message 
+		});
 	}
-}
+};
 
 var saveUserTheme = function(req,res){
 	var selectedPageId = req.body.selectedPageId ? req.body.selectedPageId : null;
@@ -5470,7 +5484,12 @@ exports.updateCommunityPostFlag = updateCommunityPostFlag;
 exports.getPlateformPosts = getPlateformPosts;
 exports.getMTsForIdeas = getMTsForIdeas;
 exports.getThemes = getThemes;
-exports.getThemesFromPosts = getThemesFromPosts;
+
+// Use modernized version for getThemesFromPosts
+const modernizedBoard = require('./boardController_MODERNIZED.js');
+exports.getThemesFromPosts = modernizedBoard.getThemesFromPosts;
+exports.getThemesFromPosts_OLD = getThemesFromPosts; // Backup
+
 exports.getMetaThemes_fromAvailablePosts = getMetaThemes_fromAvailablePosts;
 
 exports.movePost = movePost;

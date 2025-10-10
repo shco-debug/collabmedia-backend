@@ -485,7 +485,100 @@ var pageSchema = new mongoose.Schema(
 		EmailEngineDataSets : {
 			type:Array
 		},
-		MediaSelectionCriteria : {type: Object}
+		MediaSelectionCriteria : {type: Object},
+		
+		// ========== MODERN COMPONENT-BASED SCHEMA ==========
+		// New responsive component system (replaces ViewportDesktop/Tablet/Mobile)
+		Content: [{
+			id: {
+				type: String,
+				default: function() { return new mongoose.Types.ObjectId().toString(); }
+			},
+			type: {
+				type: String,
+				enum: ["text", "image", "video", "audio", "qa", "media-grid", "question"],
+				default: "text"
+			},
+			// Actual content data
+			data: {
+				text: { type: String },
+				mediaUrl: { type: String },
+				mediaTitle: { type: String },
+				thumbnail: { type: String },
+				qaPageId: { type: mongoose.Schema.Types.ObjectId, ref: 'Pages' },
+				qaPageRef: { type: mongoose.Schema.Types.ObjectId, ref: 'Pages' }, // Alternative ref name
+				embedCode: { type: String },
+				mediaIds: [{ type: mongoose.Schema.Types.ObjectId, ref: 'media' }]
+			},
+			// Layout configuration (responsive by default)
+			layout: {
+				containerClass: { type: String, default: "container" },
+				width: { type: String, default: "100%" },
+				alignment: { type: String, enum: ["left", "center", "right", "justify"], default: "left" },
+				stackOnMobile: { type: Boolean, default: true },
+				order: { type: Number, default: 0 }
+			},
+			// Responsive overrides (optional)
+			responsive: {
+				mobile: {
+					width: { type: String },
+					order: { type: Number },
+					hide: { type: Boolean, default: false }
+				},
+				tablet: {
+					width: { type: String },
+					order: { type: Number },
+					hide: { type: Boolean, default: false }
+				},
+				desktop: {
+					width: { type: String },
+					order: { type: Number },
+					hide: { type: Boolean, default: false }
+				}
+			},
+			// Styling
+			style: {
+				animation: { type: String },
+				bgColor: { type: String },
+				textColor: { type: String },
+				padding: { type: String },
+				margin: { type: String }
+			}
+		}],
+		
+		// Page-level layout configuration
+		PageLayout: {
+			type: { 
+				type: String, 
+				enum: ["stack", "grid", "flex", "masonry", "custom"], 
+				default: "stack" 
+			},
+			columns: {
+				mobile: { type: Number, default: 1 },
+				tablet: { type: Number, default: 2 },
+				desktop: { type: Number, default: 3 }
+			},
+			gap: { 
+				type: String, 
+				enum: ["none", "sm", "md", "lg", "xl"], 
+				default: "md" 
+			},
+			maxWidth: { type: String, default: "1200px" }
+		},
+		
+		// Background for the entire page
+		PageBackground: {
+			type: { 
+				type: String, 
+				enum: ["color", "image", "video", "gradient"], 
+				default: "color" 
+			},
+			value: { type: String, default: "#ffffff" },
+			opacity: { type: Number, default: 1 },
+			overlay: { type: String }
+		}
+		// Note: Old viewport fields (ViewportDesktopSections, etc.) are kept for backward compatibility
+		// They will be deprecated and can be removed after migration
     }, 
     { 
         collection: 'Pages' 
