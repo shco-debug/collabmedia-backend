@@ -284,7 +284,8 @@ function checkAdminSession(req , res , next){
 	console.log('Session info:', {
 		sessionID: req.sessionID,
 		hasSession: !!req.session,
-		adminSession: !!req.session.admin,
+		adminSession: !!(req.session && req.session.admin),
+		userRole: req.session && req.session.user ? req.session.user.Role : null,
 		cookies: req.headers.cookie
 	});
 	next();
@@ -301,6 +302,11 @@ function checkAdminSession(req , res , next){
 }
 
 function checkSubAdminSession(req , res , next){
+	// Initialize session if undefined
+	if (!req.session) {
+		req.session = {};
+	}
+	
 	if (req.session.subAdmin) {
 		console.log('✅ SubAdmin session valid, proceeding...');
 		next();

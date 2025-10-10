@@ -1,5 +1,5 @@
-var board = require('./../models/boardModel.js');
-//var board = require('./../models/pageModel.js');
+//var board = require('./../models/boardModel.js');
+var board = require('./../models/pageModel.js');
 var media = require('./../models/mediaModel.js');
 var mediaAction = require('../models/mediaActionLogModel.js');
 var mediaActionCtrl = require('../controllers/mediaActionLogsController.js');
@@ -6293,9 +6293,27 @@ var getCurrentBoardDetails_CapsuleForThemeCases = function(req, res) {
 		res.json({code:501 , message : "---------UNWANTED CASE-------------"});
 	}
 }
+
+// ============================================================================
+// MODERNIZED VERSION - Import and Setup
+// ============================================================================
+
+// Import the modernized version
+const modernized = require('./boardController_MODERNIZED.js');
+
+// Export both versions for testing
 //exports.getCurrentBoardDetails = getCurrentBoardDetails;
 //exports.getCurrentBoardDetails = getCurrentBoardDetails_V2;
-exports.getCurrentBoardDetails = getCurrentBoardDetails_V4_WithPrivacySettings;
+//exports.getCurrentBoardDetails = getCurrentBoardDetails_V4_WithPrivacySettings; // OLD VERSION
+
+// ✅ USE MODERNIZED VERSION (works with pageModel - Medias as ObjectId array)
+exports.getCurrentBoardDetails = modernized.getCurrentBoardDetails;
+
+// 🔄 BACKUP: Old version available if needed
+exports.getCurrentBoardDetails_OLD = getCurrentBoardDetails_V4_WithPrivacySettings;
+
+// 🐛 DEBUG: Auth debugging endpoint
+exports.debugBoardAuth = modernized.debugBoardAuth;
  
  var viewPostedMedia = function(req, res) {
     /*

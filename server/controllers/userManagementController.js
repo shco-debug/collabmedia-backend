@@ -8,7 +8,7 @@ var bcrypt = require('bcryptjs');
 var RequestInvitation = require('./../models/requestInvitationModel.js');
 
 //updates for share and published cases
-var __updateChapterCollection = function(registeredUserEmail , registeredUserId){
+var __updateChapterCollection = async function(registeredUserEmail , registeredUserId){
 	if( registeredUserEmail && registeredUserId){
 		var Capsule = require('./../models/capsuleModel.js');
 		var Chapter = require('./../models/chapterModel.js');
@@ -21,36 +21,27 @@ var __updateChapterCollection = function(registeredUserEmail , registeredUserId)
 		var data = {
 			OwnerId : registeredUserId
 		};
-		var options = { 
-			multi: true 
-		};		
 		
-		Capsule.update(conditions , {$set : data} , options , function(err , numAffected){
-			if( !err ){
-				console.log("Capsule : Total Number Of Affected Records = ",numAffected);
-			}
-			else{
-				console.log("Capsule : ----09998887----ERROR : ",err);
-			}
-		});
+		try {
+			const capsuleResult = await Capsule.updateMany(conditions, {$set : data}).exec();
+			console.log("Capsule : Total Number Of Affected Records = ", capsuleResult.modifiedCount || 0);
+		} catch(err) {
+			console.log("Capsule : ----09998887----ERROR : ", err);
+		}
 		
-		Chapter.update(conditions , {$set : data} , options , function(err , numAffected){
-			if( !err ){
-				console.log("Chapter : Total Number Of Affected Records = ",numAffected);
-			}
-			else{
-				console.log("Chapter : ----09998887----ERROR : ",err);
-			}
-		})
+		try {
+			const chapterResult = await Chapter.updateMany(conditions, {$set : data}).exec();
+			console.log("Chapter : Total Number Of Affected Records = ", chapterResult.modifiedCount || 0);
+		} catch(err) {
+			console.log("Chapter : ----09998887----ERROR : ", err);
+		}
 		
-		Page.update(conditions , {$set : data} , options , function(err , numAffected){
-			if( !err ){
-				console.log("Page : Total Number Of Affected Records = ",numAffected);
-			}
-			else{
-				console.log("Page : ----09998887----ERROR : ",err);
-			}
-		})
+		try {
+			const pageResult = await Page.updateMany(conditions, {$set : data}).exec();
+			console.log("Page : Total Number Of Affected Records = ", pageResult.modifiedCount || 0);
+		} catch(err) {
+			console.log("Page : ----09998887----ERROR : ", err);
+		}
 	}
 	else{
 		console.log("----09998887----registeredUserEmail : "+registeredUserEmail+" -----registeredUserId : "+registeredUserId);
@@ -58,7 +49,7 @@ var __updateChapterCollection = function(registeredUserEmail , registeredUserId)
 }
 
 //updates for invitations case
-var __updateChapterCollection__invitationCase = function(registeredUserEmail , registeredUserId){
+var __updateChapterCollection__invitationCase = async function(registeredUserEmail , registeredUserId){
 	if( registeredUserEmail && registeredUserId){
 		var Chapter = require('./../models/chapterModel.js');
 		
@@ -69,18 +60,13 @@ var __updateChapterCollection__invitationCase = function(registeredUserEmail , r
 		var data = {
 			"LaunchSettings.Invitees.$.UserID" : registeredUserId
 		};
-		var options = { 
-			multi: true 
-		};		
 		
-		Chapter.update(conditions , {$set : data} , options , function(err , numAffected){
-			if( !err ){
-				console.log("Chapter : Total Number Of Affected Records = ",numAffected);
-			}
-			else{
-				console.log("Chapter : ----09998887----ERROR : ",err);
-			}
-		})
+		try {
+			const result = await Chapter.updateMany(conditions, {$set : data}).exec();
+			console.log("Chapter Invitations : Total Number Of Affected Records = ", result.modifiedCount || 0);
+		} catch(err) {
+			console.log("Chapter Invitations : ----09998887----ERROR : ", err);
+		}
 	}
 	else{
 		console.log("----09998887----registeredUserEmail : "+registeredUserEmail+" -----registeredUserId : "+registeredUserId);
@@ -88,149 +74,423 @@ var __updateChapterCollection__invitationCase = function(registeredUserEmail , r
 }
 
 // To fetch all Users
-var findAll = function (req, res) {
-	var conditions = {
-		IsDeleted:false
-	};
-	/*var fields = {
-		Name : true,
-		NickName : true,
-		Email : true,
-		Gender : true,
-		FSGsArr2 : true,
-		CreatedOn : true,
-		ModifiedOn : true,
-		Status : true,
-		AllowCreate : true
-	};*/
-	var fields = {};
-	
-	var sortObj = {
-		ModifiedOn:-1
-	};
-	
-    userManagement.find(conditions , fields).sort(sortObj).exec(function (err, result) {
-        if (err) {
-            res.json(err);
-        } else {
-            if (result.length == 0) {
-                res.json({"code": "404", "msg": "Not Found"})
-            } else {
-                res.json({"code": "200", "msg": "Success", "response": result})
-            }
-        }
-    })
+var findAll = async function (req, res) {
+	try {
+		// Check authorization - only admin and subadmin can view all users
+		if (!req.session || !req.session.user) {
+			return res.status(401).json({
+				"code": "401",
+				"msg": "Unauthorized. Please login to continue."
+			});
+		}
+		
+		const userRole = req.session.user.Role;
+		if (userRole !== 'admin' && userRole !== 'subadmin') {
+			return res.status(403).json({
+				"code": "403",
+				"msg": "Access denied. Only admins and subadmins can view all users.",
+				"yourRole": userRole
+			});
+		}
+		
+		var conditions = {
+			IsDeleted: false
+		};
+		/*var fields = {
+			Name : true,
+			NickName : true,
+			Email : true,
+			Gender : true,
+			FSGsArr2 : true,
+			CreatedOn : true,
+			ModifiedOn : true,
+			Status : true,
+			AllowCreate : true
+		};*/
+		var fields = {};
+		
+		var sortObj = {
+			ModifiedOn: -1
+		};
+		
+		const result = await userManagement.find(conditions, fields).sort(sortObj).exec();
+		
+		if (result.length == 0) {
+			res.json({"code": "404", "msg": "Not Found"});
+		} else {
+			res.json({"code": "200", "msg": "Success", "response": result});
+		}
+	} catch (err) {
+		console.error('Error in findAll:', err);
+		res.status(500).json({"code": "500", "msg": "Error fetching users", "error": err.message});
+	}
 };
 exports.findAll = findAll;
 
 //For Add User
-var add = function (req, res) {
-console.log("Data form Frontend - - >",req.body);
-   userManagement.find({Email: req.body.Email , IsDeleted : false}, function (err, result) {
-       console.log("Resuklts ------------->",result)
-        if (result.length == 0) {
-            var newUser = new userManagement();
-            newUser.Email = req.body.Email;
-            newUser.Password = newUser.generateHash(req.body.Password);
-            newUser.Name = req.body.Name
-            newUser.FSGsArr2 = req.body.FSGsArr2;//typeof(req.body.FSGsArr2)!='undefined'?req.body.FSGsArr2:{};
-            newUser.NickName = req.body.Name ? req.body.Name : "";
+var add = async function (req, res) {
+	try {
+		console.log("Data form Frontend - - >", req.body);
+		
+		// Check authorization - only admin and subadmin can add users
+		if (!req.session || !req.session.user) {
+			return res.status(401).json({
+				"code": "401",
+				"msg": "Unauthorized. Please login to continue."
+			});
+		}
+		
+		const userRole = req.session.user.Role;
+		if (userRole !== 'admin' && userRole !== 'subadmin') {
+			return res.status(403).json({
+				"code": "403",
+				"msg": "Access denied. Only admins and subadmins can add users.",
+				"yourRole": userRole
+			});
+		}
+		
+		// Validate required fields
+		if (!req.body.Email) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": "Missing required field: Email is required"
+			});
+		}
+		if (!req.body.Password) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": "Missing required field: Password is required"
+			});
+		}
+		if (!req.body.Name) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": "Missing required field: Name is required"
+			});
+		}
+		
+		const result = await userManagement.find({Email: req.body.Email, IsDeleted: false}).exec();
+		console.log("Results ------------->", result);
+		
+		if (result.length == 0) {
+			var newUser = new userManagement();
+			newUser.Email = req.body.Email;
+			newUser.Password = newUser.generateHash(req.body.Password);
+			newUser.Name = req.body.Name;
+			newUser.FSGsArr2 = req.body.FSGsArr2;//typeof(req.body.FSGsArr2)!='undefined'?req.body.FSGsArr2:{};
+			newUser.NickName = req.body.Name ? req.body.Name : "";
+			
+			// Set role (default to 'user')
+			const userRole = req.body.Role || 'user';
+			newUser.Role = userRole;
+			
+			// Auto-assign permissions based on role
+			if (userRole === 'admin') {
+				newUser.Permissions = [
+					'user_management',
+					'content_moderation',
+					'system_settings',
+					'analytics',
+					'billing',
+					'content_editing'
+				];
+				newUser.AllowCreate = true; // Admins can always create
+			} else if (userRole === 'subadmin') {
+				// SubAdmin gets limited permissions (can be customized via req.body.Permissions if needed)
+				newUser.Permissions = req.body.Permissions && Array.isArray(req.body.Permissions) 
+					? req.body.Permissions 
+					: ['content_moderation', 'basic_analytics', 'content_editing'];
+				newUser.AllowCreate = req.body.AllowCreate !== undefined ? req.body.AllowCreate : true;
+				
+				// Auto-set supervisor to the user creating this subadmin (mapped from JWT via sessionCompatibility)
+				if (req.session && req.session.user && req.session.user._id) {
+					newUser.Supervisor = req.session.user._id;
+				}
+			} else {
+				// Regular user - no special permissions
+				newUser.Permissions = [];
+				newUser.AllowCreate = req.body.AllowCreate !== undefined ? req.body.AllowCreate : false;
+			}
+			
+			// Set username if provided
+			if (req.body.UserName) {
+				newUser.UserName = req.body.UserName;
+			}
 
-            newUser.save(function (err, numAffected) {
-                if (err) {
-                    res.json(err);
-                } else {
-						__updateChapterCollection(newUser.Email , numAffected._id);
-						__updateChapterCollection__invitationCase(newUser.Email , numAffected._id);
-						
-                        var condition = {}
-                        condition.name = "Admin__AddUser";
-                        EmailTemplate.find(condition, {}, function (err, results) {
-							if (!err) {
-								if (results.length) {
-									var newHtml = results[0].description.replace(/{Password}/g, req.body.Password);
-									newHtml = newHtml.replace(/{RecipientName}/g, req.body.Name);
-									console.log("**** New Html - - >*****",newHtml);
-									/*
-									var transporter = nodemailer.createTransport({
-										service: 'Gmail',
-										auth: {
-											user: 'collabmedia.scrpt@gmail.com',
-											pass: 'scrpt123_2014collabmedia#1909'
-										}
-									});	
-									*/
-									var transporter = nodemailer.createTransport(process.EMAIL_ENGINE.info.smtpOptions)
-									var mailOptions = {
-										//from: "Scrpt <collabmedia.scrpt@gmail.com>",
-										from: process.EMAIL_ENGINE.info.senderLine,
-										to: req.body.Email,
-										subject: results[0].subject ? results[0].subject : 'Thanks for your interest.',
-										html:newHtml
-										//html: '<h3>Thank you for registering with CollabMedia.</h3> <p>Your account has been activated and Please Go and Login into our website and enjoy the sevices we provide</p><h3>Thanks</h3><p>CollabMedia Team</p>'
-									};
-									// send mail with defined transport object
-									transporter.sendMail(mailOptions, function (error, info) {
-										if (error) {
-											return console.log(error);
-										}
-										console.log('USER ADDED BY ADMIN---------Message sent: ' + info.response);
-									});
-
-								}
-							}
-						})
-                   findAll(req, res);            
-                }
-            });
-        } else {
-            res.json({"code": "404", "msg": "Email already exists!"});
-        }
-    });
+			const savedUser = await newUser.save();
+			
+			// Send email notification
+			try {
+				var condition = { name: "Admin__AddUser" };
+				const emailResults = await EmailTemplate.find(condition, {}).exec();
+				
+				if (emailResults.length) {
+					var newHtml = emailResults[0].description.replace(/{Password}/g, req.body.Password);
+					newHtml = newHtml.replace(/{RecipientName}/g, req.body.Name);
+					console.log("**** New Html - - >*****", newHtml);
+					
+					var transporter = nodemailer.createTransport(process.EMAIL_ENGINE.info.smtpOptions);
+					var mailOptions = {
+						from: process.EMAIL_ENGINE.info.senderLine,
+						to: req.body.Email,
+						subject: emailResults[0].subject ? emailResults[0].subject : 'Thanks for your interest.',
+						html: newHtml
+					};
+					
+					// Send mail asynchronously (don't await)
+					transporter.sendMail(mailOptions, function (error, info) {
+						if (error) {
+							return console.log('Email send error:', error);
+						}
+						console.log('USER ADDED BY ADMIN---------Message sent: ' + info.response);
+					});
+				}
+			} catch (emailErr) {
+				console.error('Email template error:', emailErr);
+				// Continue even if email fails
+			}
+			
+			// Return only the newly created user (exclude password)
+			const userResponse = savedUser.toObject();
+			delete userResponse.Password;
+			
+			res.json({
+				"code": "200", 
+				"msg": "User created successfully", 
+				"user": userResponse
+			});
+		} else {
+			res.json({"code": "404", "msg": "Email already exists!"});
+		}
+	} catch (err) {
+		console.error('Error in add user:', err);
+		res.status(500).json({"code": "500", "msg": "Error adding user", "error": err.message});
+	}
 };
 exports.add = add;
 
-// Edit Email Template
-var edit = function (req, res) {
-    console.log("inside Edit Usr Backend - - >",req.body);
-//    return;
-    var fields = {
-        Name: req.body.Name,
-        Email: req.body.Email,
-        NickName: req.body.NickName,
-        FSGsArr2 : typeof(req.body.FSGsArr2)=='object'?req.body.FSGsArr2:{}
-
-    };
-    var query = {_id: req.body.id};
-    var options = {multi: false};
-    userManagement.update(query, {$set: fields}, options, callback)
-    function callback(err, numAffected) {
-        if (err) {
-            res.json(err)
-        } else {
-            findAll(req, res)
-        }
-    }
+// Edit User
+var edit = async function (req, res) {
+	try {
+		console.log("inside Edit User Backend - - >", req.body);
+		
+		// Check authorization - only admin and subadmin can edit users
+		if (!req.session || !req.session.user) {
+			return res.status(401).json({
+				"code": "401",
+				"msg": "Unauthorized. Please login to continue."
+			});
+		}
+		
+		const userRole = req.session.user.Role;
+		if (userRole !== 'admin' && userRole !== 'subadmin') {
+			return res.status(403).json({
+				"code": "403",
+				"msg": "Access denied. Only admins and subadmins can edit users.",
+				"yourRole": userRole
+			});
+		}
+		
+		// Validate required fields
+		const userId = req.body._id || req.body.id;
+		if (!userId && !req.body.Email) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": "Missing required field: _id, id, or Email is required to identify the user"
+			});
+		}
+		
+		// Build initial fields (only add if provided)
+		var fields = {};
+		if (req.body.Name) fields.Name = req.body.Name;
+		if (req.body.Email && req.body.Email !== userId) fields.Email = req.body.Email; // Don't update email if it's the identifier
+		if (req.body.NickName) fields.NickName = req.body.NickName;
+		if (req.body.FSGsArr2 && typeof(req.body.FSGsArr2) == 'object') fields.FSGsArr2 = req.body.FSGsArr2;
+		
+		// Add optional fields if provided
+		if (req.body.UserName) fields.UserName = req.body.UserName;
+		if (req.body.ProfilePic) fields.ProfilePic = req.body.ProfilePic;
+		if (req.body.Gender) fields.Gender = req.body.Gender;
+		if (req.body.AllowCreate !== undefined) fields.AllowCreate = req.body.AllowCreate;
+		
+		// Handle Role changes
+		if (req.body.Role) {
+			fields.Role = req.body.Role;
+			
+			// Auto-assign permissions based on new role
+			if (req.body.Role === 'admin') {
+				fields.Permissions = [
+					'user_management',
+					'content_moderation',
+					'system_settings',
+					'analytics',
+					'billing',
+					'content_editing'
+				];
+			} else if (req.body.Role === 'subadmin') {
+				// Use custom permissions if provided, otherwise use defaults
+				fields.Permissions = req.body.Permissions && Array.isArray(req.body.Permissions)
+					? req.body.Permissions
+					: ['content_moderation', 'basic_analytics', 'content_editing'];
+				
+				// Auto-set supervisor to the logged-in user if not provided
+				if (!req.body.Supervisor && req.session && req.session.user && req.session.user._id) {
+					fields.Supervisor = req.session.user._id;
+				} else if (req.body.Supervisor) {
+					fields.Supervisor = req.body.Supervisor;
+				}
+			} else if (req.body.Role === 'user') {
+				// Reset to regular user
+				fields.Permissions = [];
+				fields.Supervisor = null;
+			}
+		} else if (req.body.Permissions && Array.isArray(req.body.Permissions)) {
+			// Allow manual permission updates without changing role
+			fields.Permissions = req.body.Permissions;
+		}
+		
+		// Build query - support finding by _id, id, or Email
+		let query;
+		
+		// Check if userId is a valid ObjectId (24 character hex string)
+		if (userId && /^[a-fA-F0-9]{24}$/.test(userId)) {
+			query = { _id: userId };
+		} else if (userId) {
+			// If not a valid ObjectId, assume it's an email
+			query = { Email: userId };
+		} else if (req.body.Email) {
+			// Fallback to Email field
+			query = { Email: req.body.Email };
+		}
+		
+		// First, fetch the current user to check existing role
+		const currentUser = await userManagement.findOne(query).exec();
+		
+		if (!currentUser) {
+			return res.status(404).json({ "code": "404", "msg": "User not found" });
+		}
+		
+		// Check if trying to change to the same role
+		if (req.body.Role && currentUser.Role === req.body.Role) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": `User is already a ${req.body.Role}`,
+				"currentRole": currentUser.Role
+			});
+		}
+		
+		// Check if there are any actual changes
+		if (Object.keys(fields).length === 0 && !req.body.Role && !req.body.Permissions) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": "No fields to update. Please provide at least one field to modify."
+			});
+		}
+		
+		const updatedUser = await userManagement.findOneAndUpdate(
+			query,
+			{ $set: fields },
+			{ new: true } // Return updated document
+		).exec();
+		
+		if (!updatedUser) {
+			return res.status(404).json({ "code": "404", "msg": "User not found" });
+		}
+		
+		// Return updated user (exclude password)
+		const userResponse = updatedUser.toObject();
+		delete userResponse.Password;
+		
+		res.json({
+			"code": "200",
+			"msg": "User updated successfully",
+			"user": userResponse
+		});
+	} catch (err) {
+		console.error('Error in edit user:', err);
+		res.status(500).json({ "code": "500", "msg": "Error updating user", "error": err.message });
+	}
 };
 exports.edit = edit;
 
 //For Delete User
-
-var deleteUser = function(req,res){
-    console.log("***************",req.body);
-	var fields={
-		IsDeleted: true
-	};
-	var query={_id:req.body.id};
-	var options = { multi: false };
-	userManagement.update(query, { $set: fields}, options, function(err, numAffected){
-		if(err){
-			res.json(err)
+var deleteUser = async function(req, res){
+	try {
+		console.log("Deleting user:", req.body);
+		
+		// Check authorization - only admin and subadmin can delete users
+		if (!req.session || !req.session.user) {
+			return res.status(401).json({
+				"code": "401",
+				"msg": "Unauthorized. Please login to continue."
+			});
 		}
-		else{
-			findAll(req,res)
+		
+		const userRole = req.session.user.Role;
+		if (userRole !== 'admin' && userRole !== 'subadmin') {
+			return res.status(403).json({
+				"code": "403",
+				"msg": "Access denied. Only admins and subadmins can delete users.",
+				"yourRole": userRole
+			});
 		}
-	});
+		
+		// Validate required fields
+		const userId = req.body._id || req.body.id;
+		if (!userId) {
+			return res.status(400).json({ 
+				"code": "400", 
+				"msg": "Missing required field: _id or id is required to identify the user to delete" 
+			});
+		}
+		
+		const fields = {
+			IsDeleted: true
+		};
+		
+		// Build query - support finding by _id, id, or Email
+		let query;
+		if (userId && /^[a-fA-F0-9]{24}$/.test(userId)) {
+			query = { _id: userId };
+		} else {
+			query = { Email: userId };
+		}
+		
+		// First, fetch the current user to check if already deleted
+		const currentUser = await userManagement.findOne(query).exec();
+		
+		if (!currentUser) {
+			return res.status(404).json({ "code": "404", "msg": "User not found" });
+		}
+		
+		// Check if user is already deleted
+		if (currentUser.IsDeleted === true) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": "User is already deleted",
+				"userId": currentUser._id
+			});
+		}
+		
+		const deletedUser = await userManagement.findOneAndUpdate(
+			query,
+			{ $set: fields },
+			{ new: true }
+		).exec();
+		
+		if (!deletedUser) {
+			return res.status(404).json({ "code": "404", "msg": "User not found" });
+		}
+		
+		res.json({
+			"code": "200",
+			"msg": "User deleted successfully",
+			"userId": deletedUser._id
+		});
+	} catch (err) {
+		console.error('Error in delete user:', err);
+		res.status(500).json({ "code": "500", "msg": "Error deleting user", "error": err.message });
+	}
 }
 
 exports.deleteUser = deleteUser;
@@ -238,41 +498,167 @@ exports.deleteUser = deleteUser;
 
 
 // For Activating User
-var activateUser = function (req, res) {
-    var fields = {
-        Status: req.body.Status ? req.body.Status : 1
-    };
-    console.log("inside Backend Controller - -  - - - - ->",req.body);
-    var query = {_id: req.body.id};
-    var options = {multi: true};
-    userManagement.update(query, {$set: fields}, options, callback)
-    function callback(err, numAffected) {
-        if (err) {
-            res.json(err)
-        } else {
-            findAll(req, res)
-        }
-    }
+var activateUser = async function (req, res) {
+	try {
+		console.log("Activating user:", req.body);
+		
+		// Check authorization - only admin and subadmin can activate users
+		if (!req.session || !req.session.user) {
+			return res.status(401).json({
+				"code": "401",
+				"msg": "Unauthorized. Please login to continue."
+			});
+		}
+		
+		const userRole = req.session.user.Role;
+		if (userRole !== 'admin' && userRole !== 'subadmin') {
+			return res.status(403).json({
+				"code": "403",
+				"msg": "Access denied. Only admins and subadmins can activate users.",
+				"yourRole": userRole
+			});
+		}
+		
+		// Validate required fields
+		const userId = req.body._id || req.body.id;
+		if (!userId) {
+			return res.status(400).json({ 
+				"code": "400", 
+				"msg": "Missing required field: _id or id is required to identify the user to activate" 
+			});
+		}
+		
+		const fields = {
+			Status: req.body.Status ? req.body.Status : true
+		};
+		
+		// Build query - support finding by _id, id, or Email
+		let query;
+		if (userId && /^[a-fA-F0-9]{24}$/.test(userId)) {
+			query = { _id: userId };
+		} else {
+			query = { Email: userId };
+		}
+		
+		// First, fetch the current user to check existing status
+		const currentUser = await userManagement.findOne(query).exec();
+		
+		if (!currentUser) {
+			return res.status(404).json({ "code": "404", "msg": "User not found" });
+		}
+		
+		// Check if user is already active
+		if (currentUser.Status === true || currentUser.Status === 1) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": "User is already active",
+				"currentStatus": currentUser.Status
+			});
+		}
+		
+		const activatedUser = await userManagement.findOneAndUpdate(
+			query,
+			{ $set: fields },
+			{ new: true }
+		).exec();
+		
+		if (!activatedUser) {
+			return res.status(404).json({ "code": "404", "msg": "User not found" });
+		}
+		
+		res.json({
+			"code": "200",
+			"msg": "User activated successfully",
+			"userId": activatedUser._id,
+			"status": activatedUser.Status
+		});
+	} catch (err) {
+		console.error('Error in activate user:', err);
+		res.status(500).json({ "code": "500", "msg": "Error activating user", "error": err.message });
+	}
 };
 exports.activateUser = activateUser;
 
 
 // For Deactivating User
-var deactivateUser = function (req, res) {
-    var fields = {
-        Status: req.body.Status ? req.body.Status : 0
-    };
-    console.log("inside Backend Controller - -  - - - - ->",req.body);
-    var query = {_id: req.body.id};
-    var options = {multi: true};
-    userManagement.update(query, {$set: fields}, options, callback)
-    function callback(err, numAffected) {
-        if (err) {
-            res.json(err)
-        } else {
-            findAll(req, res)
-        }
-    }
+var deactivateUser = async function (req, res) {
+	try {
+		console.log("Deactivating user:", req.body);
+		
+		// Check authorization - only admin and subadmin can deactivate users
+		if (!req.session || !req.session.user) {
+			return res.status(401).json({
+				"code": "401",
+				"msg": "Unauthorized. Please login to continue."
+			});
+		}
+		
+		const userRole = req.session.user.Role;
+		if (userRole !== 'admin' && userRole !== 'subadmin') {
+			return res.status(403).json({
+				"code": "403",
+				"msg": "Access denied. Only admins and subadmins can deactivate users.",
+				"yourRole": userRole
+			});
+		}
+		
+		// Validate required fields
+		const userId = req.body._id || req.body.id;
+		if (!userId) {
+			return res.status(400).json({ 
+				"code": "400", 
+				"msg": "Missing required field: _id or id is required to identify the user to deactivate" 
+			});
+		}
+		
+		const fields = {
+			Status: req.body.Status !== undefined ? req.body.Status : false
+		};
+		
+		// Build query - support finding by _id, id, or Email
+		let query;
+		if (userId && /^[a-fA-F0-9]{24}$/.test(userId)) {
+			query = { _id: userId };
+		} else {
+			query = { Email: userId };
+		}
+		
+		// First, fetch the current user to check existing status
+		const currentUser = await userManagement.findOne(query).exec();
+		
+		if (!currentUser) {
+			return res.status(404).json({ "code": "404", "msg": "User not found" });
+		}
+		
+		// Check if user is already inactive/deactivated
+		if (currentUser.Status === false || currentUser.Status === 0) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": "User is already inactive/deactivated",
+				"currentStatus": currentUser.Status
+			});
+		}
+		
+		const deactivatedUser = await userManagement.findOneAndUpdate(
+			query,
+			{ $set: fields },
+			{ new: true }
+		).exec();
+		
+		if (!deactivatedUser) {
+			return res.status(404).json({ "code": "404", "msg": "User not found" });
+		}
+		
+		res.json({
+			"code": "200",
+			"msg": "User deactivated successfully",
+			"userId": deactivatedUser._id,
+			"status": deactivatedUser.Status
+		});
+	} catch (err) {
+		console.error('Error in deactivate user:', err);
+		res.status(500).json({ "code": "500", "msg": "Error deactivating user", "error": err.message });
+	}
 };
 exports.deactivateUser = deactivateUser;
 

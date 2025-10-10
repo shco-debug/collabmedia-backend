@@ -64,7 +64,16 @@ module.exports = function(req, res, next) {
                 DiscussList: false,
                 DiscussView: false
             },
-            __v: req.user.__v || 0
+            __v: req.user.__v || 0,
+            
+            // Admin/SubAdmin specific fields
+            Permissions: req.user.permissions || [],
+            AssignedDomains: req.user.assignedDomains || [],
+            AssignedCategories: req.user.assignedCategories || [],
+            Supervisor: req.user.supervisor || null,
+            AllPagesId: req.user.allPagesId || null,
+            AllFoldersId: req.user.allFoldersId || null,
+            JournalId: req.user.journalId || null
         };
     }
     

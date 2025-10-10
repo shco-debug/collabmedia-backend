@@ -19,11 +19,10 @@ var inviteeSchema = new mongoose.Schema({
 	},
 	CreatedOn: {
 		type: Date,
-		default: Date.now
+		default: Date.now()
 	},
 	Relation: {
 		type: String,
-		enum: ['Friend', 'Family', 'Colleague', 'Acquaintance', 'Other'],
 		required: true
 	},
 	RelationId: {
@@ -31,14 +30,14 @@ var inviteeSchema = new mongoose.Schema({
 	},
 	IsAccepted: {
 		type: Boolean,
-		default: false,
+		default: false
 	},
 	AcceptedOn: {
 		type: Date
 	},
 	IsDeleted: {
 		type: Boolean,
-		default: false,
+		default: false
 	},
 	DeletedOn: {
 		type: Date
@@ -48,8 +47,7 @@ var inviteeSchema = new mongoose.Schema({
 		ref: 'user'
 	},
 	UserLeft: {
-		type: Boolean,
-		default: false
+		type: Boolean
 	},
 	LeftOn: {
 		type: Date
@@ -71,7 +69,6 @@ var launchSettings = {
 	},
 	ShareMode: {						//(private/public/friend-solo/friend-group)	//this is participation
 		type: String,
-		enum: ['private', 'public', 'friend-solo', 'friend-group', 'invite'],
 		default: "private"
 	},
 	OthersData: [inviteeSchema],
@@ -82,16 +79,15 @@ var launchSettings = {
 		enum : ["Birthday","Theme", "Stream"]
 	},
 	StreamType : {
-		type : String,
-		enum : ['', 'Group', 'Stream'], //empty string for simple stream, 'Group' for group stream, 'Stream' for stream
-		default : undefined
+		type : String, //possible values - optional by default means simple stream, Group
+		default : null
 	},
 	OwnerBirthday : {
 		type : String
 	},
 	IsInvitationSent : {
 		type : Boolean,
-		default : false
+		default : 0
 	}
 };
 
@@ -115,8 +111,8 @@ var capsuleSchema = new mongoose.Schema({
 	},
 	CreaterId: {
 		type: mongoose.Schema.Types.ObjectId,
-		required: true
-		// Note: No ref constraint to allow flexible population from User, Admin, or SubAdmin collections
+		required: true,
+		ref: 'user'
 	},
 	OwnerId: {
 		type: mongoose.Schema.Types.ObjectId,
@@ -137,26 +133,26 @@ var capsuleSchema = new mongoose.Schema({
 	},
 	Status: {
 		type: Boolean,
-		default: true
+		default: 1
 	},
 	IsPublished: {
 		type: Boolean,
-		default: false
+		default: 0
 	},
 	IsLaunched: {
 		type: Boolean,
-		default: false
+		default: 0
 	},
 	IsDeleted: {
 		type: Boolean,
-		default: false
+		default: 0
 	},
 	CreatedOn: {
 		type: Date
 	},
 	ModifiedOn: {
 		type: Date,
-		default: Date.now
+		default: Date.now()
 	},
 	LaunchSettings: launchSettings,
 	CoverArt: {
@@ -165,17 +161,18 @@ var capsuleSchema = new mongoose.Schema({
 	MenuIcon: {
 		type: String
 	},
-	Chapters: {
-		type: Array
-	},
+	Chapters: [{
+		type: mongoose.Schema.Types.ObjectId,
+		ref: 'Chapters'
+	}],
 	MetaData: {
 		description: { type: String },
 		edition: { type: String },
 		publisher: { type: String },
 		author: { type: String },
 		Fsg: { type: Object },
-		phase: { type: Array },
-		focus: { type: Array },
+		phase: { type: Array, default: [] },
+		focus: { type: Array, default: [] },
 		keywords: { type: String },
 		StickerTextStore : { type: String },
 		StickerTextOwner : { type: String },
@@ -195,7 +192,7 @@ var capsuleSchema = new mongoose.Schema({
 	},
 	IsAllowedForSales: {
 		type: Boolean,
-		default: false
+		default: 0
 	},
 	MonthFor : {
 		type:String,
@@ -206,12 +203,12 @@ var capsuleSchema = new mongoose.Schema({
 		enum:['high','medium','low']
 	},
 	FrequencyInDays : {		//currently this setting will be applied for Group Stream as per new requirement as we don;t have option for buyers to select these settings. we want creater to decide. 
-		type:Number,
-		default:2
+		type:String,
+		default:'2'
 	},
 	IsStreamPaused : {
 		type : Boolean,
-		default : false
+		default : 0
 	},
 	EmailTemplate : {
 		type : String,
@@ -223,30 +220,30 @@ var capsuleSchema = new mongoose.Schema({
 	},
 	IsOnetimeStream : {
 		type : Boolean,
-		default : false
+		default : 0
 	},
 	IsOnlyPostImage : {
 		type : Boolean,
-		default : false
+		default : 0
 	},
 	IsSurpriseGift : {
 		type : Boolean,
-		default : false
+		default : 0
 	},
 	CelebrityInstanceId : {
 		type : mongoose.Schema.Types.ObjectId
 	},
 	IsOwnerPostsForMember : {
 		type : Boolean,
-		default : false
+		default : 0
 	},
 	IsPurchaseNeededForAllPosts : {
 		type : Boolean,
-		default : false
+		default : 0
 	},
 	OwnerAnswer : {
 		type : Boolean,
-		default : false
+		default : 0
 	},
 	StreamFlow : {
 		type : String,
@@ -258,7 +255,7 @@ var capsuleSchema = new mongoose.Schema({
 	},
 	IsLaunchDateFinalized : {
 		type : Boolean,
-		default : false
+		default : 0
 	},
 	AutoInvitePopupCount : {
 		type : Number,

@@ -2054,14 +2054,31 @@ var updateTour = async function (req, res) {
 exports.updateTour = updateTour;
 var getUserData = async function (req, res) {
     try {
-    var conditions = {};
-    conditions._id = req.session.user._id;
-    var fields = {
-        _id: 1,
-        TourView: 1
+        // Validate session exists
+        if (!req.session || !req.session.user || !req.session.user._id) {
+            return res.status(401).json({
+                status: 401,
+                message: "User session not found. Please login."
+            });
+        }
+
+        var conditions = {};
+        conditions._id = req.session.user._id;
+        
+        // Exclude only the Password field, return all other fields
+        var fields = {
+            Password: 0
         };
 
-        const userData = await user.findOne(conditions).exec();
+        // Fetch user data excluding password
+        const userData = await user.findOne(conditions, fields).exec();
+        
+        if (!userData) {
+            return res.status(404).json({
+                status: 404,
+                message: "User not found"
+            });
+        }
         
         var response = {
             status: 200,
@@ -2071,7 +2088,11 @@ var getUserData = async function (req, res) {
         res.json(response);
     } catch (error) {
         console.error('Get user data error:', error);
-        res.status(500).json({ status: 500, message: "Error retrieving user data", error: error.message });
+        res.status(500).json({ 
+            status: 500, 
+            message: "Error retrieving user data", 
+            error: error.message 
+        });
     }
 };
 exports.getUserData = getUserData;

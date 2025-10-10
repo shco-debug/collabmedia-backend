@@ -106,6 +106,11 @@ module.exports = function(router){
 		board.getCurrentBoardDetails(req,res);
 	});
 	
+	// Debug endpoint to check auth
+	router.get('/debugAuth',function(req,res){
+		board.debugBoardAuth(req,res);
+	});
+	
 	//parul 13072015
 	router.post('/getProjectBoards',function(req,res){
 		board.getProjectBoards(req,res);

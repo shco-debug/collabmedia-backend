@@ -230,6 +230,24 @@ var chapter__checkMembership = async function (req , res , next){
 			console.log("User ID:", userId);
 			console.log("User Email:", userEmail);
 
+			// First check if page_id is provided
+			if (!pageId) {
+				console.log("❌ No page_id provided in headers");
+				return res.status(400).json({
+					code: "400",
+					msg: "page_id header is required for journal/page access"
+				});
+			}
+			
+			// Validate page_id format (must be 24 hex characters)
+			if (!/^[a-fA-F0-9]{24}$/.test(pageId)) {
+				console.log("❌ Invalid page_id format:", pageId);
+				return res.status(400).json({
+					code: "400",
+					msg: "Invalid page_id format. Must be a 24-character hexadecimal string. Received: " + pageId.length + " characters."
+				});
+			}
+
 			var conditions = {
 				_id : mongoose.Types.ObjectId(pageId),
 				$or : [
@@ -251,53 +269,64 @@ var chapter__checkMembership = async function (req , res , next){
 				const result = await Page.find(conditions, fields);
 				console.log("Page query result length:", result.length);
 				if( result.length ){
-					console.log("Page access granted");
+					console.log("✅ Page access granted");
 					return next();
 				}
 				else{
-					console.log("Page access denied, checking public chapter");
+					console.log("⚠️ Page access denied, checking public chapter fallback");
 
 					//check if it's a public chapter
 					var chapterId = req.headers.chapter_id;
 
-					var conditions = {
+					if (!chapterId) {
+						console.log("❌ No chapter_id provided for fallback check");
+						return res.status(403).json({
+							code: "403",
+							msg: "You don't have access to this page. Either you're not the owner, not invited, or the page is private."
+						});
+					}
+
+					var chapterConditions = {
 						_id : chapterId,
 						Status : true,
 						IsDeleted : false,
 						IsPublic : true
 					};
 
-					var fields = {
+					var chapterFields = {
 						_id : true
 					};
 
-					console.log("Chapter query conditions:", JSON.stringify(conditions, null, 2));
+					console.log("Chapter query conditions:", JSON.stringify(chapterConditions, null, 2));
 
 					try {
-						const chapterResult = await Chapter.find(conditions, fields);
+						const chapterResult = await Chapter.find(chapterConditions, chapterFields);
 						console.log("Chapter query result length:", chapterResult.length);
 						if( chapterResult.length ){
-							console.log("Public chapter access granted");
+							console.log("✅ Public chapter access granted");
 							return next();
 						}
 						else{
-							console.log("Access denied - no public chapter found");
-							req.session.user = null; // Deletes the cookie.
-							res.clearCookie('connect.sid', { path: '/capsule' });
-							res.send(401, 'Access Denied');
+							console.log("❌ Access denied - chapter is not public or doesn't exist");
+							return res.status(403).json({
+								code: "403",
+								msg: "Access denied. You don't have permission to view this page, and the parent chapter is not public."
+							});
 						}
 					} catch (chapterErr) {
-						console.log("Chapter query error:", chapterErr);
-						req.session.user = null; // Deletes the cookie.
-						res.clearCookie('connect.sid', { path: '/capsule' });
-						res.send(401, 'Access Denied');
+						console.error("Chapter query error:", chapterErr);
+						return res.status(500).json({
+							code: "500",
+							msg: "Error checking chapter access. Please try again."
+						});
 					}
 				}
 			} catch (err) {
-				console.log("Page query error:", err);
-				req.session.user = null; // Deletes the cookie.
-				res.clearCookie('connect.sid', { path: '/capsule' });
-				res.send(401, 'Access Denied');
+				console.error("Page query error:", err);
+				return res.status(500).json({
+					code: "500",
+					msg: "Error checking page access. Invalid page_id or database error."
+				});
 			}
 		}
 		else{
@@ -309,6 +338,24 @@ var chapter__checkMembership = async function (req , res , next){
 			console.log("Chapter ID:", chapterId);
 			console.log("User ID:", userId);
 			console.log("User Email:", userEmail);
+
+			// Check if chapter_id is provided
+			if (!chapterId) {
+				console.log("❌ No chapter_id provided in headers");
+				return res.status(400).json({
+					code: "400",
+					msg: "chapter_id header is required for chapter/capsule access"
+				});
+			}
+			
+			// Validate chapter_id format (must be 24 hex characters)
+			if (!/^[a-fA-F0-9]{24}$/.test(chapterId)) {
+				console.log("❌ Invalid chapter_id format:", chapterId);
+				return res.status(400).json({
+					code: "400",
+					msg: "Invalid chapter_id format. Must be a 24-character hexadecimal string. Received: " + chapterId.length + " characters."
+				});
+			}
 
 			var conditions = {
 				_id : chapterId,
@@ -331,20 +378,22 @@ var chapter__checkMembership = async function (req , res , next){
 				const result = await Chapter.find(conditions, fields);
 				console.log("Chapter query result length:", result.length);
 				if( result.length ){
-					console.log("Chapter access granted");
+					console.log("✅ Chapter access granted");
 					return next();
 				}
 				else{
-					console.log("Access denied - no chapter permissions found");
-					req.session.user = null; // Deletes the cookie.
-					res.clearCookie('connect.sid', { path: '/capsule' });
-					res.send(401, 'Access Denied');
+					console.log("❌ Access denied - user is not chapter owner or invitee");
+					return res.status(403).json({
+						code: "403",
+						msg: "You don't have access to this chapter. Either you're not the owner or not invited."
+					});
 				}
 			} catch (err) {
-				console.log("Chapter query error:", err);
-				req.session.user = null; // Deletes the cookie.
-				res.clearCookie('connect.sid', { path: '/capsule' });
-				res.send(401, 'Access Denied');
+				console.error("Chapter query error:", err);
+				return res.status(500).json({
+					code: "500",
+					msg: "Error checking chapter access. Invalid chapter_id or database error."
+				});
 			}
 		}
 	}

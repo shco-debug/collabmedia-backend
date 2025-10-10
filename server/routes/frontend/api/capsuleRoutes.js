@@ -80,7 +80,7 @@ module.exports = function(router){
 
 	//duplicate a Capsule
 	router.post('/duplicate',function(req,res){
-		Capsule.duplicateCapsule(req,res);
+		Capsule.duplicate(req,res);
 	});
 
 	//remove a Capsule
@@ -345,6 +345,15 @@ module.exports = function(router){
 	});
 	router.post('/checkPostStreams',function(req,res){
 		Capsule.checkPostStreams(req,res);
+	});
+
+	// Debug endpoints
+	router.get('/debugSession',function(req,res){
+		Capsule.debugSession(req,res);
+	});
+	
+	router.get('/inspectPageContent',function(req,res){
+		Capsule.inspectPageContent(req,res);
 	});
 
 	//Buy Now From Public Gallery - Shoping Cart Apis

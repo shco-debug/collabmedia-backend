@@ -55,143 +55,154 @@ var __SendEmail = function(shareWithEmail, RecipientName, SharedByUserName, newH
 	});
 };
 
-var listTeams = function (req, res) {
-	var conditions = {};
-	conditions.$or = [
-		{ UserId : ObjectId(req.session.user._id) },
-		{ "MemberEmails.Email" : req.session.user.Email }
-	];
-	conditions.Status = true;
-	conditions.IsDeleted = false;
-	
-	Teams.find(conditions).populate('UserId').exec(async function (err, result) {
-		if (!err) {
-			var TeamRequests = [];
-			for(var i = 0; i < result.length; i++) {
-				result[i].MemberEmails = result[i].MemberEmails ? result[i].MemberEmails : [];
+var listTeams = async function (req, res) {
+	try {
+		// Validate session exists
+		if (!req.session || !req.session.user || !req.session.user._id) {
+			return res.status(401).json({
+				status: 401,
+				message: "User session not found. Please login.",
+				result: [],
+				TeamRequests: []
+			});
+		}
+
+		var conditions = {};
+		conditions.$or = [
+			{ UserId : ObjectId(req.session.user._id) },
+			{ "MemberEmails.Email" : req.session.user.Email }
+		];
+		conditions.Status = true;
+		conditions.IsDeleted = false;
+		
+		const result = await Teams.find(conditions).populate('UserId').exec();
+		
+		var TeamRequests = [];
+		for(var i = 0; i < result.length; i++) {
+			result[i].MemberEmails = result[i].MemberEmails ? result[i].MemberEmails : [];
+			
+			result[i].MemberEmails.push({
+				Name : result[i].UserId.Name, 
+				Email : result[i].UserId.Email,
+				StreamIds : result[i].StreamIds,
+				Status : 1
+			});
+			
+			for(var j = 0; j < result[i].MemberEmails.length; j++) {
+				var MemberEmail = result[i].MemberEmails[j].Email ? result[i].MemberEmails[j].Email : null;
+				var MemberStatus = result[i].MemberEmails[j].Status ? result[i].MemberEmails[j].Status : 0;
+				var MemberStreamIds = result[i].MemberEmails[j].StreamIds ? result[i].MemberEmails[j].StreamIds : 0;
 				
-				result[i].MemberEmails.push({
-					Name : result[i].UserId.Name, 
-					Email : result[i].UserId.Email,
-					StreamIds : result[i].StreamIds,
-					Status : 1
-				});
+				var Total_StreamOpenedEmailCount = 0;
+				var Total_ConversationCount = 0;
 				
-				for(var j = 0; j < result[i].MemberEmails.length; j++) {
-					var MemberEmail = result[i].MemberEmails[j].Email ? result[i].MemberEmails[j].Email : null;
-					var MemberStatus = result[i].MemberEmails[j].Status ? result[i].MemberEmails[j].Status : 0;
-					var MemberStreamIds = result[i].MemberEmails[j].StreamIds ? result[i].MemberEmails[j].StreamIds : 0;
+				var StreamTitles = [];
+				if(MemberStatus) {
+					var UserRecord = await User.findOne({Email : MemberEmail, IsDeleted : false});
+					UserRecord = UserRecord ? UserRecord : {};
+					UserRecord._id = UserRecord._id ? UserRecord._id : null;
+					if(!UserRecord._id) {
+						continue;
+					}
 					
-					var Total_StreamOpenedEmailCount = 0;
-					var Total_ConversationCount = 0;
+					result[i].MemberEmails[j].Name = UserRecord.Name ? UserRecord.Name : '';
+					result[i].MemberEmails[j].UserId = UserRecord._id ? UserRecord._id : '';
+					result[i].MemberEmails[j].ProfilePic = UserRecord.ProfilePic ? UserRecord.ProfilePic : '';
 					
-					var StreamTitles = [];
-					if(MemberStatus) {
-						var UserRecord = await User.findOne({Email : MemberEmail, IsDeleted : false});
-						UserRecord = UserRecord ? UserRecord : {};
-						UserRecord._id = UserRecord._id ? UserRecord._id : null;
-						if(!UserRecord._id) {
-							continue;
-						}
-						
-						result[i].MemberEmails[j].Name = UserRecord.Name ? UserRecord.Name : '';
-						result[i].MemberEmails[j].UserId = UserRecord._id ? UserRecord._id : '';
-						result[i].MemberEmails[j].ProfilePic = UserRecord.ProfilePic ? UserRecord.ProfilePic : '';
-						
-						if(!MemberStreamIds.length) {
-							continue;
-						}
-						
-						for(var lp = 0; lp < MemberStreamIds.length; lp++) {
-							MemberStreamIds[lp] = ObjectId(MemberStreamIds[lp]);
-						}
-						var conditions = {
-							_id : {$in : MemberStreamIds},
-							OwnerId : UserRecord._id,
-							Origin : "published",
-							IsPublished : true,
-							"LaunchSettings.Audience":"ME",
-							"LaunchSettings.CapsuleFor" : "Stream",
-							Status : true,
-							IsDeleted : false
-						};
-						var fields = {}; 
-						var sortObj = {
-							_id : 1,
-							Order: 1,
-							ModifiedOn: -1
-						};
-						var results = await Capsule.find(conditions , fields).sort(sortObj).lean();
-						results = results ? results : [];
-						
-						if( results.length ){
-							console.log("results.length ------------- ", results.length);
-							for( var loop = 0; loop < results.length; loop++ ){
-								StreamTitles.push(results[loop].Title);
-								var CapsuleId = results[loop]._id;
-								var UserEmail = MemberEmail ? MemberEmail : null;
-								var StreamOpenedEmailCount = 0;
-								var ConversationCount = 0;
-								if(CapsuleId && UserEmail) {
-									var conditions = {
-										CapsuleId : CapsuleId,
-										UserEmail : UserEmail
-									};
-									
-									StreamOpenedEmailCount = await StreamEmailTracker.find(conditions, {}).count();
-									StreamOpenedEmailCount = StreamOpenedEmailCount ? StreamOpenedEmailCount : 0;
-									
-									var StreamConversation_conditions = {
-										CapsuleId : CapsuleId ? CapsuleId : null,
-										UserId : req.session.user._id ? req.session.user._id : null
-									};
-									var ConversationResult = await StreamConversation.findOne(StreamConversation_conditions, {});
-									ConversationResult = ConversationResult ? ConversationResult : {};
-									ConversationResult.ConversationCount = ConversationResult.ConversationCount ? ConversationResult.ConversationCount : 0;
-									if(ConversationResult.ConversationCount) {
-										ConversationCount = ConversationResult.ConversationCount ? ConversationResult.ConversationCount : 0;
-									}
-								}
-								results[loop].StreamOpenedEmailCount = StreamOpenedEmailCount;
-								results[loop].ConversationCount = ConversationCount;
+					if(!MemberStreamIds.length) {
+						continue;
+					}
+					
+					for(var lp = 0; lp < MemberStreamIds.length; lp++) {
+						MemberStreamIds[lp] = ObjectId(MemberStreamIds[lp]);
+					}
+					var streamConditions = {
+						_id : {$in : MemberStreamIds},
+						OwnerId : UserRecord._id,
+						Origin : "published",
+						IsPublished : true,
+						"LaunchSettings.Audience":"ME",
+						"LaunchSettings.CapsuleFor" : "Stream",
+						Status : true,
+						IsDeleted : false
+					};
+					var fields = {}; 
+					var sortObj = {
+						_id : 1,
+						Order: 1,
+						ModifiedOn: -1
+					};
+					var results = await Capsule.find(streamConditions , fields).sort(sortObj).lean();
+					results = results ? results : [];
+					
+					if( results.length ){
+						console.log("results.length ------------- ", results.length);
+						for( var loop = 0; loop < results.length; loop++ ){
+							StreamTitles.push(results[loop].Title);
+							var CapsuleId = results[loop]._id;
+							var UserEmail = MemberEmail ? MemberEmail : null;
+							var StreamOpenedEmailCount = 0;
+							var ConversationCount = 0;
+							if(CapsuleId && UserEmail) {
+								var trackerConditions = {
+									CapsuleId : CapsuleId,
+									UserEmail : UserEmail
+								};
 								
-								Total_StreamOpenedEmailCount += StreamOpenedEmailCount;
-								Total_ConversationCount += ConversationCount;
+								// Use countDocuments() instead of deprecated count()
+								StreamOpenedEmailCount = await StreamEmailTracker.countDocuments(trackerConditions);
+								StreamOpenedEmailCount = StreamOpenedEmailCount ? StreamOpenedEmailCount : 0;
+								
+								var StreamConversation_conditions = {
+									CapsuleId : CapsuleId ? CapsuleId : null,
+									UserId : req.session.user._id ? req.session.user._id : null
+								};
+								var ConversationResult = await StreamConversation.findOne(StreamConversation_conditions, {});
+								ConversationResult = ConversationResult ? ConversationResult : {};
+								ConversationResult.ConversationCount = ConversationResult.ConversationCount ? ConversationResult.ConversationCount : 0;
+								if(ConversationResult.ConversationCount) {
+									ConversationCount = ConversationResult.ConversationCount ? ConversationResult.ConversationCount : 0;
+								}
 							}
-						}
-					} else {
-						if(MemberEmail == req.session.user.Email && String(result[i].UserId._id) != String(req.session.user._id)) {
-							TeamRequests.push({
-								_id: result[i]._id,
-								OwnerName : result[i].UserId.Name ? result[i].UserId.Name : '',
-								TeamName : result[i].TeamName ? result[i].TeamName : ''
-							});
+							results[loop].StreamOpenedEmailCount = StreamOpenedEmailCount;
+							results[loop].ConversationCount = ConversationCount;
+							
+							Total_StreamOpenedEmailCount += StreamOpenedEmailCount;
+							Total_ConversationCount += ConversationCount;
 						}
 					}
-					result[i].MemberEmails[j].StreamOpenedEmailCount = Total_StreamOpenedEmailCount;
-					result[i].MemberEmails[j].ConversationCount = Total_ConversationCount;
-					result[i].MemberEmails[j].StreamTitles = StreamTitles ? StreamTitles : [];
-				}				
-			}
-			
-			
-			var response = {
-				status: 200,
-				message: "Team listing.",
-				result: result,
-				TeamRequests: TeamRequests
-			}
-			return res.json(response);
+				} else {
+					if(MemberEmail == req.session.user.Email && String(result[i].UserId._id) != String(req.session.user._id)) {
+						TeamRequests.push({
+							_id: result[i]._id,
+							OwnerName : result[i].UserId.Name ? result[i].UserId.Name : '',
+							TeamName : result[i].TeamName ? result[i].TeamName : ''
+						});
+					}
+				}
+				result[i].MemberEmails[j].StreamOpenedEmailCount = Total_StreamOpenedEmailCount;
+				result[i].MemberEmails[j].ConversationCount = Total_ConversationCount;
+				result[i].MemberEmails[j].StreamTitles = StreamTitles ? StreamTitles : [];
+			}				
 		}
-		else {
-			console.log(err);
-			var response = {
-				status: 501,
-				message: "Something went wrong."
-			}
-			return res.json(response);
+		
+		var response = {
+			status: 200,
+			message: "Team listing.",
+			result: result,
+			TeamRequests: TeamRequests
 		}
-	})
+		return res.json(response);
+	} catch (err) {
+		console.error("Error in listTeams:", err);
+		var response = {
+			status: 501,
+			message: "Error retrieving teams. Please try again.",
+			result: [],
+			TeamRequests: []
+		}
+		return res.json(response);
+	}
 };
 
 var createTeam = async function (req, res) {

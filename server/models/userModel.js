@@ -73,7 +73,36 @@ var userSchema = new mongoose.Schema({
 	IsHowItWorksSeen: {type: Boolean, default: false},
 	IsPostLaunchVideoSeen: {type: Boolean, default: false},
 	SpeechToTextMediaId: {type: mongoose.Schema.Types.ObjectId, default: null},
-	Role: {type: String, enum: ["user", "subadmin", "admin"], default: "user"}
+	Role: {type: String, enum: ["user", "subadmin", "admin"], default: "user"},
+	
+	// Admin/SubAdmin specific fields (only used when Role is "admin" or "subadmin")
+	Permissions: [{
+		type: String,
+		enum: [
+			// Admin permissions
+			'user_management',
+			'content_moderation',
+			'system_settings',
+			'analytics',
+			'billing',
+			// SubAdmin permissions
+			'basic_analytics',
+			'content_editing'
+		],
+		default: []
+	}],
+	AssignedDomains: [{
+		type: mongoose.Schema.Types.ObjectId,
+		ref: 'Domain'
+	}],
+	AssignedCategories: [{
+		type: mongoose.Schema.Types.ObjectId,
+		ref: 'Category'
+	}],
+	Supervisor: {
+		type: mongoose.Schema.Types.ObjectId,
+		ref: 'user'  // Can reference another user (admin)
+	}
 });
 
 
@@ -112,6 +141,76 @@ userSchema.methods.validPassword=function(password,compPass){
 		return true;
 	}
 	return bcrypt.compareSync(password,compPass);
+};
+
+/*________________________________________________________________________
+	* Admin/SubAdmin Helper Methods
+	* Only applicable when Role is "admin" or "subadmin"
+_________________________________________________________________________
+*/
+
+// Check if user has a specific permission (for admin/subadmin roles)
+userSchema.methods.hasPermission = function(permission) {
+	if (this.Role === 'user') return false;
+	return this.Permissions && this.Permissions.includes(permission);
+};
+
+// Check if user is admin
+userSchema.methods.isAdmin = function() {
+	return this.Role === 'admin';
+};
+
+// Check if user is subadmin
+userSchema.methods.isSubAdmin = function() {
+	return this.Role === 'subadmin';
+};
+
+// Check if user has elevated privileges (admin or subadmin)
+userSchema.methods.hasElevatedRole = function() {
+	return this.Role === 'admin' || this.Role === 'subadmin';
+};
+
+// Assign domain to subadmin
+userSchema.methods.assignDomain = function(domainId) {
+	if (this.Role !== 'subadmin') return Promise.resolve(this);
+	if (!this.AssignedDomains.includes(domainId)) {
+		this.AssignedDomains.push(domainId);
+		return this.save();
+	}
+	return Promise.resolve(this);
+};
+
+// Remove domain assignment
+userSchema.methods.removeDomain = function(domainId) {
+	if (this.Role !== 'subadmin') return Promise.resolve(this);
+	this.AssignedDomains = this.AssignedDomains.filter(id => !id.equals(domainId));
+	return this.save();
+};
+
+// Update last active time
+userSchema.methods.updateLastActive = function() {
+	this.LastActiveTime = new Date();
+	return this.save();
+};
+
+// Static method to find by role
+userSchema.statics.findByRole = function(role) {
+	return this.find({ Role: role, Status: true, IsDeleted: false });
+};
+
+// Static method to find all admins
+userSchema.statics.findAdmins = function() {
+	return this.find({ Role: 'admin', Status: true, IsDeleted: false });
+};
+
+// Static method to find all subadmins
+userSchema.statics.findSubAdmins = function() {
+	return this.find({ Role: 'subadmin', Status: true, IsDeleted: false });
+};
+
+// Static method to find active users only
+userSchema.statics.findActiveUsers = function() {
+	return this.find({ Status: true, IsDeleted: false });
 };
 
 var user = mongoose.model('user',userSchema);
