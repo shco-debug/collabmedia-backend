@@ -1,4 +1,5 @@
 var media = require('../../../controllers/mediaController.js');
+var mediaOld = require('../../../controllers/mediaControllerOld.js');
 module.exports = function(router){
 	 
 	
@@ -7,13 +8,13 @@ module.exports = function(router){
 	})
 	
 	router.post('/edit',function(req,res){
-		media.edit(req,res);
+		mediaOld.edit(req,res);
 	})
 	router.post('/editall',function(req,res){
-		media.editAll(req,res);
+		mediaOld.editAll(req,res);
 	})
 	router.post('/editTag',function(req,res){
-		media.editTags(req,res);
+		mediaOld.editTags(req,res);
 	})	
 	router.post('/view',function(req,res){
 		media.findAll(req,res);
@@ -22,17 +23,17 @@ module.exports = function(router){
 		media.findAllStatus(req,res);
 	})
 	router.post('/delete',function(req,res){
-		media.deleteMedia(req,res);
+		mediaOld.deleteMedia(req,res);
 	})
 	// parul 08-01-2015
 	router.post('/viewMedia',function(req,res){
-		media.viewMediaAdmin(req,res);
+		mediaOld.viewMediaAdmin(req,res);
 	})
 	// end
 	
 	// parul 10-04-2015
 	router.post('/view/subadmin',function(req,res){
-		media.findAll_subAdmin(req,res);
+		mediaOld.findAll_subAdmin(req,res);
 	})
 	// end
 	
@@ -41,13 +42,13 @@ module.exports = function(router){
 		media.filteredData(req,res);
 	})
 	router.post('/editMedia',function(req,res){
-		media.editMedia(req,res);
+		mediaOld.editMedia(req,res);
 	})
 	router.post('/addedTag',function(req,res){
-		media.addedTag(req,res);
+		mediaOld.addedTag(req,res);
 	})
 	router.post('/deleteDescriptor',function(req,res){
-		media.deleteDescriptor(req,res);
+		mediaOld.deleteDescriptor(req,res);
 	})
 	
 	//added by manishp on 10032016 - making search by locator drop-down fast.
@@ -57,7 +58,7 @@ module.exports = function(router){
 	
 	//Added By Mayank Thapa 17 Feb 2k17
 	router.post('/getFlagAsInAppropriates',function(req,res){
-		media.getFlagAsInAppropriates(req,res);
+		mediaOld.getFlagAsInAppropriates(req,res);
 	})
 
 
@@ -65,19 +66,19 @@ module.exports = function(router){
 
 
 	router.post('/addMassImport',function(req,res){
-		media.uploadMassImport(req,res);
+		mediaOld.uploadMassImport(req,res);
 	})
 
 	router.post('/viewMassImport',function(req,res){
-		media.findAllMassImport(req,res);
+		mediaOld.findAllMassImport(req,res);
 	})
 
 	router.post('/deleteZipFile',function(req,res){
-		media.deleteZipFile(req,res);
+		mediaOld.deleteZipFile(req,res);
 	})
 	
 	router.get('/ApiToFixDescriptors',function(req,res){
-		media.ApiToFixDescriptorsMappingOnMedia(req,res);
+		mediaOld.ApiToFixDescriptorsMappingOnMedia(req,res);
 	})
 	
 

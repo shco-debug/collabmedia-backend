@@ -212,6 +212,53 @@ app.use("/api/gpt", (req, res, next) => {
 
 // Main router setup
 const router = require("./config/express/config.js")(app);
+
+// ⚡ IMPORTANT: Apply middlewares BEFORE loading routes!
+// Apply middlewares to Admin routes (JWT + Session compatibility)
+require("./server/middlewares.js")(router.admin.adminRoutes);
+require("./server/middlewares.js")(router.admin.userManagementRoutes);
+require("./server/middlewares.js")(router.admin.fsgRoutes);
+require("./server/middlewares.js")(router.admin.domainRoutes);
+require("./server/middlewares.js")(router.admin.collectionRoutes);
+require("./server/middlewares.js")(router.admin.groupTagRoutes);
+require("./server/middlewares.js")(router.admin.metaMetaTagRoutes);
+require("./server/middlewares.js")(router.admin.gtbindingRoutes);
+require("./server/middlewares.js")(router.admin.tagRoutes);
+require("./server/middlewares.js")(router.admin.massmediauploadRoutes);
+require("./server/middlewares.js")(router.admin.sourceRoutes);
+require("./server/middlewares.js")(router.admin.contributionRoutes);
+require("./server/middlewares.js")(router.admin.metaTagRoutes);
+require("./server/middlewares.js")(router.admin.emailTemplateRoutes);
+require("./server/middlewares.js")(router.admin.copyrightClaimsRoutes);
+require("./server/middlewares.js")(router.admin.postManagerRoutes);
+require("./server/middlewares.js")(router.admin.unsplashGrapperRoutes);
+
+// Apply middlewares to SubAdmin routes
+require("./server/middlewares.js")(router.subadmin.subadminRoutes);
+
+// Apply middlewares to Frontend routes
+require("./server/middlewares.js")(router.userRoutes);
+require("./server/middlewares.js")(router.projectRoutes);
+require("./server/middlewares.js")(router.boardRoutes);
+require("./server/middlewares.js")(router.myInviteeRoutes);
+require("./server/middlewares.js")(router.myBoardRoutes);
+require("./server/middlewares.js")(router.addBoardMediaToBoardRoutes);
+require("./server/middlewares.js")(router.mediaRoutes);
+require("./server/middlewares.js")(router.proxyRoutes);
+require("./server/middlewares.js")(router.originalImageRoutes);
+require("./server/middlewares.js")(router.keywordRoutes);
+require("./server/middlewares.js")(router.chapterRoutes);
+require("./server/middlewares.js")(router.groupRoutes);
+require("./server/middlewares.js")(router.memberRoutes);
+require("./server/middlewares.js")(router.pageRoutes);
+require("./server/middlewares.js")(router.capsuleRoutes);
+require("./server/middlewares.js")(router.referralRoutes);
+require("./server/middlewares.js")(router.journalRoutes);
+require("./server/middlewares.js")(router.mediaActionRoutes);
+require("./server/middlewares.js")(router.userActivityRoutes);
+require("./server/middlewares.js")(router.mainRoutes);
+
+// NOW load the route handlers AFTER middlewares are applied
 require("./server/routes/admin/api/userManagementRoutes.js")(
   router.admin.userManagementRoutes
 );
@@ -296,28 +343,7 @@ require("./server/routes/subadmin/api/subAdminRoutes.js")(
   router.subadmin.subadminRoutes
 );
 
-// Frontend Middlewares & Routes
-require("./server/middlewares.js")(router.userRoutes);
-require("./server/middlewares.js")(router.projectRoutes);
-require("./server/middlewares.js")(router.boardRoutes);
-require("./server/middlewares.js")(router.myInviteeRoutes);
-require("./server/middlewares.js")(router.myBoardRoutes);
-require("./server/middlewares.js")(router.addBoardMediaToBoardRoutes);
-require("./server/middlewares.js")(router.mediaRoutes);
-require("./server/middlewares.js")(router.proxyRoutes);
-require("./server/middlewares.js")(router.originalImageRoutes);
-require("./server/middlewares.js")(router.keywordRoutes);
-require("./server/middlewares.js")(router.chapterRoutes);
-require("./server/middlewares.js")(router.groupRoutes);
-require("./server/middlewares.js")(router.memberRoutes);
-require("./server/middlewares.js")(router.pageRoutes);
-require("./server/middlewares.js")(router.capsuleRoutes);
-require("./server/middlewares.js")(router.referralRoutes);
-require("./server/middlewares.js")(router.journalRoutes);
-require("./server/middlewares.js")(router.mediaActionRoutes);
-require("./server/middlewares.js")(router.userActivityRoutes);
-
-// Frontend API Routes
+// Frontend API Routes (middlewares already applied above)
 require("./server/routes/frontend/api/userRoutes.js")(router.userRoutes);
 require("./server/routes/frontend/api/projectRoutes.js")(
   router.projectRoutes
@@ -368,8 +394,7 @@ require("./server/routes/frontend/api/relationshipRoutes.js")(
 const gptActivationRoutes = require("./server/routes/gpt/GPTactivationRoutes.js");
 app.use("/api/gpt", gptActivationRoutes);
 
-// Main API Routes (includes /media/createSinglePost)
-require("./server/middlewares.js")(router.mainRoutes);
+// Main API Routes (includes /media/createSinglePost) - middleware already applied above
 require("./server/routes/routes.js")(router.mainRoutes);
 
 // Video upload endpoint (replaces complex recorder system)

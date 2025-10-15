@@ -58,8 +58,6 @@ const authenticateJWT = (req, res, next) => {
         next();
         
     } catch (error) {
-        console.log('❌ JWT token verification failed:', error.message);
-        
         if (error.name === 'TokenExpiredError') {
             return res.status(401).json({ 
                 "code": "401", 

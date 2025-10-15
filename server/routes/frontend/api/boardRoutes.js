@@ -23,6 +23,10 @@ module.exports = function(router){
 		board.addMediaToBoard(req,res)	
 	})
 	
+	router.post('/updatePost',function(req,res){
+		board.updatePost(req,res)	
+	})
+	
 	router.post('/uploadMedia',function(req,res){
 		board.uploadMedia(req,res)	
 	})

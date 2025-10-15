@@ -477,7 +477,7 @@ var saveFile = async function (req, res) {
     var query = { Email: req.session.user.Email };
     // console.log(a);
         
-        const updateResult = await user.update(
+        const updateResult = await user.updateOne(
         query,
             { $set: { ProfilePic: img1 } }, 
             { upsert: true }
@@ -733,48 +733,161 @@ exports.register = register;
 
 var requestInvitation = async function (req, res) {
     try {
-    //console.log("RequestInvitation-------", req.body);
-        const userResult = await user.find({ Email: req.body.email, IsDeleted: false }).exec();
-        
-        if (userResult.length == 0) {
-            const invitationResult = await RequestInvitation.find({ Email: req.body.email, IsDeleted: false }).exec();
-            
-            if (invitationResult.length == 0) {
-						var newUser = new RequestInvitation();
-						newUser.Email = req.body.email;
-						newUser.Name = req.body.name;
-                if (req.body.gender) {
-							newUser.Gender = req.body.gender;
-						}
-                
-                const numAffected = await newUser.save();
-								/*
-								if (req.body.referralLink) {
-									var referralData = {
-										referralLink: req.body.referralLink,
-										referradByUserId: req.body.userId,
-										referradToUserId: numAffected._id,
-										referradToEmail: numAffected.Email,
-										referradByEmail: req.body.referralByEmail,
-										referradCapsuleId: req.body.referCapsuleId
-									}
-									__updateReferralCollacton(referralData);
-								}
-								*/
-								//sendmail(newUser.Email, "register", newUser, res);
-							//sendmail__requestInvitation(newUser.Email, "register", newUser, res);
-								//__updateChapterCollection(newUser.Email, numAffected._id);
-								res.json({ "code": "200", "msg": "Success" });
+        // Validate required fields
+        if (!req.body.email) {
+            return res.status(400).json({
+                "code": "400",
+                "msg": "Email is required",
+                "success": false
+            });
+        }
 
-					} else {
-						res.json({ "code": "404", "msg": "Email already exists!" });
-					}
-        } else {
-				res.json({ "code": "405", "msg": "Email already exists!" });
-			}
+        if (!req.body.name) {
+            return res.status(400).json({
+                "code": "400",
+                "msg": "Name is required",
+                "success": false
+            });
+        }
+
+        // Validate email format
+        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+        if (!emailRegex.test(req.body.email)) {
+            return res.status(400).json({
+                "code": "400",
+                "msg": "Invalid email format. Please provide a valid email address",
+                "success": false
+            });
+        }
+
+        // Normalize email to lowercase for consistency
+        const normalizedEmail = req.body.email.toLowerCase().trim();
+        const trimmedName = req.body.name.trim();
+
+        // Validate name length
+        if (trimmedName.length < 2) {
+            return res.status(400).json({
+                "code": "400",
+                "msg": "Name must be at least 2 characters long",
+                "success": false
+            });
+        }
+
+        // Validate gender if provided
+        if (req.body.gender && !["Male", "Female", "Other", ""].includes(req.body.gender)) {
+            return res.status(400).json({
+                "code": "400",
+                "msg": "Invalid gender value. Allowed values: Male, Female, Other",
+                "success": false
+            });
+        }
+
+        // Check if user already exists with this email
+        const userResult = await user.find({ 
+            Email: normalizedEmail, 
+            IsDeleted: false 
+        }).exec();
+        
+        if (userResult.length > 0) {
+            return res.status(409).json({
+                "code": "409",
+                "msg": "This email is already registered. Please login or use a different email address",
+                "success": false,
+                "emailExists": true
+            });
+        }
+
+        // Check if invitation request already exists
+        const invitationResult = await RequestInvitation.find({ 
+            Email: normalizedEmail, 
+            IsDeleted: false 
+        }).exec();
+        
+        if (invitationResult.length > 0) {
+            // Check the status of existing invitation
+            const existingInvitation = invitationResult[0];
+            let statusMessage = "";
+            
+            switch(existingInvitation.Status) {
+                case "pending":
+                    statusMessage = "Your invitation request is already pending review. We'll contact you soon";
+                    break;
+                case "approved":
+                    statusMessage = "Your invitation has been approved. Please check your email for registration instructions";
+                    break;
+                case "rejected":
+                    statusMessage = "Your previous invitation request was declined. Please contact support for more information";
+                    break;
+                case "expired":
+                    statusMessage = "Your previous invitation request has expired. Please submit a new request";
+                    break;
+                default:
+                    statusMessage = "An invitation request with this email already exists";
+            }
+            
+            return res.status(409).json({
+                "code": "409",
+                "msg": statusMessage,
+                "success": false,
+                "invitationExists": true,
+                "invitationStatus": existingInvitation.Status
+            });
+        }
+
+        // Create new invitation request
+        var newInvitation = new RequestInvitation();
+        newInvitation.Email = normalizedEmail;
+        newInvitation.Name = trimmedName;
+        
+        if (req.body.gender) {
+            newInvitation.Gender = req.body.gender;
+        }
+        
+        const savedInvitation = await newInvitation.save();
+        
+        // Log successful invitation request
+        console.log(`✅ New invitation request created: ${normalizedEmail} - ${trimmedName}`);
+        
+        // TODO: Send confirmation email
+        // sendmail__requestInvitation(savedInvitation.Email, "invitation_request", savedInvitation, res);
+        
+        return res.status(200).json({
+            "code": "200",
+            "msg": "Thank you for your interest! Your invitation request has been submitted successfully. We will review your request and get back to you soon",
+            "success": true,
+            "data": {
+                "email": savedInvitation.Email,
+                "name": savedInvitation.Name,
+                "requestedAt": savedInvitation.RequestedAt,
+                "status": savedInvitation.Status
+            }
+        });
+
     } catch (error) {
         console.error('Request invitation error:', error);
-        res.status(500).json(error);
+        
+        // Check for Mongoose validation errors
+        if (error.name === 'ValidationError') {
+            const validationErrors = Object.keys(error.errors).map(key => ({
+                field: key,
+                message: error.errors[key].message
+            }));
+            
+            return res.status(400).json({
+                "code": "400",
+                "msg": "Validation failed. Please check your input",
+                "success": false,
+                "errors": validationErrors
+            });
+        }
+        
+        // Generic error response
+        return res.status(500).json({
+            "code": "500",
+            "msg": "An error occurred while processing your invitation request. Please try again later",
+            "success": false,
+            "error": process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
 		}
 };
 exports.requestInvitation = requestInvitation;
@@ -809,7 +922,7 @@ var chklogin = async function (req, res) {
 		var query = { _id: ObjectId(String(req.user.userId)) };
         var options = { multi: false };
 
-            await user.update(query, { $set: dataToUpdate }, options).exec();
+            await user.updateOne(query, { $set: dataToUpdate }).exec();
 
         res.json({ "code": "200", "msg": "Success", "usersession": req.user });
         } catch (error) {
@@ -853,7 +966,7 @@ var uploadDP = async function (req, res) {
         // Use Promise wrapper for the update operation
         new Promise(async (resolve, reject) => {
             try {
-                const result = await user.update(query, { $set: dataToUpload }, options).exec();
+                const result = await user.updateOne(query, { $set: dataToUpload }).exec();
                 resolve(result);
             } catch (error) {
                 reject(error);
@@ -905,7 +1018,7 @@ var fsgArrUpdate = async function (req, res) {
                 fields[req.body.title] = req.body.value;
             }
             
-            await user.update(query, { $set: { FSGsArr2: fields } }, { upsert: false }).exec();
+            await user.updateOne(query, { $set: { FSGsArr2: fields } }).exec();
             
             const result = await user.find({ '_id': req.session.user._id }).exec();
                         req.session.user = result[0];
@@ -927,7 +1040,7 @@ exports.fsgArrUpdate = fsgArrUpdate;
 var saveSettings = async function (req, res) {
     try {
     var query = { _id: req.session.user._id };
-        await user.update(query, { $set: { Settings: req.body } }, { upsert: false }).exec();
+        await user.updateOne(query, { $set: { Settings: req.body } }).exec();
         
         const result = await user.find({ '_id': req.session.user._id }).exec();
                 req.session.user = result[0];
@@ -1537,7 +1650,7 @@ var saveUserPassword = async function (req, res) {
                     var conditions = { _id: req.session.user._id };
                     var options = { multi: false };
 
-                    await user.update(conditions, { $set: setObj }, options).exec();
+                    await user.updateOne(conditions, { $set: setObj }).exec();
                     res.json({ "code": "200", "msg": "Password has been updated succesfully.", "response": "Updated successfully" });
                 } else {
                     //console.log("* * Inside else password Match* *");
@@ -1762,7 +1875,7 @@ var saveUserAvatar_Subdomain = async function (req, res) {
                 var query = { _id: req.session.user._id };
                 var options = { multi: false };
             
-            await user.update(query, { $set: fields }, options).exec();
+            await user.updateOne(query, { $set: fields }).exec();
             
                         req.session.user.Subdomain_profilePic = croppedImagePath;
                         res.json({ code: "200", msg: "Successfully Saved!", ProfilePic: croppedImagePath });
@@ -1851,38 +1964,113 @@ var saveUsername = function (req, res) {
 */
 var saveUsername = async function (req, res) {
     try {
-    //console.log("inside saveUsername - -- >", req.body)
-    req.body = req.body ? req.body : {};
-    var inputUsername = req.body.UserName ? req.body.UserName : null;
-    var conditions = {
-            UserName: { $regex: new RegExp("^" + inputUsername + "$", "i") },
-		IsDeleted: false
-    };
-    var fields = {
-        _id: true
-    };
-    if (inputUsername == null) {
-        res.json({ "code": "501", "msg": "Input Error." });
-    } else {
-            const data = await user.find(conditions, fields).exec();
-            
-                //console.log("* * * *Inside Username already Exist* * * *", data, data.length);
-                var setObj = {
-                    UserName: req.body.UserName,
-                };
-                var conditions = { _id: req.session.user._id };
-                var options = { multi: false };
-
-                if (data.length) {
-                res.json({ "code": "201", "msg": "Username already exist" });
-                } else {
-                await user.update(conditions, { $set: setObj }, options).exec();
-                res.json({ "code": "200", "msg": "Username has been updated succesfully", "response": "Updated successfully" });
-            }
+        // Check if user is logged in
+        if (!req.session || !req.session.user || !req.session.user._id) {
+            return res.status(401).json({
+                "code": "401",
+                "msg": "Unauthorized. Please login to continue",
+                "success": false
+            });
         }
+
+        // Validate username input
+        const inputUsername = req.body.UserName ? req.body.UserName.trim() : null;
+        
+        if (!inputUsername) {
+            return res.status(400).json({
+                "code": "400",
+                "msg": "Username is required",
+                "success": false
+            });
+        }
+
+        // Validate username format (alphanumeric, underscores, 3-20 characters)
+        const usernameRegex = /^[a-zA-Z0-9_]{3,20}$/;
+        if (!usernameRegex.test(inputUsername)) {
+            return res.status(400).json({
+                "code": "400",
+                "msg": "Username must be 3-20 characters and contain only letters, numbers, and underscores",
+                "success": false
+            });
+        }
+
+        // Get current user data
+        const currentUser = await user.findOne({ 
+            _id: req.session.user._id, 
+		IsDeleted: false
+        }).exec();
+
+        if (!currentUser) {
+            return res.status(404).json({
+                "code": "404",
+                "msg": "User not found",
+                "success": false
+            });
+        }
+
+        // Check if username is the same as current (case-insensitive)
+        if (currentUser.UserName && currentUser.UserName.toLowerCase() === inputUsername.toLowerCase()) {
+            return res.json({
+                "code": "304",
+                "msg": "Username is already set to this value",
+                "success": true,
+                "notModified": true,
+                "username": currentUser.UserName
+            });
+        }
+
+        // Check if username is already taken by another user (case-insensitive)
+        const existingUser = await user.findOne({
+            UserName: { $regex: new RegExp("^" + inputUsername + "$", "i") },
+            IsDeleted: false,
+            _id: { $ne: req.session.user._id }  // Exclude current user
+        }).exec();
+
+        if (existingUser) {
+            return res.status(409).json({
+                "code": "409",
+                "msg": "Username is already taken. Please choose a different username",
+                "success": false,
+                "usernameTaken": true
+            });
+        }
+
+        // Update username
+        const updateResult = await user.updateOne(
+            { _id: req.session.user._id },
+            { $set: { UserName: inputUsername } }
+        ).exec();
+
+        if (updateResult.modifiedCount > 0) {
+            // Update session with new username
+            if (req.session.user) {
+                req.session.user.UserName = inputUsername;
+            }
+
+            console.log(`✅ Username updated successfully: ${currentUser.Email} -> ${inputUsername}`);
+
+            return res.json({
+                "code": "200",
+                "msg": "Username has been updated successfully",
+                "success": true,
+                "username": inputUsername
+            });
+        } else {
+            return res.status(500).json({
+                "code": "500",
+                "msg": "Failed to update username. Please try again",
+                "success": false
+            });
+        }
+
     } catch (error) {
         console.error('Save username error:', error);
-        res.status(500).json(error);
+        return res.status(500).json({
+            "code": "500",
+            "msg": "An error occurred while updating username. Please try again later",
+            "success": false,
+            "error": process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 };
 exports.saveUsername = saveUsername;
@@ -1976,7 +2164,7 @@ var saveUserEmail = async function (req, res) {
                 res.json({ "code": "201", "msg": "Email already exist" });
                 } else {
                     console.log("If Data.length is not there ")
-                await user.update(conditions, { $set: setObj }, options).exec();
+                await user.updateOne(conditions, { $set: setObj }).exec();
                 res.json({ "code": "200", "msg": "Email has been updated succesfully", "response": "Updated successfully" });
             }
         }
@@ -1989,26 +2177,69 @@ exports.saveUserEmail = saveUserEmail;
 
 var confirm_token = async function (req, res) {
     try {
-        const data = await user.find({ resetPasswordToken: req.body.token }).exec();
-        
-        if (data && data.length) {
-                data = data[0];
-                console.log("* * Inside confirm Token else= = >* * ", data);
-                var Email = data.Email;
-                var query = { Email: Email, IsDeleted: false };
+        // Validate token is provided
+        if (!req.body.token) {
+            return res.status(400).json({
+                "code": "400",
+                "msg": "Confirmation token is required",
+                "success": false
+            });
+        }
 
-            await user.update(query, { $set: { EmailConfirmationStatus: true } }).exec();
-                        console.log("* * Inside !err  now sending mail from here on success= = >* * ", data);
-                        sendmail(Email, "confirm_token", data, res);
-                        console.log(data);
-                        //res.json({"code":200,"msg":"Success"});
-            res.json({ "code": "200", "msg": "Email confirmed successfully" });
+        // Find user by token - use let instead of const since we reassign it
+        let userData = await user.find({ resetPasswordToken: req.body.token }).exec();
+        
+        if (userData && userData.length > 0) {
+            userData = userData[0];
+            console.log("✅ Email confirmation - User found:", userData.Email);
+            
+            // Check if email is already confirmed
+            if (userData.EmailConfirmationStatus === true) {
+                return res.json({
+                    "code": "200",
+                    "msg": "Email has already been confirmed. You can login now",
+                    "success": true,
+                    "alreadyConfirmed": true
+                });
+            }
+            
+            const email = userData.Email;
+            const query = { Email: email, IsDeleted: false };
+
+            // Update email confirmation status
+            await user.updateOne(query, { $set: { EmailConfirmationStatus: true } }).exec();
+            
+            console.log("✅ Email confirmed successfully for:", email);
+            
+            // Send confirmation success email
+            try {
+                sendmail(email, "confirm_token", userData, res);
+            } catch (emailError) {
+                console.error('Error sending confirmation email:', emailError);
+                // Continue even if email fails
+            }
+            
+            return res.json({
+                "code": "200",
+                "msg": "Email confirmed successfully! You can now login to your account",
+                "success": true,
+                "email": email
+            });
                     } else {
-            res.json({ "code": "404", "msg": "Confirmation token doesn't matched." });
+            return res.status(404).json({
+                "code": "404",
+                "msg": "Invalid or expired confirmation token. Please request a new confirmation email",
+                "success": false
+            });
         }
     } catch (error) {
         console.error('Confirm token error:', error);
-        res.status(500).json({ "code": "501", "msg": "Something went wrong." });
+        return res.status(500).json({
+            "code": "500",
+            "msg": "An error occurred while confirming your email. Please try again later",
+            "success": false,
+            "error": process.env.NODE_ENV === 'development' ? error.message : undefined
+        });
     }
 };
 exports.confirm_token = confirm_token;
@@ -2034,7 +2265,7 @@ var updateTour = async function (req, res) {
     }
 
     // return
-        const updateResult = await user.update(conditions, { $set: updateData }).exec();
+        const updateResult = await user.updateOne(conditions, { $set: updateData }).exec();
         const userData = await user.findOne(conditions).exec();
         
             var response = {
@@ -2133,7 +2364,7 @@ var stripeConnect = async function (req, res) {
                     };
                     console.log("@@@@@@@@@@@@@@@@@@@@@@@@@@@@@------------------------------------**************UPDATING-----------");
                 
-                const resp = await user.update({ _id: user_id }, { $set: setObj }).exec();
+                const resp = await user.updateOne({ _id: user_id }, { $set: setObj }).exec();
                 console.log("@@@@@@@@@@@@@@@@@@@@@############-----------------ERROR-------------------", resp);
                         console.log("@@@@@@@@@@@@@@@@@@@@@############-----------------response-------------------", resp);
                 
@@ -2193,7 +2424,7 @@ var __createDefaultJournal_BackgroundCall = async function (user_id, user_email)
                 JournalId: String(capsuleResult._id)
             };
             
-            await user.update(updateCond, dataToSet).exec();
+            await user.updateOne(updateCond, dataToSet).exec();
             console.log("Journal ID saved to user");
 
 			//update if there is any transfer ownership chapter
@@ -2225,7 +2456,7 @@ var __createDefaultJournal_BackgroundCall = async function (user_id, user_email)
                             AllFoldersId: String(result._id)
                         };
                         
-                        await user.update(updateCond, dataToSet).exec();
+                        await user.updateOne(updateCond, dataToSet).exec();
 
 							var data = {};
 							data.Title = "General";
@@ -2296,7 +2527,7 @@ var __createDefaultJournal_BackgroundCall = async function (user_id, user_email)
                                     AllPagesId: String(result._id)
                                 };
                                 
-                                await user.update(updateCond, dataToSet).exec();
+                                await user.updateOne(updateCond, dataToSet).exec();
 									}
 									//save General page - id in users collection...
 
@@ -2448,7 +2679,7 @@ var AcceptBrowserPolicy = async function (req, res) {
     try {
     var query = { _id: req.session.user._id };
     // console.log(a);
-        await user.update(query, { $set: { BrowserPolicyAccepted: true } }).exec();
+        await user.updateOne(query, { $set: { BrowserPolicyAccepted: true } }).exec();
         
 			req.session.user.BrowserPolicyAccepted = true;
         res.json({ code: 200, message: 'done' });
@@ -2463,7 +2694,7 @@ var acceptAppPolicy = async function (req, res) {
     try {
     var query = { _id: req.session.user._id };
     // console.log(a);
-        await user.update(query, { $set: { ApplicationPolicyAccepted: true } }).exec();
+        await user.updateOne(query, { $set: { ApplicationPolicyAccepted: true } }).exec();
         
 			req.session.user.ApplicationPolicyAccepted = true;
         res.json({ code: 200, message: 'done' });
