@@ -1,0 +1,2062 @@
+{
+	"info": {
+		"_postman_id": "collabmedia-user-management-complete",
+		"name": "CollabMedia User Management - Complete API",
+		"description": "Comprehensive user management API collection including authentication, profile management, admin operations, teams, and all user-related endpoints",
+		"schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+		"_exporter_id": "collabmedia-user-management"
+	},
+	"auth": {
+		"type": "bearer",
+		"bearer": [
+			{
+				"key": "token",
+				"value": "{{session_cookie}}",
+				"type": "string"
+			}
+		]
+	},
+	"item": [
+		{
+			"name": "1. User Authentication & Registration",
+			"item": [
+				{
+					"name": "User Login",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"password\": \"password123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/login",
+							"host": ["{{base_url}}"],
+							"path": ["user", "login"]
+						},
+						"description": "Authenticate user and create session"
+					}
+				},
+				{
+					"name": "User Register",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"John Doe\",\n  \"email\": \"john@example.com\",\n  \"password\": \"password123\",\n  \"gender\": \"Male\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/register",
+							"host": ["{{base_url}}"],
+							"path": ["user", "register"]
+						},
+						"description": "Register new user account (fields: email, password, name, gender - all lowercase)"
+					}
+				},
+				{
+					"name": "Request Invitation",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\",\n  \"name\": \"John Doe\",\n  \"gender\": \"Male\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/requestInvitation",
+							"host": ["{{base_url}}"],
+							"path": ["user", "requestInvitation"]
+						},
+						"description": "Request platform invitation.\n\n**Required Fields (all lowercase):**\n- `email` (string) - Valid email address\n- `name` (string) - User's full name (min 2 characters)\n\n**Optional Fields:**\n- `gender` (string) - Male, Female, or Other\n\n**Response Codes:**\n- 200: Success\n- 400: Validation error (missing/invalid fields)\n- 409: Email already exists or invitation already requested\n- 500: Server error"
+					},
+					"response": [
+						{
+							"name": "Success - Invitation Requested",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"newuser@example.com\",\n  \"name\": \"John Doe\",\n  \"gender\": \"Male\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/user/requestInvitation",
+									"host": ["{{base_url}}"],
+									"path": ["user", "requestInvitation"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"code\": \"200\",\n  \"msg\": \"Thank you for your interest! Your invitation request has been submitted successfully. We will review your request and get back to you soon\",\n  \"success\": true,\n  \"data\": {\n    \"email\": \"newuser@example.com\",\n    \"name\": \"John Doe\",\n    \"requestedAt\": \"2024-10-14T10:30:00.000Z\",\n    \"status\": \"pending\"\n  }\n}"
+						},
+						{
+							"name": "Error - Missing Email",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"name\": \"John Doe\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/user/requestInvitation",
+									"host": ["{{base_url}}"],
+									"path": ["user", "requestInvitation"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"code\": \"400\",\n  \"msg\": \"Email is required\",\n  \"success\": false\n}"
+						},
+						{
+							"name": "Error - Invalid Email Format",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"invalid-email\",\n  \"name\": \"John Doe\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/user/requestInvitation",
+									"host": ["{{base_url}}"],
+									"path": ["user", "requestInvitation"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"code\": \"400\",\n  \"msg\": \"Invalid email format. Please provide a valid email address\",\n  \"success\": false\n}"
+						},
+						{
+							"name": "Error - Email Already Registered",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"existing@example.com\",\n  \"name\": \"John Doe\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/user/requestInvitation",
+									"host": ["{{base_url}}"],
+									"path": ["user", "requestInvitation"]
+								}
+							},
+							"status": "Conflict",
+							"code": 409,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"code\": \"409\",\n  \"msg\": \"This email is already registered. Please login or use a different email address\",\n  \"success\": false,\n  \"emailExists\": true\n}"
+						},
+						{
+							"name": "Error - Invitation Already Pending",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"email\": \"pending@example.com\",\n  \"name\": \"John Doe\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/user/requestInvitation",
+									"host": ["{{base_url}}"],
+									"path": ["user", "requestInvitation"]
+								}
+							},
+							"status": "Conflict",
+							"code": 409,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"code\": \"409\",\n  \"msg\": \"Your invitation request is already pending review. We'll contact you soon\",\n  \"success\": false,\n  \"invitationExists\": true,\n  \"invitationStatus\": \"pending\"\n}"
+						}
+					]
+				},
+				{
+					"name": "Check Login Status",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/chklogin",
+							"host": ["{{base_url}}"],
+							"path": ["user", "chklogin"]
+						},
+						"description": "Check if user is logged in"
+					}
+				},
+				{
+					"name": "User Logout",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/logout",
+							"host": ["{{base_url}}"],
+							"path": ["user", "logout"]
+						},
+						"description": "Logout user and destroy session"
+					}
+				},
+				{
+					"name": "Confirm Email Token",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"abc123xyz789token\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/confirm_token",
+							"host": ["{{base_url}}"],
+							"path": ["user", "confirm_token"]
+						},
+						"description": "Confirm user email address using the token sent via email after registration.\n\n**How it works:**\n1. User registers and receives an email with confirmation link\n2. Link contains a unique token\n3. User clicks link which calls this endpoint with the token\n4. Email is marked as confirmed\n\n**Required Fields:**\n- `token` (string) - The confirmation token from the email\n\n**Response Codes:**\n- 200: Email confirmed successfully (or already confirmed)\n- 400: Token is missing\n- 404: Invalid or expired token\n- 500: Server error"
+					},
+					"response": [
+						{
+							"name": "Success - Email Confirmed",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"token\": \"abc123xyz789validtoken\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/user/confirm_token",
+									"host": ["{{base_url}}"],
+									"path": ["user", "confirm_token"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"code\": \"200\",\n  \"msg\": \"Email confirmed successfully! You can now login to your account\",\n  \"success\": true,\n  \"email\": \"user@example.com\"\n}"
+						},
+						{
+							"name": "Success - Already Confirmed",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"token\": \"abc123xyz789token\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/user/confirm_token",
+									"host": ["{{base_url}}"],
+									"path": ["user", "confirm_token"]
+								}
+							},
+							"status": "OK",
+							"code": 200,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"code\": \"200\",\n  \"msg\": \"Email has already been confirmed. You can login now\",\n  \"success\": true,\n  \"alreadyConfirmed\": true\n}"
+						},
+						{
+							"name": "Error - Missing Token",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{}"
+								},
+								"url": {
+									"raw": "{{base_url}}/user/confirm_token",
+									"host": ["{{base_url}}"],
+									"path": ["user", "confirm_token"]
+								}
+							},
+							"status": "Bad Request",
+							"code": 400,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"code\": \"400\",\n  \"msg\": \"Confirmation token is required\",\n  \"success\": false\n}"
+						},
+						{
+							"name": "Error - Invalid Token",
+							"originalRequest": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+									"raw": "{\n  \"token\": \"invalidtoken123\"\n}"
+								},
+								"url": {
+									"raw": "{{base_url}}/user/confirm_token",
+									"host": ["{{base_url}}"],
+									"path": ["user", "confirm_token"]
+								}
+							},
+							"status": "Not Found",
+							"code": 404,
+							"_postman_previewlanguage": "json",
+							"header": [
+								{
+									"key": "Content-Type",
+									"value": "application/json"
+								}
+							],
+							"body": "{\n  \"code\": \"404\",\n  \"msg\": \"Invalid or expired confirmation token. Please request a new confirmation email\",\n  \"success\": false\n}"
+						}
+					]
+				}
+			]
+		},
+		{
+			"name": "2. Password Management",
+			"item": [
+				{
+					"name": "Reset Password Request",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"user@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/reset_password",
+							"host": ["{{base_url}}"],
+							"path": ["user", "reset_password"]
+						},
+						"description": "Send password reset email"
+					}
+				},
+				{
+					"name": "Set New Password",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"token\": \"RESET_TOKEN\",\n  \"newPassword\": \"newPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/new_password",
+							"host": ["{{base_url}}"],
+							"path": ["user", "new_password"]
+						},
+						"description": "Set new password with reset token"
+					}
+				},
+				{
+					"name": "Save User Password (Logged In)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"oldPassword\": \"currentPassword123\",\n  \"newPassword\": \"newPassword123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveUserPassword",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveUserPassword"]
+						},
+						"description": "Change password for logged in user"
+					}
+				}
+			]
+		},
+		{
+			"name": "3. User Profile & Account",
+			"item": [
+				{
+					"name": "Get User Data",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/getUserData",
+							"host": ["{{base_url}}"],
+							"path": ["user", "getUserData"]
+						},
+						"description": "Get current user's data"
+					}
+				},
+				{
+					"name": "Get Account Details",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/getAccountDetails",
+							"host": ["{{base_url}}"],
+							"path": ["user", "getAccountDetails"]
+						},
+						"description": "Get user account details"
+					}
+				},
+				{
+					"name": "Save Account Details",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"John Doe\",\n  \"Bio\": \"Software developer\",\n  \"Location\": \"New York\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveAccountDetails",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveAccountDetails"]
+						},
+						"description": "Update user account details"
+					}
+				},
+				{
+					"name": "Save Username",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"UserName\": \"newusername\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveUsername",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveUsername"]
+						},
+						"description": "Update username"
+					}
+				},
+				{
+					"name": "Save User Email",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Email\": \"newemail@example.com\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveUserEmail",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveUserEmail"]
+						},
+						"description": "Update user email"
+					}
+				},
+				{
+					"name": "Upload User Avatar",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "avatar",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveUserAvatar",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveUserAvatar"]
+						},
+						"description": "Upload user profile picture"
+					}
+				},
+				{
+					"name": "Upload User Avatar (Subdomain)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "avatar",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveUserAvatar_Subdomain",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveUserAvatar_Subdomain"]
+						},
+						"description": "Upload user avatar for subdomain"
+					}
+				},
+				{
+					"name": "Get Owner Details",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ownerId\": \"OWNER_ID_HERE\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/getOwnerDetails",
+							"host": ["{{base_url}}"],
+							"path": ["user", "getOwnerDetails"]
+						},
+						"description": "Get owner profile details"
+					}
+				},
+				{
+					"name": "Get User by Subdomain",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/getDataBySubdomain",
+							"host": ["{{base_url}}"],
+							"path": ["user", "getDataBySubdomain"]
+						},
+						"description": "Get user data by subdomain"
+					}
+				}
+			]
+		},
+		{
+			"name": "4. User Settings & Preferences",
+			"item": [
+				{
+					"name": "Save Settings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"privacy\": \"public\",\n  \"notifications\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveSettings",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveSettings"]
+						},
+						"description": "Save user settings"
+					}
+				},
+				{
+					"name": "Update Tour View",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tourCompleted\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/updateTour",
+							"host": ["{{base_url}}"],
+							"path": ["user", "updateTour"]
+						},
+						"description": "Update user tour status"
+					}
+				},
+				{
+					"name": "Accept Browser Policy",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/AcceptBrowserPolicy",
+							"host": ["{{base_url}}"],
+							"path": ["user", "AcceptBrowserPolicy"]
+						},
+						"description": "Accept browser policy"
+					}
+				},
+				{
+					"name": "Accept App Policy",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/acceptAppPolicy",
+							"host": ["{{base_url}}"],
+							"path": ["user", "acceptAppPolicy"]
+						},
+						"description": "Accept app policy"
+					}
+				},
+				{
+					"name": "Save Subdomain Settings",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"subdomain\": \"mysite\",\n  \"theme\": \"dark\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveSubdomainSettings",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveSubdomainSettings"]
+						},
+						"description": "Save subdomain settings"
+					}
+				}
+			]
+		},
+		{
+			"name": "5. User Milestones & Metrics",
+			"item": [
+				{
+					"name": "Save User Milestone",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"title\": \"First Post\",\n  \"description\": \"Created my first post\",\n  \"date\": \"2024-01-15\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveUserMilestone",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveUserMilestone"]
+						},
+						"description": "Save user milestone"
+					}
+				},
+				{
+					"name": "Save User Goal",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"goal\": \"100 followers\",\n  \"deadline\": \"2024-12-31\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveGoal",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveGoal"]
+						},
+						"description": "Save user goal"
+					}
+				},
+				{
+					"name": "Save User Metrics",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"followers\": 100,\n  \"posts\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveUserMetrics",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveUserMetrics"]
+						},
+						"description": "Save user metrics"
+					}
+				},
+				{
+					"name": "Save User Keyshifts",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"keyshift\": \"Switched to video content\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveUserKeyshifts",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveUserKeyshifts"]
+						},
+						"description": "Save user keyshifts"
+					}
+				},
+				{
+					"name": "Save User Birthdate",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"birthdate\": \"1990-01-15\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveUserBirthdate",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveUserBirthdate"]
+						},
+						"description": "Save user birthdate"
+					}
+				},
+				{
+					"name": "Save Owner Birthdate",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ownerId\": \"OWNER_ID\",\n  \"birthdate\": \"1985-05-20\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveOwnerBirthdate",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveOwnerBirthdate"]
+						},
+						"description": "Save owner birthdate"
+					}
+				},
+				{
+					"name": "Confirm Owner Birthday",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"ownerId\": \"OWNER_ID\",\n  \"confirmed\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/confirmOwnerBirthday",
+							"host": ["{{base_url}}"],
+							"path": ["user", "confirmOwnerBirthday"]
+						},
+						"description": "Confirm owner birthday"
+					}
+				}
+			]
+		},
+		{
+			"name": "6. User Activity & Analytics",
+			"item": [
+				{
+					"name": "Log User Action",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"action\": \"clicked_button\",\n  \"page\": \"home\",\n  \"metadata\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/logUserAction",
+							"host": ["{{base_url}}"],
+							"path": ["user", "logUserAction"]
+						},
+						"description": "Log user action for analytics"
+					}
+				},
+				{
+					"name": "Log User Feedback",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"feedback\": \"Great platform!\",\n  \"rating\": 5\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/logUserFeedback",
+							"host": ["{{base_url}}"],
+							"path": ["user", "logUserFeedback"]
+						},
+						"description": "Submit user feedback"
+					}
+				},
+				{
+					"name": "Get User Notifications Count",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/getUserNotificationsCount",
+							"host": ["{{base_url}}"],
+							"path": ["user", "getUserNotificationsCount"]
+						},
+						"description": "Get count of user notifications"
+					}
+				},
+				{
+					"name": "Update Notification Seen Status",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"notificationId\": \"NOTIFICATION_ID\",\n  \"seen\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/updateNotificationSeenStatus",
+							"host": ["{{base_url}}"],
+							"path": ["user", "updateNotificationSeenStatus"]
+						},
+						"description": "Mark notification as seen"
+					}
+				}
+			]
+		},
+		{
+			"name": "7. User Search & Tagging",
+			"item": [
+				{
+					"name": "Search Users for Tagging",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"searchText\": \"john\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/tagging_users_list",
+							"host": ["{{base_url}}"],
+							"path": ["user", "tagging_users_list"]
+						},
+						"description": "Search users for tagging in posts"
+					}
+				},
+				{
+					"name": "Search Users (Member)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"searchText\": \"jane\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/member/searchUsers",
+							"host": ["{{base_url}}"],
+							"path": ["member", "searchUsers"]
+						},
+						"description": "Search for users"
+					}
+				}
+			]
+		},
+		{
+			"name": "8. Team Management",
+			"item": [
+				{
+					"name": "Create Team",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"Development Team\",\n  \"description\": \"Our dev team\",\n  \"members\": [\"USER_ID_1\", \"USER_ID_2\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/createTeam",
+							"host": ["{{base_url}}"],
+							"path": ["user", "createTeam"]
+						},
+						"description": "Create new team"
+					}
+				},
+				{
+					"name": "Update Team",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"teamId\": \"TEAM_ID\",\n  \"name\": \"Updated Team Name\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/updateTeam",
+							"host": ["{{base_url}}"],
+							"path": ["user", "updateTeam"]
+						},
+						"description": "Update team details"
+					}
+				},
+				{
+					"name": "Delete Team",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"teamId\": \"TEAM_ID\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/deleteTeam",
+							"host": ["{{base_url}}"],
+							"path": ["user", "deleteTeam"]
+						},
+						"description": "Delete team"
+					}
+				},
+				{
+					"name": "Leave Team",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"teamId\": \"TEAM_ID\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/leaveTeam",
+							"host": ["{{base_url}}"],
+							"path": ["user", "leaveTeam"]
+						},
+						"description": "Leave team"
+					}
+				},
+				{
+					"name": "Approve Team",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"teamId\": \"TEAM_ID\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/approveTeam",
+							"host": ["{{base_url}}"],
+							"path": ["user", "approveTeam"]
+						},
+						"description": "Approve team"
+					}
+				},
+				{
+					"name": "List Teams",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/listTeams",
+							"host": ["{{base_url}}"],
+							"path": ["user", "listTeams"]
+						},
+						"description": "Get list of all teams"
+					}
+				}
+			]
+		},
+		{
+			"name": "9. File & FSG Management",
+			"item": [
+				{
+					"name": "File Upload",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "file",
+									"type": "file",
+									"src": []
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/user/fileUpload",
+							"host": ["{{base_url}}"],
+							"path": ["user", "fileUpload"]
+						},
+						"description": "Upload file"
+					}
+				},
+				{
+					"name": "Save File",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"fileName\": \"document.pdf\",\n  \"fileUrl\": \"/uploads/document.pdf\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/saveFile",
+							"host": ["{{base_url}}"],
+							"path": ["user", "saveFile"]
+						},
+						"description": "Save file metadata"
+					}
+				},
+				{
+					"name": "Add FSG",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"fsgData\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/addFsg",
+							"host": ["{{base_url}}"],
+							"path": ["user", "addFsg"]
+						},
+						"description": "Add FSG data"
+					}
+				},
+				{
+					"name": "Update FSG Array",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"fsgArray\": []\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/user/fsgArrUpdate",
+							"host": ["{{base_url}}"],
+							"path": ["user", "fsgArrUpdate"]
+						},
+						"description": "Update FSG array"
+					}
+				}
+			]
+		},
+		{
+			"name": "10. Stripe & Payment",
+			"item": [
+				{
+					"name": "Stripe Connect",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/user/stripeConnect?code=STRIPE_AUTH_CODE",
+							"host": ["{{base_url}}"],
+							"path": ["user", "stripeConnect"],
+							"query": [
+								{
+									"key": "code",
+									"value": "STRIPE_AUTH_CODE"
+								}
+							]
+						},
+						"description": "Connect Stripe account"
+					}
+				}
+			]
+		},
+		{
+			"name": "11. Admin - User Management",
+			"item": [
+				{
+					"name": "Get All Users",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/view",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "view"]
+						},
+						"description": "Get all users (admin only)"
+					}
+				},
+				{
+					"name": "Get Users Paginated",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"skip\": 0,\n  \"limit\": 50,\n  \"sortBy\": \"CreatedOn\",\n  \"sortOrder\": -1\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/view",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "view"]
+						},
+						"description": "Get users with pagination"
+					}
+				},
+				{
+					"name": "Search Users",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"searchText\": \"john\",\n  \"skip\": 0,\n  \"limit\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/search",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "search"]
+						},
+						"description": "Search users by name/email/username"
+					}
+				},
+				{
+					"name": "Add User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"Name\": \"New User\",\n  \"Email\": \"newuser@example.com\",\n  \"Password\": \"password123\",\n  \"UserName\": \"newuser\",\n  \"Role\": \"user\",\n  \"AllowCreate\": false\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/add",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "add"]
+						},
+						"description": "Add new user (admin)"
+					}
+				},
+				{
+					"name": "Edit User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID\",\n  \"Name\": \"Updated Name\",\n  \"Email\": \"updated@example.com\",\n  \"Role\": \"user\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/edit",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "edit"]
+						},
+						"description": "Edit user details (admin)"
+					}
+				},
+				{
+					"name": "Delete User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/delete",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "delete"]
+						},
+						"description": "Delete user (soft delete)"
+					}
+				},
+				{
+					"name": "Activate User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/activateUser",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "activateUser"]
+						},
+						"description": "Activate user account"
+					}
+				},
+				{
+					"name": "Deactivate User",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/deactivateUser",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "deactivateUser"]
+						},
+						"description": "Deactivate user account"
+					}
+				},
+				{
+					"name": "Set/Unset Create Permission",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"_id\": \"USER_ID\",\n  \"AllowCreate\": true\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/setUnsetCreate",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "setUnsetCreate"]
+						},
+						"description": "Toggle content creation permission"
+					}
+				},
+				{
+					"name": "Upload User Avatar (Admin)",
+					"request": {
+						"method": "POST",
+						"header": [],
+						"body": {
+							"mode": "formdata",
+							"formdata": [
+								{
+									"key": "avatar",
+									"type": "file",
+									"src": []
+								},
+								{
+									"key": "userId",
+									"value": "USER_ID",
+									"type": "text"
+								}
+							]
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/uploadAvatar",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "uploadAvatar"]
+						},
+						"description": "Upload user avatar (admin)"
+					}
+				}
+			]
+		},
+		{
+			"name": "12. Admin - Invitation Management",
+			"item": [
+				{
+					"name": "View Invitation Requests",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"skip\": 0,\n  \"limit\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/viewRequestInvitation",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "viewRequestInvitation"]
+						},
+						"description": "View all invitation requests"
+					}
+				},
+				{
+					"name": "Search Invitation Requests",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"searchText\": \"john@example.com\",\n  \"skip\": 0,\n  \"limit\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/searchRequestInvitation",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "searchRequestInvitation"]
+						},
+						"description": "Search invitation requests"
+					}
+				}
+			]
+		},
+		{
+			"name": "13. Admin - Sales & Reports",
+			"item": [
+				{
+					"name": "Get User Sales",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID\",\n  \"skip\": 0,\n  \"limit\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/getMySales",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "getMySales"]
+						},
+						"description": "Get sales by user"
+					}
+				},
+				{
+					"name": "Get All Reports",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/userManagement/getAllReports",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "userManagement", "getAllReports"]
+						},
+						"description": "Get all user reports"
+					}
+				}
+			]
+		},
+		{
+			"name": "14. Admin Authentication",
+			"item": [
+				{
+					"name": "Admin Login",
+					"request": {
+						"auth": { "type": "noauth" },
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"email\": \"admin@scrpt.com\",\n  \"password\": \"admin123\",\n  \"remember\": \"1\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/signin",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "signin"]
+						},
+						"description": "Admin login"
+					}
+				},
+				{
+					"name": "Check Admin Login",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/chklogin",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "chklogin"]
+						},
+						"description": "Check admin login status"
+					}
+				},
+				{
+					"name": "Admin Logout",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/logout",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "logout"]
+						},
+						"description": "Admin logout"
+					}
+				},
+				{
+					"name": "Get All Admins",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/admins",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "admins"]
+						},
+						"description": "Get all admin users"
+					}
+				},
+				{
+					"name": "Create Admin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"name\": \"New Admin\",\n  \"email\": \"newadmin@scrpt.com\",\n  \"password\": \"admin123\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/create",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "create"]
+						},
+						"description": "Create new admin"
+					}
+				},
+				{
+					"name": "Promote User to SubAdmin",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID\",\n  \"password\": \"newpassword123\",\n  \"permissions\": [\"content_moderation\"],\n  \"role\": \"subadmin\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/promoteUserToSubAdmin",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "promoteUserToSubAdmin"]
+						},
+						"description": "Promote user to subadmin"
+					}
+				}
+			]
+		},
+		{
+			"name": "15. Referral & Credits",
+			"item": [
+				{
+					"name": "Update Referral Point",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID\",\n  \"points\": 100\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/updateReferralPoint",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "updateReferralPoint"]
+						},
+						"description": "Update user referral points"
+					}
+				},
+				{
+					"name": "Get Referral Point",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/getReferralPoint",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "getReferralPoint"]
+						},
+						"description": "Get referral points configuration"
+					}
+				},
+				{
+					"name": "Get User Data for Credit",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/referral/getUserDataForCredit",
+							"host": ["{{base_url}}"],
+							"path": ["referral", "getUserDataForCredit"]
+						},
+						"description": "Get user data for credit calculation"
+					}
+				}
+			]
+		},
+		{
+			"name": "16. User Stats & Activities",
+			"item": [
+				{
+					"name": "Get User Activities",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID\",\n  \"skip\": 0,\n  \"limit\": 50\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/userActivity/getUserActivities",
+							"host": ["{{base_url}}"],
+							"path": ["userActivity", "getUserActivities"]
+						},
+						"description": "Get user activities"
+					}
+				},
+				{
+					"name": "Get User Activity Stats",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/userActivity/getUserActivityStats",
+							"host": ["{{base_url}}"],
+							"path": ["userActivity", "getUserActivityStats"]
+						},
+						"description": "Get user activity statistics"
+					}
+				},
+				{
+					"name": "Get User Streams Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/journal/getUserStreamsStats",
+							"host": ["{{base_url}}"],
+							"path": ["journal", "getUserStreamsStats"]
+						},
+						"description": "Get user streams statistics"
+					}
+				},
+				{
+					"name": "Get User Stats",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/journal/getUserStats",
+							"host": ["{{base_url}}"],
+							"path": ["journal", "getUserStats"]
+						},
+						"description": "Get user statistics"
+					}
+				}
+			]
+		},
+		{
+			"name": "17. Admin - User Tags",
+			"item": [
+				{
+					"name": "View User Tags",
+					"request": {
+						"method": "GET",
+						"header": [],
+						"url": {
+							"raw": "{{base_url}}/admin/tag/viewUserTag",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "tag", "viewUserTag"]
+						},
+						"description": "View all user tags"
+					}
+				},
+				{
+					"name": "Add User Tags",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"userId\": \"USER_ID\",\n  \"tags\": [\"premium\", \"verified\"]\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/tag/addUserTags",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "tag", "addUserTags"]
+						},
+						"description": "Add tags to user"
+					}
+				},
+				{
+					"name": "Edit User Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tagId\": \"TAG_ID\",\n  \"name\": \"Updated Tag\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/tag/editUserTag",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "tag", "editUserTag"]
+						},
+						"description": "Edit user tag"
+					}
+				},
+				{
+					"name": "Update User Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tagId\": \"TAG_ID\",\n  \"updates\": {}\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/tag/updateUserTag",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "tag", "updateUserTag"]
+						},
+						"description": "Update user tag"
+					}
+				},
+				{
+					"name": "Delete User Tag",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"tagId\": \"TAG_ID\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/tag/deleteUserTag",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "tag", "deleteUserTag"]
+						},
+						"description": "Delete user tag"
+					}
+				}
+			]
+		},
+		{
+			"name": "18. Copyright Claims - User Search",
+			"item": [
+				{
+					"name": "Get Users by Media ID",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"mediaId\": \"MEDIA_ID\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/copyrightClaims/get_usersByMediaID",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "copyrightClaims", "get_usersByMediaID"]
+						},
+						"description": "Get users associated with media"
+					}
+				},
+				{
+					"name": "Search User (Copyright)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"searchText\": \"john\"\n}"
+						},
+						"url": {
+							"raw": "{{base_url}}/admin/copyrightClaims/searchUser",
+							"host": ["{{base_url}}"],
+							"path": ["admin", "copyrightClaims", "searchUser"]
+						},
+						"description": "Search users for copyright claims"
+					}
+				}
+			]
+		}
+	],
+	"variable": [
+		{
+			"key": "base_url",
+			"value": "https://www.scrpt.com",
+			"type": "string"
+		},
+		{
+			"key": "session_cookie",
+			"value": "",
+			"type": "string",
+			"description": "Session cookie value"
+		},
+		{
+			"key": "user_id",
+			"value": "",
+			"type": "string",
+			"description": "Current user ID"
+		},
+		{
+			"key": "admin_session",
+			"value": "",
+			"type": "string",
+			"description": "Admin session cookie"
+		}
+	]
+}
+

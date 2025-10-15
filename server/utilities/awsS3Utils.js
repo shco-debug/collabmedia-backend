@@ -137,8 +137,11 @@ const uploadVideoToS3 = async function (file, folder = 'scrptMedia/video/recorde
         const command = new PutObjectCommand(uploadParams);
         const result = await s3Client.send(command);
 
-        // Generate video URL
-        const videoUrl = `s3://${process.env.AWS_BUCKET_NAME || 'scrpt'}/${fileName}`;
+        // Generate full HTTPS URL
+        const bucket = process.env.AWS_BUCKET_NAME || 'scrpt';
+        const region = process.env.AWS_REGION || 'us-east-1';
+        const videoUrl = `https://${bucket}.s3.${region}.amazonaws.com/${fileName}`;
+        const s3Uri = `s3://${bucket}/${fileName}`;
 
         // Clean up local file only if it exists (not for buffer uploads)
         if (file.path && fs.existsSync(file.path)) {
@@ -149,11 +152,12 @@ const uploadVideoToS3 = async function (file, folder = 'scrptMedia/video/recorde
             success: true,
             fileName: fileName,
             videoUrl: videoUrl,
+            s3Uri: s3Uri,
             fileSize: file.size || fileContent.length,
             contentType: file.mimetype,
             originalName: file.originalname,
-            bucket: process.env.AWS_BUCKET_NAME || 'scrpt',
-            region: process.env.AWS_REGION || 'us-east-1',
+            bucket: bucket,
+            region: region,
             s3Result: result
         };
 
@@ -227,8 +231,11 @@ const uploadToS3 = async function (file, folder = 'scrptMedia/img/100', metadata
         const command = new PutObjectCommand(uploadParams);
         const result = await s3Client.send(command);
 
-        // Generate file URL
-        const fileUrl = `s3://${process.env.AWS_BUCKET_NAME || 'scrpt'}/${fileName}`;
+        // Generate full HTTPS URL
+        const bucket = process.env.AWS_BUCKET_NAME || 'scrpt';
+        const region = process.env.AWS_REGION || 'us-east-1';
+        const fileUrl = `https://${bucket}.s3.${region}.amazonaws.com/${fileName}`;
+        const s3Uri = `s3://${bucket}/${fileName}`;
 
         // Clean up local file only if it exists (not for buffer uploads)
         if (file.path && fs.existsSync(file.path)) {
@@ -239,11 +246,12 @@ const uploadToS3 = async function (file, folder = 'scrptMedia/img/100', metadata
             success: true,
             fileName: fileName,
             fileUrl: fileUrl,
+            s3Uri: s3Uri,
             fileSize: file.size || fileContent.length,
             contentType: file.mimetype,
             originalName: file.originalname,
-            bucket: process.env.AWS_BUCKET_NAME || 'scrpt',
-            region: process.env.AWS_REGION || 'us-east-1',
+            bucket: bucket,
+            region: region,
             s3Result: result
         };
 
@@ -312,10 +320,14 @@ const uploadImageToMultipleSizes = async function (file, baseName, sizes = ['100
             const command = new PutObjectCommand(uploadParams);
             const result = await s3Client.send(command);
             
+            const bucket = process.env.AWS_BUCKET_NAME || 'scrpt';
+            const region = process.env.AWS_REGION || 'us-east-1';
+            
             results.push({
                 size: size,
                 fileName: fileName,
-                fileUrl: `s3://${process.env.AWS_BUCKET_NAME || 'scrpt'}/${fileName}`,
+                fileUrl: `https://${bucket}.s3.${region}.amazonaws.com/${fileName}`,
+                s3Uri: `s3://${bucket}/${fileName}`,
                 success: true
             });
         }

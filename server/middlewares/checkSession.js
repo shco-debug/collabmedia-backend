@@ -12,7 +12,6 @@ module.exports = function(req, res, next){
 	//var frontendApiPrefix = '/api';
 	//console.log('Something is happening.');
 	reqUrl = req.baseUrl + req.path;
-	console.log('🔍 checkSession middleware:', reqUrl);
 
 	/*
 	if(reqUrl.substring(0,1) == '/'){		//this will prevent layout htmls....
@@ -227,6 +226,32 @@ module.exports = function(req, res, next){
 		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}
+	else if(reqUrl.substring(0,16) == '/userManagement'){
+		var frontendApiPrefix = '/userManagement';
+		var unprotectedRoutes = [
+			// No unprotected routes - all userManagement endpoints require authentication
+		];
+		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
+	}
+	else if(reqUrl.substring(0,4) == '/fsg' ||
+			reqUrl.substring(0,8) == '/domains' ||
+			reqUrl.substring(0,12) == '/collections' ||
+			reqUrl.substring(0,10) == '/groupTags' ||
+			reqUrl.substring(0,13) == '/metaMetaTags' ||
+			reqUrl.substring(0,10) == '/gtbinding' ||
+			reqUrl.substring(0,5) == '/tags' ||
+			reqUrl.substring(0,16) == '/massmediaupload' ||
+			reqUrl.substring(0,8) == '/sources' ||
+			reqUrl.substring(0,13) == '/contribution' ||
+			reqUrl.substring(0,9) == '/metaTags' ||
+			reqUrl.substring(0,14) == '/emailTemplate' ||
+			reqUrl.substring(0,16) == '/copyrightClaims' ||
+			reqUrl.substring(0,12) == '/postManager' ||
+			reqUrl.substring(0,16) == '/unsplashgrapper'){
+		var frontendApiPrefix = reqUrl.split('/').slice(0, 2).join('/');
+		var unprotectedRoutes = [];
+		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
+	}
 	else if(reqUrl.substring(0,17) == '/assets/Media/img'){
 		var arrLength = 0;
 		arrLength = reqUrl.substring(0).split('/').length;
@@ -241,7 +266,6 @@ module.exports = function(req, res, next){
 
 	}
 	else{
-		//console.log("in else..");
 		next();
 	}
 

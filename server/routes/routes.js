@@ -357,6 +357,10 @@ module.exports = function(router){
 		media.updatePostPrivacy(req,res)
 	})
 	
+	router.post('/media/updatePost',function(req,res){
+		media.updatePost(req,res)
+	})
+
 	router.post('/media/addTagsToUploadedMedia',function(req,res){
 		media.addTagsToUploadedMedia(req,res)	
 	})

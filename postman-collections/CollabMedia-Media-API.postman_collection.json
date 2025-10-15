@@ -78,7 +78,7 @@
 					"response": []
 				},
 				{
-					"name": "View All Media",
+					"name": "View All Media (Basic)",
 					"request": {
 						"method": "POST",
 						"header": [
@@ -106,7 +106,74 @@
 								"view"
 							]
 						},
-						"description": "View all media with optional filtering by title, group tags, and collections. Supports pagination with offset and limit parameters."
+						"description": "View all media with optional filtering by title, group tags, and collections. Supports pagination with offset and limit parameters. Returns media with Status=1 only."
+					},
+					"response": []
+				},
+				{
+					"name": "View All Media (All Status)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"offset\": 0,\n  \"limit\": 100,\n  \"keywordsSearch\": [],\n  \"addAnotherTag\": [],\n  \"excludeWord\": [],\n  \"mmt\": \"\",\n  \"mt\": \"\",\n  \"gt\": \"\",\n  \"collection\": \"\",\n  \"domain\": \"\",\n  \"source\": \"\",\n  \"status\": \"\",\n  \"mediaType\": \"\",\n  \"whereAdded\": \"\",\n  \"howAdded\": \"\",\n  \"tagtype\": \"\",\n  \"Media\": \"\",\n  \"locator\": \"\",\n  \"dtStart\": \"\",\n  \"dtEnd\": \"\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/massmediaupload/view/all",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"massmediaupload",
+								"view",
+								"all"
+							]
+						},
+						"description": "View all media with comprehensive filtering options. Uses 'media' collection. Returns media with all status types (not deleted or status 2/3)."
+					},
+					"response": []
+				},
+						{
+					"name": "Search Media by Locator",
+					"request": {
+								"method": "POST",
+								"header": [
+									{
+										"key": "Content-Type",
+										"value": "application/json"
+									}
+								],
+								"body": {
+									"mode": "raw",
+							"raw": "{\n  \"Media\": \"uploadImageTool\",\n  \"locator\": \"record\",\n  \"domain\": \"\",\n  \"status\": \"\",\n  \"gt\": \"\",\n  \"collection\": \"\",\n  \"mmt\": \"\",\n  \"mt\": \"\",\n  \"whereAdded\": \"\",\n  \"tagtype\": \"\",\n  \"howAdded\": \"\",\n  \"mediaType\": \"\",\n  \"source\": \"\",\n  \"keywordsSearch\": [],\n  \"addAnotherTag\": [],\n  \"excludeWord\": [],\n  \"dtStart\": \"\",\n  \"dtEnd\": \"\"\n}",
+									"options": {
+										"raw": {
+											"language": "json"
+										}
+									}
+								},
+								"url": {
+							"raw": "{{base_url}}/massmediaupload/searchByLocatorList",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"massmediaupload",
+								"searchByLocatorList"
+							]
+						},
+						"description": "Search media by locator with regex matching. Returns only _id, AutoId, and Locator fields. Limit: 1000 results."
 					},
 					"response": []
 				},
@@ -278,8 +345,8 @@
 			]
 		},
 		{
-			"name": "Single Post CRUD Operations",
-			"description": "Complete CRUD operations for individual posts within boards/pages. Posts are embedded in the Medias array of boards/pages.",
+			"name": "Board Post CRUD (Legacy)",
+			"description": "Complete CRUD operations for posts within boards. Posts are embedded in the board's Medias array. NOTE: The updatePost route was missing and has now been added.",
 			"item": [
 				{
 					"name": "Create Post (Add Media to Board)",
@@ -343,7 +410,39 @@
 								"updatePost"
 							]
 						},
-						"description": "Update an existing post within a board. Updates all post fields including title, prompt, content, privacy settings, and themes. Requires user session. Returns updated post data."
+						"description": "✅ NOW AVAILABLE - Update an existing post within a board. Updates all post fields including title, prompt, content, privacy settings, and themes. Requires user session. Returns updated post data. WARNING: Uses deprecated Mongoose methods and session-only auth (no JWT support)."
+					},
+					"response": []
+				},
+				{
+					"name": "Read Post (Get Board Details)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"id\": \"{{board_id}}\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/board/",
+							"host": [
+								"{{base_url}}"
+							],
+							"path": [
+								"board"
+							]
+						},
+						"description": "Get all posts from a board. Returns the complete board data including all posts in the Medias array. Requires user session. Returns board with populated post data."
 					},
 					"response": []
 				},
@@ -445,445 +544,12 @@
 						"description": "Update the link URL type for a post. Possible values: AdPost, BroadcastPost, Post. Updates both regular and dashed edit pages. Requires user session. Returns success confirmation."
 					},
 					"response": []
-				},
-				{
-					"name": "Update Post Editor Pick Status",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"postId\": \"{{post_id}}\",\n  \"isEditorPick\": true\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/media/editorPickUpdatePost",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"media",
-								"editorPickUpdatePost"
-							]
-						},
-						"description": "Update the editor pick status for a post. Can mark posts as editor picks or remove the status. Requires admin/editor session. Returns success confirmation."
-					},
-					"response": []
-				},
-				{
-					"name": "Get Post Details",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id\": \"{{board_id}}\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/board/",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"board"
-							]
-						},
-						"description": "Get all posts from a board. Returns the complete board data including all posts in the Medias array. Requires user session. Returns board with populated post data."
-					},
-					"response": []
-				},
-				{
-					"name": "Add Comment to Post",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"postId\": \"{{post_id}}\",\n  \"comment\": \"Sample comment text\",\n  \"commentType\": \"text\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/board/addComment",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"board",
-								"addComment"
-							]
-						},
-						"description": "Add a comment to a specific post. Supports different comment types. Requires user session. Returns success confirmation and updated post data."
-					},
-					"response": []
-				},
-				{
-					"name": "Delete Comment",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"commentId\": \"{{comment_id}}\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/board/cmntDelete",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"board",
-								"cmntDelete"
-							]
-						},
-						"description": "Delete a comment from a post. Requires user session and appropriate permissions. Returns success confirmation."
-					},
-					"response": []
 				}
 			]
 		},
 		{
-			"name": "Single Post CRUD Operations",
-			"description": "Complete CRUD operations for individual posts within boards/pages. Posts are embedded in the Medias array of boards/pages.",
-			"item": [
-				{
-					"name": "Create Post (Add Media to Board)",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"media\": \"{{media_id}}\",\n  \"url\": \"https://example.com/image.jpg\",\n  \"title\": \"Sample Post Title\",\n  \"prompt\": \"Sample post prompt or description\",\n  \"locator\": \"sample_locator_123\",\n  \"themeId\": \"{{theme_id}}\",\n  \"theme\": \"Sample Theme Title\",\n  \"data\": {\n    \"value\": {\n      \"MediaType\": \"Image\",\n      \"ContentType\": \"image/jpeg\",\n      \"Content\": \"Sample content for the post\"\n    }\n  },\n  \"owner\": \"{{user_id}}\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/board/addMedia",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"board",
-								"addMedia"
-							]
-						},
-						"description": "Create a new post by adding media to a board. The post will be embedded in the board's Medias array. Requires user session. Returns success confirmation and updated board data."
-					},
-					"response": []
-				},
-				{
-					"name": "Update Post",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"PostId\": \"{{post_id}}\",\n  \"media\": \"{{media_id}}\",\n  \"url\": \"https://example.com/updated-image.jpg\",\n  \"title\": \"Updated Post Title\",\n  \"prompt\": \"Updated post prompt\",\n  \"locator\": \"updated_locator_456\",\n  \"themeId\": \"{{theme_id}}\",\n  \"theme\": \"Updated Theme Title\",\n  \"data\": {\n    \"value\": {\n      \"MediaType\": \"Image\",\n      \"ContentType\": \"image/jpeg\",\n      \"Content\": \"Updated content for the post\"\n    }\n  },\n  \"Content\": \"Updated content for the post\",\n  \"owner\": \"{{user_id}}\",\n  \"thumbnail\": \"https://example.com/thumb.jpg\",\n  \"Statement\": \"Updated post statement\",\n  \"IsOnlyForOwner\": false,\n  \"PostPrivacySetting\": \"PublicWithoutName\",\n  \"IsUnsplashImage\": false,\n  \"Themes\": [],\n  \"TaggedUsers\": [],\n  \"Label\": \"{{label_id}}\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/board/updatePost",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"board",
-								"updatePost"
-							]
-						},
-						"description": "Update an existing post within a board. Updates all post fields including title, prompt, content, privacy settings, and themes. Requires user session. Returns updated post data."
-					},
-					"response": []
-				},
-				{
-					"name": "Delete Post",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"post_id\": \"{{post_id}}\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/board/deleteMedia",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"board",
-								"deleteMedia"
-							]
-						},
-						"description": "Delete a specific post from a board. Removes the post from the board's Medias array and cleans up associated PageStream data. Requires user session. Returns success confirmation."
-					},
-					"response": []
-				},
-				{
-					"name": "Update Post Label",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"post_id\": \"{{post_id}}\",\n  \"label_id\": \"{{label_id}}\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/journal/updatePostLabelId",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"journal",
-								"updatePostLabelId"
-							]
-						},
-						"description": "Update the label for a specific post. Can set or remove labels. Updates both regular and dashed edit pages. Requires user session. Returns success confirmation."
-					},
-					"response": []
-				},
-				{
-					"name": "Update Post Link URL",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"PostId\": \"{{post_id}}\",\n  \"PostLinkUrl\": \"AdPost\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/journal/updatePostLinkUrl",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"journal",
-								"updatePostLinkUrl"
-							]
-						},
-						"description": "Update the link URL type for a post. Possible values: AdPost, BroadcastPost, Post. Updates both regular and dashed edit pages. Requires user session. Returns success confirmation."
-					},
-					"response": []
-				},
-				{
-					"name": "Update Post Editor Pick Status",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"postId\": \"{{post_id}}\",\n  \"isEditorPick\": true\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/media/editorPickUpdatePost",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"media",
-								"editorPickUpdatePost"
-							]
-						},
-						"description": "Update the editor pick status for a post. Can mark posts as editor picks or remove the status. Requires admin/editor session. Returns success confirmation."
-					},
-					"response": []
-				},
-				{
-					"name": "Get Post Details",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id\": \"{{board_id}}\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/board/",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"board"
-							]
-						},
-						"description": "Get all posts from a board. Returns the complete board data including all posts in the Medias array. Requires user session. Returns board with populated post data."
-					},
-					"response": []
-				},
-				{
-					"name": "Add Comment to Post",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"postId\": \"{{post_id}}\",\n  \"comment\": \"Sample comment text\",\n  \"commentType\": \"text\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/board/addComment",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"board",
-								"addComment"
-							]
-						},
-						"description": "Add a comment to a specific post. Supports different comment types. Requires user session. Returns success confirmation and updated post data."
-					},
-					"response": []
-				},
-				{
-					"name": "Delete Comment",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"id\": \"{{board_id}}\",\n  \"postId\": \"{{post_id}}\",\n  \"commentId\": \"{{comment_id}}\"\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/board/cmntDelete",
-							"host": [
-								"{{base_url}}"
-							],
-							"path": [
-								"board",
-								"cmntDelete"
-							]
-						},
-						"description": "Delete a comment from a post. Requires user session and appropriate permissions. Returns success confirmation."
-					},
-					"response": []
-				}
-			]
-		},
-		{
-			"name": "New Media Endpoints",
-			"description": "Newly added media endpoints for single post creation, user posts management, and privacy updates",
+			"name": "Modern Post API (Recommended)",
+			"description": "⭐ RECOMMENDED - Modern post endpoints with async/await, JWT support, optimal partial updates, and better error handling. Use these instead of the legacy board endpoints.",
 			"item": [
 				{
 					"name": "Create Single Post",
@@ -895,13 +561,13 @@
 								"value": "application/json"
 							},
 							{
-								"key": "Cookie",
-								"value": "connect.sid={{user_session_id}}"
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"title\": \"My Amazing Post\",\n  \"content\": \"This is the content of my post\",\n  \"prompt\": \"A beautiful sunset over the mountains\",\n  \"postStatement\": \"This represents my thoughts on nature\",\n  \"postType\": \"Image\",\n  \"mediaArray\": [\n    {\n      \"url\": \"https://example.com/image1.jpg\",\n      \"type\": \"image\",\n      \"title\": \"Sunset Image\"\n    }\n  ],\n  \"keywords\": [\n    {\n      \"id\": \"673e606638a4fd1fb5eba090\",\n      \"title\": \"nature\"\n    },\n    {\n      \"id\": \"673e606638a4fd1fb5eba091\",\n      \"title\": \"sunset\"\n    }\n  ],\n  \"pageId\": \"673e606638a4fd1fb5eba092\",\n  \"blendSettings\": {\n    \"image1\": {\n      \"url\": \"https://example.com/image1.jpg\",\n      \"lightness\": 0.6\n    },\n    \"image2\": {\n      \"url\": \"https://example.com/image2.jpg\",\n      \"lightness\": 0.4\n    },\n    \"blendMode\": \"screen\"\n  }\n}",
+							"raw": "{\n  \"streamId\": \"{{stream_id}}\",\n  \"title\": \"My Amazing Post\",\n  \"content\": \"This is the content of my post\",\n  \"postType\": \"image\",\n  \"postStatement\": \"This represents my thoughts\",\n  \"mediaArray\": [\n    {\n      \"url\": \"https://example.com/image1.jpg\",\n      \"type\": \"image\"\n    }\n  ],\n  \"keywords\": [\"nature\", \"sunset\"],\n  \"pageId\": \"{{page_id}}\",\n  \"blendSettings\": {\n    \"blendImage1\": \"https://example.com/image1.jpg\",\n    \"blendImage2\": \"https://example.com/image2.jpg\",\n    \"blendRatio\": 0.5\n  },\n  \"metadata\": {}\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -913,40 +579,41 @@
 							"host": ["{{base_url}}"],
 							"path": ["media", "createSinglePost"]
 						},
-						"description": "Create a single post with media. Can be added to a page (if pageId provided) or created as independent media. Supports image blending and group tag extraction."
+						"description": "✅ MODERN - Create a single post with media. Supports image blending, S3 uploads with multiple sizes, JWT auth, and comprehensive error handling. Can be added to a page or created independently."
 					},
-					"response": [
-						{
-							"name": "Successful Creation",
-							"originalRequest": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"title\": \"My Amazing Post\",\n  \"content\": \"This is the content of my post\",\n  \"mediaArray\": [{\"url\": \"https://example.com/image1.jpg\"}]\n}",
-									"options": {
-										"raw": {
-											"language": "json"
-										}
-									}
-								},
-								"url": {
-									"raw": "{{base_url}}/media/createSinglePost",
-									"host": ["{{base_url}}"],
-									"path": ["media", "createSinglePost"]
-								}
+					"response": []
+				},
+				{
+					"name": "Update Post (Optimized)",
+					"request": {
+						"method": "POST",
+						"header": [
+							{
+								"key": "Content-Type",
+								"value": "application/json"
 							},
-							"status": "Created",
-							"code": 201,
-							"_postman_previewlanguage": "json",
-							"body": "{\n  \"code\": 201,\n  \"msg\": \"Post created successfully\",\n  \"data\": {\n    \"mediaId\": \"673e606638a4fd1fb5eba090\",\n    \"pageId\": \"673e606638a4fd1fb5eba092\",\n    \"blendedImageUrl\": \"https://s3.amazonaws.com/bucket/blended_image.jpg\",\n    \"location\": [\n      {\n        \"url\": \"https://example.com/image1.jpg\",\n        \"type\": \"source\",\n        \"index\": 0\n      },\n      {\n        \"url\": \"https://example.com/image2.jpg\",\n        \"type\": \"source\",\n        \"index\": 1\n      },\n      {\n        \"url\": \"https://s3.amazonaws.com/bucket/blended_image.jpg\",\n        \"type\": \"blended\",\n        \"index\": 2\n      }\n    ]\n  }\n}"
-						}
-					]
+							{
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
+							}
+						],
+						"body": {
+							"mode": "raw",
+							"raw": "{\n  \"PostId\": \"{{post_id}}\",\n  \"id\": \"{{board_id}}\",\n  \"media\": \"{{media_id}}\",\n  \"MediaID\": \"{{media_id}}\",\n  \"url\": null,\n  \"title\": \"Updated Title\",\n  \"prompt\": \"Updated prompt\",\n  \"locator\": \"032720254349_73827\",\n  \"data\": {\n    \"value\": {\n      \"MediaType\": \"Notes\",\n      \"ContentType\": \"Notes\"\n    }\n  },\n  \"Content\": \"<div>Your updated HTML content here...</div>\",\n  \"owner\": \"{{user_id}}\",\n  \"thumbnail\": \"https://example.com/thumb.jpg\",\n  \"Statement\": \"Updated post statement\",\n  \"PostPrivacySetting\": \"PublicWithoutName\",\n  \"IsUnsplashImage\": false,\n  \"PostType\": \"Post\",\n  \"IsOnetimeStream\": false,\n  \"Themes\": [],\n  \"TaggedUsers\": [],\n  \"Label\": \"{{label_id}}\",\n  \"Location\": [\n    {\n      \"Size\": \"2.86 MB\",\n      \"URL\": \"https://scrpt.s3.amazonaws.com/scrptMedia/uploadedMedia/aspectfit/image.png\"\n    }\n  ],\n  \"BlendSettings\": {\n    \"image1Url\": \"https://example.com/img1.jpg\",\n    \"image2Url\": \"https://example.com/img2.jpg\",\n    \"blendRatio\": 0.5,\n    \"blendMode\": \"screen\"\n  },\n  \"Action\": \"Post\"\n}",
+							"options": {
+								"raw": {
+									"language": "json"
+								}
+							}
+						},
+						"url": {
+							"raw": "{{base_url}}/media/updatePost",
+							"host": ["{{base_url}}"],
+							"path": ["media", "updatePost"]
+						},
+						"description": "✅ NEW & OPTIMAL - Update an existing post with intelligent partial updates. Only updates fields that are provided, leaving others unchanged. Supports JWT & session auth, updates both regular and IsDasheditpage versions, and maintains mediaActionLogs. This is the modern replacement for /board/updatePost."
+					},
+					"response": []
 				},
 				{
 					"name": "Get User Posts",
@@ -958,13 +625,13 @@
 								"value": "application/json"
 							},
 							{
-								"key": "Cookie",
-								"value": "connect.sid={{user_session_id}}"
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"page\": 1,\n  \"limit\": 10,\n  \"sortBy\": \"createdAt\",\n  \"sortOrder\": \"desc\",\n  \"filters\": {\n    \"postPrivacySetting\": \"OnlyForOwner\",\n    \"mediaType\": \"Image\",\n    \"dateRange\": {\n      \"start\": \"2024-01-01\",\n      \"end\": \"2024-12-31\"\n    }\n  },\n  \"searchTerm\": \"sunset\"\n}",
+							"raw": "{\n  \"userId\": \"{{user_id}}\",\n  \"offset\": 0,\n  \"limit\": 20\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -976,40 +643,9 @@
 							"host": ["{{base_url}}"],
 							"path": ["media", "getUserPosts"]
 						},
-						"description": "Get posts created by the logged-in user with advanced filtering, sorting, and pagination. Supports privacy filtering and search."
+						"description": "✅ MODERN - Get posts created by a user with pagination and filtering."
 					},
-					"response": [
-						{
-							"name": "Successful Response",
-							"originalRequest": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"page\": 1,\n  \"limit\": 10\n}",
-									"options": {
-										"raw": {
-											"language": "json"
-										}
-									}
-								},
-								"url": {
-									"raw": "{{base_url}}/media/getUserPosts",
-									"host": ["{{base_url}}"],
-									"path": ["media", "getUserPosts"]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"body": "{\n  \"code\": 200,\n  \"msg\": \"Posts retrieved successfully\",\n  \"data\": {\n    \"posts\": [\n      {\n        \"_id\": \"673e606638a4fd1fb5eba090\",\n        \"title\": \"My Amazing Post\",\n        \"content\": \"This is the content of my post\",\n        \"prompt\": \"A beautiful sunset over the mountains\",\n        \"postStatement\": \"This represents my thoughts on nature\",\n        \"postType\": \"Image\",\n        \"postPrivacySetting\": \"OnlyForOwner\",\n        \"location\": [\n          {\n            \"url\": \"https://example.com/image1.jpg\",\n            \"type\": \"source\",\n            \"index\": 0\n          }\n        ],\n        \"groupTags\": [\"nature\", \"sunset\"],\n        \"lightness\": 0.5,\n        \"createdAt\": \"2024-01-15T10:30:00.000Z\",\n        \"updatedAt\": \"2024-01-15T10:30:00.000Z\"\n      }\n    ],\n    \"pagination\": {\n      \"currentPage\": 1,\n      \"totalPages\": 5,\n      \"totalPosts\": 50,\n      \"hasNextPage\": true,\n      \"hasPrevPage\": false\n    }\n  }\n}"
-						}
-					]
+					"response": []
 				},
 				{
 					"name": "Update Post Privacy",
@@ -1021,13 +657,13 @@
 								"value": "application/json"
 							},
 							{
-								"key": "Cookie",
-								"value": "connect.sid={{user_session_id}}"
+								"key": "Authorization",
+								"value": "Bearer {{token}}"
 							}
 						],
 						"body": {
 							"mode": "raw",
-							"raw": "{\n  \"postId\": \"673e606638a4fd1fb5eba090\",\n  \"privacySetting\": \"PublicWithName\"\n}",
+							"raw": "{\n  \"postId\": \"{{post_id}}\",\n  \"privacySetting\": \"PublicWithName\"\n}",
 							"options": {
 								"raw": {
 									"language": "json"
@@ -1039,234 +675,7 @@
 							"host": ["{{base_url}}"],
 							"path": ["media", "updatePostPrivacy"]
 						},
-						"description": "Update the privacy setting of a user's post. Valid privacy settings: OnlyForOwner, PublicWithName, PublicWithoutName."
-					},
-					"response": [
-						{
-							"name": "Successful Update",
-							"originalRequest": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"postId\": \"673e606638a4fd1fb5eba090\",\n  \"privacySetting\": \"PublicWithName\"\n}",
-									"options": {
-										"raw": {
-											"language": "json"
-										}
-									}
-								},
-								"url": {
-									"raw": "{{base_url}}/media/updatePostPrivacy",
-									"host": ["{{base_url}}"],
-									"path": ["media", "updatePostPrivacy"]
-								}
-							},
-							"status": "OK",
-							"code": 200,
-							"_postman_previewlanguage": "json",
-							"body": "{\n  \"code\": 200,\n  \"msg\": \"Post privacy updated successfully\",\n  \"data\": {\n    \"postId\": \"673e606638a4fd1fb5eba090\",\n    \"oldPrivacySetting\": \"OnlyForOwner\",\n    \"newPrivacySetting\": \"PublicWithName\",\n    \"updatedAt\": \"2024-01-15T10:30:00.000Z\"\n  }\n}"
-						},
-						{
-							"name": "Post Not Found",
-							"originalRequest": {
-								"method": "POST",
-								"header": [
-									{
-										"key": "Content-Type",
-										"value": "application/json"
-									}
-								],
-								"body": {
-									"mode": "raw",
-									"raw": "{\n  \"postId\": \"invalid_post_id\",\n  \"privacySetting\": \"PublicWithName\"\n}",
-									"options": {
-										"raw": {
-											"language": "json"
-										}
-									}
-								},
-								"url": {
-									"raw": "{{base_url}}/media/updatePostPrivacy",
-									"host": ["{{base_url}}"],
-									"path": ["media", "updatePostPrivacy"]
-								}
-							},
-							"status": "Not Found",
-							"code": 404,
-							"_postman_previewlanguage": "json",
-							"body": "{\n  \"code\": 404,\n  \"msg\": \"Post not found or you don't have permission to update it\"\n}"
-						}
-					]
-				}
-			]
-		},
-		{
-			"name": "Advanced Post Types",
-			"description": "Advanced post types including question posts, answer posts, and different media types",
-			"item": [
-				{
-					"name": "Create Question Post",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Cookie",
-								"value": "connect.sid={{user_session_id}}"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"title\": \"What's your favorite memory?\",\n  \"content\": \"<p>What's your favorite memory with me?</p>\",\n  \"postType\": \"QuestionPost\",\n  \"postStatement\": \"What's your favorite memory with me?\",\n  \"mediaArray\": [],\n  \"keywords\": [\n    {\n      \"id\": \"{{group_tag_id_1}}\",\n      \"title\": \"memory\"\n    }\n  ],\n  \"pageId\": \"{{page_id}}\",\n  \"metadata\": {\n    \"IsPrivateQuestionPost\": false,\n    \"IsOnetimeStream\": false\n  }\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/media/createSinglePost",
-							"host": ["{{base_url}}"],
-							"path": ["media", "createSinglePost"]
-						},
-						"description": "Create a question post for others to answer"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Answer Post",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Cookie",
-								"value": "connect.sid={{user_session_id}}"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"title\": \"My favorite memory\",\n  \"content\": \"<p>My favorite memory is when we went hiking together!</p>\",\n  \"postType\": \"AnswerPost\",\n  \"postStatement\": \"My favorite memory is when we went hiking together!\",\n  \"mediaArray\": [\n    {\n      \"url\": \"https://example.com/hiking-memory.jpg\",\n      \"type\": \"image\",\n      \"title\": \"Hiking Memory\"\n    }\n  ],\n  \"keywords\": [\n    {\n      \"id\": \"{{group_tag_id_1}}\",\n      \"title\": \"hiking\"\n    }\n  ],\n  \"pageId\": \"{{page_id}}\",\n  \"metadata\": {\n    \"QuestionPostId\": \"{{question_post_id}}\",\n    \"IsOnetimeStream\": false\n  }\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/media/createSinglePost",
-							"host": ["{{base_url}}"],
-							"path": ["media", "createSinglePost"]
-						},
-						"description": "Create an answer post responding to a question"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Video Post",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Cookie",
-								"value": "connect.sid={{user_session_id}}"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"title\": \"My Video Message\",\n  \"content\": \"<p>Here's my video message for you!</p>\",\n  \"postType\": \"Post\",\n  \"postStatement\": \"Here's my video message for you!\",\n  \"mediaArray\": [\n    {\n      \"url\": \"https://example.com/video-message.mp4\",\n      \"type\": \"video\",\n      \"title\": \"Video Message\"\n    }\n  ],\n  \"keywords\": [\n    {\n      \"id\": \"{{group_tag_id_1}}\",\n      \"title\": \"video\"\n    }\n  ],\n  \"pageId\": \"{{page_id}}\",\n  \"metadata\": {\n    \"IsOnetimeStream\": true\n  }\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/media/createSinglePost",
-							"host": ["{{base_url}}"],
-							"path": ["media", "createSinglePost"]
-						},
-						"description": "Create a video post with video content"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Audio Post",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Cookie",
-								"value": "connect.sid={{user_session_id}}"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"title\": \"My Voice Message\",\n  \"content\": \"<p>Here's my voice message for you!</p>\",\n  \"postType\": \"Post\",\n  \"postStatement\": \"Here's my voice message for you!\",\n  \"mediaArray\": [\n    {\n      \"url\": \"https://example.com/voice-message.mp3\",\n      \"type\": \"audio\",\n      \"title\": \"Voice Message\"\n    }\n  ],\n  \"keywords\": [\n    {\n      \"id\": \"{{group_tag_id_1}}\",\n      \"title\": \"audio\"\n    }\n  ],\n  \"pageId\": \"{{page_id}}\",\n  \"metadata\": {\n    \"IsOnetimeStream\": true\n  }\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/media/createSinglePost",
-							"host": ["{{base_url}}"],
-							"path": ["media", "createSinglePost"]
-						},
-						"description": "Create an audio post with voice content"
-					},
-					"response": []
-				},
-				{
-					"name": "Create Link Post",
-					"request": {
-						"method": "POST",
-						"header": [
-							{
-								"key": "Content-Type",
-								"value": "application/json"
-							},
-							{
-								"key": "Cookie",
-								"value": "connect.sid={{user_session_id}}"
-							}
-						],
-						"body": {
-							"mode": "raw",
-							"raw": "{\n  \"title\": \"Check out this link!\",\n  \"content\": \"<p>Check out this amazing article I found!</p><a href='https://example.com/article' target='_blank'>Read Article</a>\",\n  \"postType\": \"Post\",\n  \"postStatement\": \"Check out this amazing article I found!\",\n  \"mediaArray\": [],\n  \"keywords\": [\n    {\n      \"id\": \"{{group_tag_id_1}}\",\n      \"title\": \"article\"\n    }\n  ],\n  \"pageId\": \"{{page_id}}\",\n  \"metadata\": {\n    \"IsOnetimeStream\": false\n  }\n}",
-							"options": {
-								"raw": {
-									"language": "json"
-								}
-							}
-						},
-						"url": {
-							"raw": "{{base_url}}/media/createSinglePost",
-							"host": ["{{base_url}}"],
-							"path": ["media", "createSinglePost"]
-						},
-						"description": "Create a post with a link to external content"
+						"description": "✅ MODERN - Update post privacy. Valid settings: PublicWithName, PublicWithoutName, OnlyForOwner, InvitedFriends"
 					},
 					"response": []
 				}
@@ -1300,43 +709,13 @@
 			"type": "string"
 		},
 		{
+			"key": "token",
+			"value": "",
+			"type": "string"
+		},
+		{
 			"key": "media_id",
 			"value": "your_media_id_here",
-			"type": "string"
-		},
-		{
-			"key": "domain_id",
-			"value": "your_domain_id_here",
-			"type": "string"
-		},
-		{
-			"key": "group_tag_id_1",
-			"value": "your_group_tag_id_1_here",
-			"type": "string"
-		},
-		{
-			"key": "group_tag_id_2",
-			"value": "your_group_tag_id_2_here",
-			"type": "string"
-		},
-		{
-			"key": "collection_id_1",
-			"value": "your_collection_id_1_here",
-			"type": "string"
-		},
-		{
-			"key": "collection_id_2",
-			"value": "your_collection_id_2_here",
-			"type": "string"
-		},
-		{
-			"key": "meta_tag_id",
-			"value": "your_meta_tag_id_here",
-			"type": "string"
-		},
-		{
-			"key": "meta_meta_tag_id",
-			"value": "your_meta_meta_tag_id_here",
 			"type": "string"
 		},
 		{
@@ -1365,23 +744,18 @@
 			"type": "string"
 		},
 		{
-			"key": "comment_id",
-			"value": "your_comment_id_here",
-			"type": "string"
-		},
-		{
 			"key": "page_id",
 			"value": "your_page_id_here",
 			"type": "string"
 		},
 		{
-			"key": "question_post_id",
-			"value": "your_question_post_id_here",
+			"key": "stream_id",
+			"value": "your_stream_id_here",
 			"type": "string"
 		},
 		{
-			"key": "user_session_id",
-			"value": "your_user_session_id_here",
+			"key": "group_tag_id_1",
+			"value": "your_group_tag_id_here",
 			"type": "string"
 		}
 	]

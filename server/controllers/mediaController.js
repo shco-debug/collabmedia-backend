@@ -2990,7 +2990,7 @@ const createSinglePost = async (req, res) => {
     // Handle blend settings if provided
     let blendImage1Url = null;
     let blendImage2Url = null;
-    
+
     if (
       blendSettings &&
       blendSettings.blendImage1 &&
@@ -2999,10 +2999,18 @@ const createSinglePost = async (req, res) => {
       console.log("Processing blend images...");
 
       // Check if images are URLs, base64, or files
-      const isImage1Url = typeof blendSettings.blendImage1 === 'string' && blendSettings.blendImage1.startsWith('http');
-      const isImage1Base64 = typeof blendSettings.blendImage1 === 'string' && blendSettings.blendImage1.startsWith('data:');
-      const isImage2Url = typeof blendSettings.blendImage2 === 'string' && blendSettings.blendImage2.startsWith('http');
-      const isImage2Base64 = typeof blendSettings.blendImage2 === 'string' && blendSettings.blendImage2.startsWith('data:');
+      const isImage1Url =
+        typeof blendSettings.blendImage1 === "string" &&
+        blendSettings.blendImage1.startsWith("http");
+      const isImage1Base64 =
+        typeof blendSettings.blendImage1 === "string" &&
+        blendSettings.blendImage1.startsWith("data:");
+      const isImage2Url =
+        typeof blendSettings.blendImage2 === "string" &&
+        blendSettings.blendImage2.startsWith("http");
+      const isImage2Base64 =
+        typeof blendSettings.blendImage2 === "string" &&
+        blendSettings.blendImage2.startsWith("data:");
 
       if (isImage1Url && isImage2Url) {
         // Scenario 1: Both are URLs - save directly
@@ -3011,49 +3019,73 @@ const createSinglePost = async (req, res) => {
         blendImage2Url = blendSettings.blendImage2;
       } else {
         // Scenario 2: Images are base64 or files - upload to S3 with multiple sizes
-        console.log("📤 Images are base64/files - uploading to S3 with multiple sizes");
-        
+        console.log(
+          "📤 Images are base64/files - uploading to S3 with multiple sizes"
+        );
+
         const awsS3Utils = require("../utilities/awsS3Utils.js");
-        
+
         try {
           // Helper function to convert base64 to buffer
           const base64ToBuffer = (base64String) => {
-            if (base64String.startsWith('data:')) {
-              const base64Data = base64String.split(',')[1];
-              return Buffer.from(base64Data, 'base64');
+            if (base64String.startsWith("data:")) {
+              const base64Data = base64String.split(",")[1];
+              return Buffer.from(base64Data, "base64");
             }
             return base64String; // If it's already a buffer
           };
-          
+
           // Upload first image
           if (!isImage1Url) {
             const timestamp1 = Date.now();
             const randomId1 = Math.round(Math.random() * 1e9);
             const fileName1 = `blend1_${timestamp1}_${randomId1}`;
-            const imageBuffer1 = isImage1Base64 ? base64ToBuffer(blendSettings.blendImage1) : blendSettings.blendImage1;
-            
-            console.log(`📤 Uploading first image: ${isImage1Base64 ? 'base64' : 'buffer'} (size: ${imageBuffer1.length} bytes)`);
-            
+            const imageBuffer1 = isImage1Base64
+              ? base64ToBuffer(blendSettings.blendImage1)
+              : blendSettings.blendImage1;
+
+            console.log(
+              `📤 Uploading first image: ${
+                isImage1Base64 ? "base64" : "buffer"
+              } (size: ${imageBuffer1.length} bytes)`
+            );
+
             const uploadResult1 = await awsS3Utils.resizeAndUploadImageToS3(
               imageBuffer1,
               `${fileName1}.webp`,
               [
-                { width: 100, height: 100, folder: '100', fit: 'cover' },
-                { width: 300, height: 300, folder: '300', fit: 'cover' },
-                { width: 600, height: 600, folder: '600', fit: 'cover' },
-                { width: 1000, height: 1000, folder: 'aspectfit_small', fit: 'inside' },
-                { width: null, height: null, folder: 'aspectfit', fit: 'inside' } // Original resolution
+                { width: 100, height: 100, folder: "100", fit: "cover" },
+                { width: 300, height: 300, folder: "300", fit: "cover" },
+                { width: 600, height: 600, folder: "600", fit: "cover" },
+                {
+                  width: 1000,
+                  height: 1000,
+                  folder: "aspectfit_small",
+                  fit: "inside",
+                },
+                {
+                  width: null,
+                  height: null,
+                  folder: "aspectfit",
+                  fit: "inside",
+                }, // Original resolution
               ],
-              { customFolder: 'userUploads' }
+              { customFolder: "userUploads" }
             );
-            
+
             if (uploadResult1.success) {
               // Get the original resolution URL from the results array
-              const aspectfitResult = uploadResult1.results.find(r => r.size === 'aspectfit');
-              blendImage1Url = aspectfitResult ? aspectfitResult.httpUrl : uploadResult1.results[0]?.httpUrl;
+              const aspectfitResult = uploadResult1.results.find(
+                (r) => r.size === "aspectfit"
+              );
+              blendImage1Url = aspectfitResult
+                ? aspectfitResult.httpUrl
+                : uploadResult1.results[0]?.httpUrl;
               console.log("✅ First image uploaded:", blendImage1Url);
             } else {
-              throw new Error(`Failed to upload first image: ${uploadResult1.error}`);
+              throw new Error(
+                `Failed to upload first image: ${uploadResult1.error}`
+              );
             }
           } else {
             blendImage1Url = blendSettings.blendImage1;
@@ -3064,35 +3096,56 @@ const createSinglePost = async (req, res) => {
             const timestamp2 = Date.now() + 1;
             const randomId2 = Math.round(Math.random() * 1e9);
             const fileName2 = `blend2_${timestamp2}_${randomId2}`;
-            const imageBuffer2 = isImage2Base64 ? base64ToBuffer(blendSettings.blendImage2) : blendSettings.blendImage2;
-            
-            console.log(`📤 Uploading second image: ${isImage2Base64 ? 'base64' : 'buffer'} (size: ${imageBuffer2.length} bytes)`);
-            
+            const imageBuffer2 = isImage2Base64
+              ? base64ToBuffer(blendSettings.blendImage2)
+              : blendSettings.blendImage2;
+
+            console.log(
+              `📤 Uploading second image: ${
+                isImage2Base64 ? "base64" : "buffer"
+              } (size: ${imageBuffer2.length} bytes)`
+            );
+
             const uploadResult2 = await awsS3Utils.resizeAndUploadImageToS3(
               imageBuffer2,
               `${fileName2}.webp`,
               [
-                { width: 100, height: 100, folder: '100', fit: 'cover' },
-                { width: 300, height: 300, folder: '300', fit: 'cover' },
-                { width: 600, height: 600, folder: '600', fit: 'cover' },
-                { width: 1000, height: 1000, folder: 'aspectfit_small', fit: 'inside' },
-                { width: null, height: null, folder: 'aspectfit', fit: 'inside' } // Original resolution
+                { width: 100, height: 100, folder: "100", fit: "cover" },
+                { width: 300, height: 300, folder: "300", fit: "cover" },
+                { width: 600, height: 600, folder: "600", fit: "cover" },
+                {
+                  width: 1000,
+                  height: 1000,
+                  folder: "aspectfit_small",
+                  fit: "inside",
+                },
+                {
+                  width: null,
+                  height: null,
+                  folder: "aspectfit",
+                  fit: "inside",
+                }, // Original resolution
               ],
-              { customFolder: 'userUploads' }
+              { customFolder: "userUploads" }
             );
-            
+
             if (uploadResult2.success) {
               // Get the original resolution URL from the results array
-              const aspectfitResult = uploadResult2.results.find(r => r.size === 'aspectfit');
-              blendImage2Url = aspectfitResult ? aspectfitResult.httpUrl : uploadResult2.results[0]?.httpUrl;
+              const aspectfitResult = uploadResult2.results.find(
+                (r) => r.size === "aspectfit"
+              );
+              blendImage2Url = aspectfitResult
+                ? aspectfitResult.httpUrl
+                : uploadResult2.results[0]?.httpUrl;
               console.log("✅ Second image uploaded:", blendImage2Url);
             } else {
-              throw new Error(`Failed to upload second image: ${uploadResult2.error}`);
+              throw new Error(
+                `Failed to upload second image: ${uploadResult2.error}`
+              );
             }
           } else {
             blendImage2Url = blendSettings.blendImage2;
           }
-
         } catch (uploadError) {
           console.error("❌ Error uploading blend images:", uploadError);
           return res.status(500).json({
@@ -3125,13 +3178,15 @@ const createSinglePost = async (req, res) => {
     const locator = `post_${Date.now()}_${incNum}`;
 
     // Extract keywords for group tags and transform to embedded document format
-    const groupTagIds = keywords.map((k) => ({
-      GroupTagID: k.id,
-      GroupTagTitle: k.title,
-      MetaMetaTagID: "",
-      MetaTagID: "",
-      _id: new ObjectId()
-    })).filter((gt) => gt.GroupTagID);
+    const groupTagIds = keywords
+      .map((k) => ({
+        GroupTagID: k.id,
+        GroupTagTitle: k.title,
+        MetaMetaTagID: "",
+        MetaTagID: "",
+        _id: new ObjectId(),
+      }))
+      .filter((gt) => gt.GroupTagID);
     const promptText = keywords.map((k) => k.title).join(",");
 
     // Prepare Location array with all images (original + blended)
@@ -3176,12 +3231,12 @@ const createSinglePost = async (req, res) => {
       UploadedBy: "user",
       UploadedOn: new Date(),
       UploaderID: userId,
-      Source: (blendImage1Url || blendImage2Url) ? "blending" : "user_upload",
+      Source: blendImage1Url || blendImage2Url ? "blending" : "user_upload",
       GroupTags: groupTagIds,
       Collection: [],
       Status: 1,
       AddedWhere: "directToPf",
-      AddedHow: (blendImage1Url || blendImage2Url) ? "blending" : "user_upload",
+      AddedHow: blendImage1Url || blendImage2Url ? "blending" : "user_upload",
       IsDeleted: 0,
       Content: content,
       MediaType: "Image",
@@ -3212,7 +3267,7 @@ const createSinglePost = async (req, res) => {
         blendImage1: blendImage1Url,
         blendImage2: blendImage2Url,
         isSelected: blendSettings.isSelected || false,
-        selectedVariantIndex: blendSettings.selectedVariantIndex || 0
+        selectedVariantIndex: blendSettings.selectedVariantIndex || 0,
         // Do NOT spread the original blendSettings to avoid including base64 data
       },
       IsUnsplashImage: false,
@@ -3749,7 +3804,7 @@ const getUserPosts = async (req, res) => {
       // Determine media type and content type for proper response formatting
       let mediaType = post.MediaType;
       let contentType = post.ContentType;
-      
+
       // Handle different media types
       if (post.MediaType === "Image" || post.MediaType === "image") {
         mediaType = "Image";
@@ -3982,6 +4037,739 @@ const updatePostPrivacy = async (req, res) => {
   }
 };
 
+// Filtered data function for advanced media filtering (modernized with async/await)
+const filteredData = async function (req, res) {
+  try {
+    let fields = {};
+
+    fields["IsDeleted"] = 0;
+    if (req.body.domain != null && req.body.domain != "") {
+      fields["Domains"] = req.body.domain;
+    }
+
+    if (req.body.Media != null && req.body.domain != "") {
+      if (req.body.locator == "record") {
+        fields["Locator"] = { $regex: req.body.Media };
+      } else {
+        fields["AutoId"] = req.body.Media;
+      }
+    }
+
+    fields["$or"] = [
+      { IsPrivate: { $exists: false } },
+      { IsPrivate: { $exists: true, $ne: 1 } },
+    ];
+
+    if (req.body.status != null && req.body.status != "") {
+      fields["Status"] = req.body.status;
+    } else {
+      fields["Status"] = { $nin: [2, 3] };
+    }
+
+    if (req.body.source != null && req.body.source != "") {
+      fields["SourceUniqueID"] = req.body.source;
+    }
+
+    if (req.body.gt != null && req.body.gt != "") {
+      fields["GroupTags.GroupTagID"] = req.body.gt;
+    }
+
+    if (req.body.collection != null && req.body.collection != "") {
+      fields["Collection"] = { $in: [req.body.collection] };
+    }
+
+    if (req.body.mmt != null && req.body.mmt != "") {
+      fields["MetaMetaTags"] = req.body.mmt;
+    }
+
+    if (req.body.mt != null && req.body.mt != "") {
+      fields["MetaTags"] = req.body.mt;
+    }
+
+    if (req.body.whereAdded) {
+      fields["AddedWhere"] = req.body.whereAdded;
+    }
+
+    if (req.body.tagtype) {
+      fields["TagType"] = req.body.tagtype;
+    }
+
+    if (req.body.howAdded) {
+      fields["AddedHow"] = req.body.howAdded;
+    }
+
+    if (req.body.mediaType) {
+      if (req.body.mediaType == "Image") {
+        fields["$or"] = [
+          { MediaType: "Image" },
+          { MediaType: "Link", LinkType: "image" },
+        ];
+      } else if (req.body.mediaType == "Link") {
+        fields["MediaType"] = req.body.mediaType;
+        fields["LinkType"] = { $ne: "image" };
+      } else {
+        fields["MediaType"] = req.body.mediaType;
+      }
+    }
+
+    if (req.body.inappropriate) {
+      if (req.body.inappropriate > 0 && req.body.inappropriate < 5) {
+        fields["InAppropFlagCount"] = { $gte: req.body.inappropriate };
+      } else if (req.body.inappropriate >= 5) {
+        fields["InAppropFlagCount"] = { $gte: req.body.inappropriate };
+      } else {
+        fields["InAppropFlagCount"] = 0;
+      }
+    }
+
+    if (req.body.dtEnd != null && req.body.dtStart != null) {
+      var end = req.body.dtEnd;
+      var start = req.body.dtStart;
+      var end_dt = end.split("/");
+      var start_dt = start.split("/");
+      start_dt[0] = start_dt[0] - 1;
+      end_dt[0] = end_dt[0] - 1;
+
+      console.log(start_dt);
+      console.log(end_dt);
+
+      var start_date = new Date(start_dt[2], start_dt[0], start_dt[1], 0, 0, 0);
+      var end_date = new Date(end_dt[2], end_dt[0], end_dt[1], 23, 59, 59);
+
+      fields["UploadedOn"] = { $lte: end_date, $gte: start_date };
+    }
+
+    if (
+      (req.body.keywordsSearch != null && req.body.keywordsSearch != "") ||
+      (req.body.addAnotherTag != null && req.body.addAnotherTag != "") ||
+      (req.body.excludeWord != null && req.body.excludeWord != "")
+    ) {
+      console.log(req.body.keywordsSearch);
+      console.log(req.body.addAnotherTag);
+      console.log(req.body.excludeWord);
+      if (req.body.gt != null && req.body.gt != "") {
+        req.body.keywordsSearch.push(req.body.gt);
+        delete fields["GroupTags.GroupTagID"];
+
+        if (req.body.addAnotherTag)
+          req.body.keywordsSearch.concat(req.body.addAnotherTag);
+      }
+
+      fields["GroupTags.GroupTagID"] = {
+        $in: req.body.keywordsSearch,
+        $nin: req.body.excludeWord,
+      };
+    }
+
+    fields["AddedWhere"] = { $ne: "contentPage" };
+
+    console.log("Fields---------", fields);
+    var offset = req.body.offset ? parseInt(req.body.offset) : 0;
+    var limit = req.body.limit ? parseInt(req.body.limit) : 0;
+    var parameters = {
+      Posts: false,
+      Marks: false,
+      Stamps: false,
+      GroupTags: false,
+      OwnerFSGs: false,
+    };
+
+    // Modernized with async/await instead of callbacks
+    const result = await media
+      .find(fields, parameters)
+      .sort({ UploadedOn: "desc" })
+      .skip(offset)
+      .limit(limit)
+      .exec();
+    const resultlength = await media
+      .find(fields, { _id: 1 })
+      .countDocuments()
+      .exec();
+
+    if (resultlength > 0) {
+      return res.json({
+        code: "200",
+        msg: "Success",
+        response: result,
+        responselength: resultlength,
+      });
+    } else {
+      return res.json({ code: "404", msg: "Not Found", responselength: 0 });
+    }
+  } catch (err) {
+    console.error("Error in filteredData:", err);
+    return res.json({ code: "500", msg: "Error", error: err.message });
+  }
+};
+const searchByLocatorList = function (req, res) {
+  var fields = {};
+
+  fields["IsDeleted"] = 0;
+  if (req.body.domain != null && req.body.domain != "") {
+    fields["Domains"] = req.body.domain;
+  }
+
+  //added by parul 09022015
+  if (req.body.Media != null && req.body.domain != "") {
+    if (req.body.locator == "record") {
+      fields["Locator"] = { $regex: req.body.Media };
+    } else {
+      fields["AutoId"] = req.body.Media;
+    }
+  }
+  fields["$or"] = [
+    { IsPrivate: { $exists: false } },
+    { IsPrivate: { $exists: true, $ne: 1 } },
+  ];
+
+  if (req.body.status != null && req.body.status != "") {
+    fields["Status"] = req.body.status;
+  } else {
+    fields["Status"] = { $nin: [2, 3] };
+  }
+
+  if (req.body.source != null && req.body.source != "") {
+    fields["SourceUniqueID"] = req.body.source;
+  }
+
+  if (req.body.gt != null && req.body.gt != "") {
+    fields["GroupTags.GroupTagID"] = req.body.gt;
+  }
+
+  if (req.body.collection != null && req.body.collection != "") {
+    fields["Collection"] = { $in: [req.body.collection] };
+  }
+  if (req.body.mmt != null && req.body.mmt != "") {
+    fields["MetaMetaTags"] = req.body.mmt;
+  }
+  if (req.body.mt != null && req.body.mt != "") {
+    fields["MetaTags"] = req.body.mt;
+  }
+  if (req.body.whereAdded) {
+    fields["AddedWhere"] = req.body.whereAdded;
+  }
+  if (req.body.tagtype) {
+    fields["TagType"] = req.body.tagtype;
+  }
+  if (req.body.howAdded) {
+    fields["AddedHow"] = req.body.howAdded;
+
+    //added by manishp on 12022016 - for avoiding the listing of contentPage medias
+    fields["AddedWhere"] = { $eq: req.body.howAdded, $ne: "contentPage" };
+  }
+  if (req.body.mediaType) {
+    if (req.body.mediaType == "Image") {
+      fields["$or"] = [
+        { MediaType: "Image" },
+        { MediaType: "Link", LinkType: "image" },
+      ];
+    } else if (req.body.mediaType == "Link") {
+      fields["MediaType"] = req.body.mediaType;
+      fields["LinkType"] = { $ne: "image" };
+    } else {
+      fields["MediaType"] = req.body.mediaType;
+    }
+  }
+  if (req.body.dtEnd != null && req.body.dtStart != null) {
+    var end = req.body.dtEnd;
+    var start = req.body.dtStart;
+    var end_dt = end.split("/");
+    var start_dt = start.split("/");
+    start_dt[0] = start_dt[0] - 1;
+    end_dt[0] = end_dt[0] - 1;
+
+    console.log(start_dt);
+    console.log(end_dt);
+
+    var start_date = new Date(start_dt[2], start_dt[0], start_dt[1], 0, 0, 0);
+    var end_date = new Date(end_dt[2], end_dt[0], end_dt[1], 23, 59, 59);
+
+    fields["UploadedOn"] = { $lte: end_date, $gte: start_date };
+  }
+
+  console.log(fields); //return;
+
+  if (
+    (req.body.keywordsSearch != null && req.body.keywordsSearch != "") ||
+    (req.body.addAnotherTag != null && req.body.addAnotherTag != "") ||
+    (req.body.excludeWord != null && req.body.excludeWord != "")
+  ) {
+    console.log(req.body.keywordsSearch);
+    console.log(req.body.addAnotherTag);
+    console.log(req.body.excludeWord);
+    //req.body.keywordsSearch = req.body.keywordsSearch ? req.body.keywordsSearch : [];
+
+    //if grouptag is selected from drop-down then -
+    if (req.body.gt != null && req.body.gt != "") {
+      req.body.keywordsSearch.push(req.body.gt);
+      delete fields["GroupTags.GroupTagID"];
+    }
+
+    //if another tag is added
+    if (req.body.addAnotherTag) {
+      req.body.keywordsSearch = req.body.keywordsSearch.concat(
+        req.body.addAnotherTag
+      );
+    }
+
+    //Required condition because using $in....
+    if (req.body.keywordsSearch.length) {
+      fields["GroupTags.GroupTagID"] = {
+        $in: req.body.keywordsSearch,
+        $nin: req.body.excludeWord,
+      };
+    } else {
+      fields["GroupTags.GroupTagID"] = { $nin: req.body.excludeWord };
+    }
+  }
+
+  console.log("Fields---------", fields); //return;
+  //using column as fields : as you can see fields has been taken as conditions earlier - agree bad code!!!
+  var columns = {
+    _id: true,
+    AutoId: true,
+    Locator: true,
+  };
+
+  var limit = 1000;
+
+  media
+    .find(fields, columns)
+    .sort({ AutoId: 1, Locator: 1 })
+    .limit(limit)
+    .exec(function (err, result) {
+      if (err) {
+        res.json(err);
+      } else {
+        media
+          .find(fields, { _id: 1 })
+          .countDocuments()
+          .exec(function (err, resultlength) {
+            if (err) {
+              res.json(err);
+            } else {
+              if (resultlength > 0) {
+                //res.json({"code":"200","msg":"Success","response":result,"responselength":resultlength.length});
+                res.json({
+                  code: "200",
+                  msg: "Success",
+                  response: result,
+                  responselength: resultlength,
+                });
+              } else {
+                res.json({ code: "404", msg: "Not Found", responselength: 0 });
+              }
+            }
+          });
+      }
+    });
+};
+
+/**
+ * Modern Post Update Endpoint
+ * Updates an existing post in the Media collection
+ * Pages.Medias only stores ObjectId references, actual post data is in Media collection
+ * Only updates fields that are provided (optimal partial updates)
+ * Supports both JWT and session authentication
+ */
+const updatePost = async (req, res) => {
+  try {
+    // Authentication check - support both JWT and session
+    const currentUser = req.session?.user || req.user;
+    
+    if (!currentUser) {
+      return res.status(401).json({
+        status: "failed",
+        code: "401",
+        message: "Authentication required. Please login to continue."
+      });
+    }
+    
+    // Validate required fields - need either PostId or MediaID to identify the post
+    const mediaId = req.body.media || req.body.MediaID;
+    const postId = req.body.PostId; // May or may not be the same as mediaId
+    
+    if (!mediaId) {
+      return res.status(400).json({
+        status: "failed",
+        code: "400",
+        message: "media or MediaID is required to update a post"
+      });
+    }
+    
+    // Build update object - only include fields that are provided
+    const updateFields = {};
+    
+    // Basic fields
+    if (req.body.url !== undefined) updateFields.MediaURL = req.body.url;
+    if (req.body.title !== undefined) updateFields.Title = req.body.title;
+    if (req.body.prompt !== undefined) updateFields.Prompt = req.body.prompt;
+    if (req.body.locator !== undefined) updateFields.Locator = req.body.locator;
+    if (req.body.thumbnail !== undefined) updateFields.thumbnail = req.body.thumbnail;
+    
+    // Media type and content from data object or direct fields
+    if (req.body.data?.value?.MediaType !== undefined) {
+      updateFields.MediaType = req.body.data.value.MediaType;
+    } else if (req.body.MediaType !== undefined) {
+      updateFields.MediaType = req.body.MediaType;
+    }
+    
+    if (req.body.data?.value?.ContentType !== undefined) {
+      updateFields.ContentType = req.body.data.value.ContentType;
+    } else if (req.body.ContentType !== undefined) {
+      updateFields.ContentType = req.body.ContentType;
+    }
+    
+    // Content field
+    if (req.body.Content !== undefined) {
+      updateFields.Content = req.body.Content;
+    }
+    
+    // Location array (media URLs with sizes)
+    if (req.body.Location !== undefined && Array.isArray(req.body.Location)) {
+      updateFields.Location = req.body.Location;
+    }
+    
+    // BlendSettings object (for 2MJ blend posts)
+    if (req.body.BlendSettings !== undefined) {
+      updateFields.BlendSettings = req.body.BlendSettings;
+    } else if (req.body.blendSettings !== undefined) {
+      updateFields.BlendSettings = req.body.blendSettings;
+    }
+    
+    // Post-specific fields (these are in Media collection now)
+    if (req.body.owner !== undefined || req.body.OwnerId !== undefined) {
+      updateFields.PostedBy = req.body.owner || req.body.OwnerId;
+    }
+    
+    // Privacy and visibility settings
+    if (req.body.PostPrivacySetting !== undefined) {
+      updateFields.PostPrivacySetting = req.body.PostPrivacySetting;
+    }
+    
+    // Image source flag
+    if (req.body.IsUnsplashImage !== undefined) {
+      updateFields.IsUnsplashImage = req.body.IsUnsplashImage;
+    }
+    
+    // Post type fields
+    if (req.body.PostType !== undefined) {
+      updateFields.PostType = req.body.PostType;
+    }
+    
+    if (req.body.IsOnetimeStream !== undefined) {
+      updateFields.IsOnetimeStream = req.body.IsOnetimeStream;
+    }
+    
+    if (req.body.IsPreLaunchPost !== undefined) {
+      updateFields.IsPreLaunchPost = req.body.IsPreLaunchPost;
+    }
+    
+    if (req.body.IsPrivateQuestionPost !== undefined) {
+      updateFields.IsPrivateQuestionPost = req.body.IsPrivateQuestionPost;
+    }
+    
+    if (req.body.QuestionPostId !== undefined) {
+      updateFields.QuestionPostId = req.body.QuestionPostId;
+    }
+    
+    // Check if there are any fields to update
+    if (Object.keys(updateFields).length === 0) {
+      return res.status(400).json({
+        status: "failed",
+        code: "400",
+        message: "No fields to update. Please provide at least one field to modify."
+      });
+    }
+    
+    // Update timestamp
+    updateFields.UpdatedOn = new Date();
+    
+    // Query to find the media/post by ID
+    const query = { _id: mediaId };
+    
+    // Perform the update in Media collection
+    const updateResult = await media.updateOne(query, { $set: updateFields }).exec();
+    
+    if (updateResult.matchedCount === 0) {
+      return res.status(404).json({
+        status: "failed",
+        code: "404",
+        message: "Post/Media not found"
+      });
+    }
+    
+    if (updateResult.modifiedCount === 0) {
+      return res.status(200).json({
+        status: "success",
+        code: "200",
+        message: "No changes made - all fields were already set to these values",
+        mediaId: mediaId
+      });
+    }
+    
+    // Update media action logs if this is a Post action
+    const boardId = req.body.id || req.body.BoardId;
+    
+    if (req.body.Action === 'Post' || req.body.Action === 'EditPost') {
+      const mediaActionLogData = {
+        PostId: postId || mediaId, // Use PostId if provided, otherwise MediaID
+        MediaId: mediaId,
+        UserId: currentUser._id,
+        UserFsg: currentUser.FSGsArr2 || currentUser.FSGs || {},
+        BoardId: boardId,
+        OwnerId: req.body.owner || req.body.OwnerId,
+        Action: 'Post',
+        Title: req.body.title || req.body.Title || null,
+        Prompt: req.body.prompt || req.body.Prompt || null,
+        Locator: req.body.locator || req.body.Locator,
+        URL: req.body.url || req.body.MediaURL || null,
+        MediaType: req.body.data?.value?.MediaType || req.body.MediaType,
+        ContentType: req.body.data?.value?.ContentType || req.body.ContentType,
+        Content: req.body.Content || null,
+        Comment: req.body.Comment || "",
+        PostPrivacySetting: req.body.PostPrivacySetting || "PublicWithoutName",
+        IsUnsplashImage: req.body.IsUnsplashImage || false,
+        Themes: req.body.Themes || [],
+        TaggedUsers: req.body.TaggedUsers || []
+      };
+      
+      if (req.body.Label) {
+        mediaActionLogData.Label = req.body.Label;
+      }
+      
+      if (req.body.Statement) {
+        mediaActionLogData.PostStatement = req.body.Statement;
+      }
+      
+      // Check if action log already exists for this post
+      const actionLogConditions = {
+        MediaId: mediaId,
+        UserId: currentUser._id,
+        Action: 'Post'
+      };
+      
+      // Include PostId in conditions if it exists
+      if (postId) {
+        actionLogConditions.PostId = postId;
+      }
+      
+      // Include BoardId in conditions if it exists
+      if (boardId) {
+        actionLogConditions.BoardId = boardId;
+      }
+      
+      const existingActionLog = await mediaAction.findOne(actionLogConditions).exec();
+      
+      if (existingActionLog) {
+        // Update existing action log
+        await mediaAction.updateOne(actionLogConditions, { $set: mediaActionLogData }).exec();
+      } else {
+        // Create new action log
+        await mediaAction(mediaActionLogData).save();
+      }
+    }
+    
+    // Fetch the updated media/post to return to client
+    const userFields = {
+      Name: 1,
+      NickName: 1,
+      ProfilePic: 1
+    };
+    
+    const updatedMedia = await media
+      .findById(mediaId)
+      .populate('PostedBy', userFields)
+      .exec();
+    
+    if (!updatedMedia) {
+      // Post was updated but couldn't fetch details
+      return res.json({
+        status: "success",
+        code: "200",
+        message: "Post updated successfully",
+        mediaId: mediaId
+      });
+    }
+    
+    // Convert to plain object for modification
+    const postData = updatedMedia.toObject();
+    
+    // Handle privacy setting for response
+    if (postData.PostPrivacySetting === "PublicWithoutName" && postData.PostedBy) {
+      postData.PostedBy = {
+        _id: postData.PostedBy._id,
+        Name: "",
+        NickName: "",
+        ProfilePic: ""
+      };
+    }
+    
+    res.json({
+      status: "success",
+      code: "200",
+      message: "Post updated successfully",
+      postData: postData
+    });
+    
+  } catch (err) {
+    console.error("Error in updatePost:", err);
+    res.status(500).json({
+      status: "failed",
+      code: "500",
+      message: "Error updating post",
+      error: err.message
+    });
+  }
+};
+
+// Find all media with status filters and pagination
+const findAllStatus = async function (req, res) {
+  try {
+    const fields = {};
+
+    fields['IsDeleted'] = 0;
+    
+    if (req.body.domain != null && req.body.domain != "") {
+      fields['Domains'] = req.body.domain;
+    }
+
+    // Added by parul 09022015
+    if (req.body.Media != null && req.body.locator != "") {
+      if (req.body.locator == 'record') {
+        fields['Locator'] = { $regex: req.body.Media };
+      } else {
+        fields['AutoId'] = parseInt(req.body.Media);
+      }
+    }
+
+    // Privacy filter
+    fields['$or'] = [
+      { IsPrivate: { '$exists': false } }, 
+      { IsPrivate: { $exists: true, $ne: 1 } }
+    ];
+
+    // Status filter
+    // If status is "all" or "ALL", don't apply any status filter
+    if (req.body.status != null && req.body.status != "") {
+      if (req.body.status.toString().toLowerCase() !== 'all') {
+        fields['Status'] = req.body.status;
+      }
+      // If status is "all", skip adding Status filter (show all statuses)
+    } else {
+      // Default: exclude status 2 (pending) and 3 (deleted)
+      fields['Status'] = { '$nin': [2, 3] };
+    }
+
+    if (req.body.source != null && req.body.source != "") {
+      fields['SourceUniqueID'] = req.body.source;
+    }
+
+    if (req.body.gt != null && req.body.gt != "") {
+      fields['GroupTags.GroupTagID'] = req.body.gt;
+    }
+
+    // Added by parul 26 dec 2014
+    if (req.body.collection != null && req.body.collection != "") {
+      fields['Collection'] = { $in: [req.body.collection] };
+    }
+
+    if (req.body.mmt != null && req.body.mmt != "") {
+      fields['MetaMetaTags'] = req.body.mmt;
+    }
+
+    if (req.body.mt != null && req.body.mt != "") {
+      fields['MetaTags'] = req.body.mt;
+    }
+
+    if (req.body.whereAdded) {
+      fields['AddedWhere'] = req.body.whereAdded;
+    }
+
+    if (req.body.tagtype) {
+      fields['TagType'] = req.body.tagtype;
+    }
+
+    if (req.body.howAdded) {
+      fields['AddedHow'] = req.body.howAdded;
+    }
+
+    // Media type filter
+    if (req.body.mediaType) {
+      if (req.body.mediaType == 'Image') {
+        fields['$or'] = [
+          { "MediaType": 'Image' }, 
+          { "MediaType": 'Link', "LinkType": 'image' }
+        ];
+      } else if (req.body.mediaType == 'Link') {
+        fields['MediaType'] = req.body.mediaType;
+        fields['LinkType'] = { $ne: 'image' };
+      } else {
+        fields['MediaType'] = req.body.mediaType;
+      }
+    }
+
+    // Date range filter - only apply if both dates are provided and not empty strings
+    if (req.body.dtEnd != null && req.body.dtEnd !== "" && 
+        req.body.dtStart != null && req.body.dtStart !== "") {
+      const end = req.body.dtEnd;
+      const start = req.body.dtStart;
+      const end_dt = end.split('/');
+      const start_dt = start.split('/');
+      start_dt[0] = start_dt[0] - 1;
+      end_dt[0] = end_dt[0] - 1;
+
+      console.log(start_dt);
+      console.log(end_dt);
+
+      const start_date = new Date(start_dt[2], start_dt[0], start_dt[1], 0, 0, 0);
+      const end_date = new Date(end_dt[2], end_dt[0], end_dt[1], 23, 59, 59);
+
+      // Only add to fields if dates are valid
+      if (!isNaN(start_date.getTime()) && !isNaN(end_date.getTime())) {
+        fields['UploadedOn'] = { $lte: end_date, $gte: start_date };
+      }
+    }
+
+    console.log(fields);
+
+    // Execute query with modern async/await
+    const result = await media
+      .find(fields)
+      .sort({ UploadedOn: 'desc' })
+      .skip(req.body.offset)
+      .limit(req.body.limit)
+      .exec();
+
+    const resultlength = await media
+      .find(fields, { _id: 1 })
+      .countDocuments()
+      .exec();
+
+    if (resultlength > 0) {
+      res.json({ 
+        "code": "200", 
+        "msg": "Success", 
+        "response": result, 
+        "responselength": resultlength 
+      });
+    } else {
+      res.json({ 
+        "code": "404", 
+        "msg": "No media found matching the specified filters", 
+        "responselength": 0 
+      });
+    }
+  } catch (err) {
+    console.error("Error in findAllStatus:", err);
+    res.status(500).json({ 
+      "code": "500", 
+      "msg": "Internal server error", 
+      "error": err.message 
+    });
+  }
+};
+
 module.exports = {
   crop_image,
   findAll,
@@ -3998,5 +4786,8 @@ module.exports = {
   createBlendImage,
   getUserPosts,
   updatePostPrivacy,
+  filteredData,
+  searchByLocatorList,
+  updatePost,
+  findAllStatus,
 };
-

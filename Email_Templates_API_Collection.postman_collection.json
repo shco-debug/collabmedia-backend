@@ -1,0 +1,120 @@
+{
+  "info": {
+    "name": "Email Templates API",
+    "description": "API collection for Email Template management",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:3000",
+      "type": "string"
+    },
+    {
+      "key": "token",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "View All Email Templates",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{base_url}}/emailTemplate/view",
+          "host": ["{{base_url}}"],
+          "path": ["emailTemplate", "view"]
+        },
+        "description": "Fetches all email templates from the database"
+      },
+      "response": []
+    },
+    {
+      "name": "Add Email Template",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"name\": \"Welcome Email\",\n  \"subject\": \"Welcome to Our Platform!\",\n  \"constants\": \"{{username}}, {{verificationLink}}\",\n  \"description\": \"<html><body><h1>Welcome {{username}}</h1><p>Please verify your email by clicking: {{verificationLink}}</p></body></html>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/emailTemplate/add",
+          "host": ["{{base_url}}"],
+          "path": ["emailTemplate", "add"]
+        },
+        "description": "Creates a new email template"
+      },
+      "response": []
+    },
+    {
+      "name": "Edit Email Template",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/json",
+            "type": "text"
+          },
+          {
+            "key": "Authorization",
+            "value": "Bearer {{token}}",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n  \"id\": \"507f1f77bcf86cd799439011\",\n  \"name\": \"Updated Welcome Email\",\n  \"subject\": \"Welcome - Updated Subject\",\n  \"constants\": \"{{username}}, {{verificationLink}}, {{companyName}}\",\n  \"description\": \"<html><body><h1>Welcome to {{companyName}}, {{username}}!</h1><p>Verify email: {{verificationLink}}</p></body></html>\"\n}",
+          "options": {
+            "raw": {
+              "language": "json"
+            }
+          }
+        },
+        "url": {
+          "raw": "{{base_url}}/emailTemplate/edit",
+          "host": ["{{base_url}}"],
+          "path": ["emailTemplate", "edit"]
+        },
+        "description": "Updates an existing email template by ID"
+      },
+      "response": []
+    }
+  ],
+  "auth": {
+    "type": "bearer",
+    "bearer": [
+      {
+        "key": "token",
+        "value": "{{token}}",
+        "type": "string"
+      }
+    ]
+  }
+}
+

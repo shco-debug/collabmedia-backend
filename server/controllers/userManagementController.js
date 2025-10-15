@@ -77,18 +77,23 @@ var __updateChapterCollection__invitationCase = async function(registeredUserEma
 var findAll = async function (req, res) {
 	try {
 		// Check authorization - only admin and subadmin can view all users
-		if (!req.session || !req.session.user) {
+		// Support both JWT (req.user) and session (req.session.user) authentication
+		const user = req.session?.user || req.user;
+		
+		if (!user) {
 			return res.status(401).json({
 				"code": "401",
-				"msg": "Unauthorized. Please login to continue."
+				"msg": "Unauthorized. Please login to continue.",
+				"success": false
 			});
 		}
 		
-		const userRole = req.session.user.Role;
+		const userRole = user.Role || user.role;
 		if (userRole !== 'admin' && userRole !== 'subadmin') {
 			return res.status(403).json({
 				"code": "403",
 				"msg": "Access denied. Only admins and subadmins can view all users.",
+				"success": false,
 				"yourRole": userRole
 			});
 		}
@@ -96,18 +101,13 @@ var findAll = async function (req, res) {
 		var conditions = {
 			IsDeleted: false
 		};
-		/*var fields = {
-			Name : true,
-			NickName : true,
-			Email : true,
-			Gender : true,
-			FSGsArr2 : true,
-			CreatedOn : true,
-			ModifiedOn : true,
-			Status : true,
-			AllowCreate : true
-		};*/
-		var fields = {};
+		
+		// Exclude sensitive fields from response
+		var fields = {
+			Password: 0,
+			resetPasswordToken: 0,
+			resetPasswordExpires: 0
+		};
 		
 		var sortObj = {
 			ModifiedOn: -1
@@ -116,9 +116,15 @@ var findAll = async function (req, res) {
 		const result = await userManagement.find(conditions, fields).sort(sortObj).exec();
 		
 		if (result.length == 0) {
-			res.json({"code": "404", "msg": "Not Found"});
+			res.json({"code": "404", "msg": "Not Found", "success": false});
 		} else {
-			res.json({"code": "200", "msg": "Success", "response": result});
+			res.json({
+				"code": "200", 
+				"msg": "Success", 
+				"success": true,
+				"count": result.length,
+				"response": result
+			});
 		}
 	} catch (err) {
 		console.error('Error in findAll:', err);
@@ -130,17 +136,20 @@ exports.findAll = findAll;
 //For Add User
 var add = async function (req, res) {
 	try {
-		console.log("Data form Frontend - - >", req.body);
 		
 		// Check authorization - only admin and subadmin can add users
-		if (!req.session || !req.session.user) {
+		// Support both JWT (req.user) and session (req.session.user) authentication
+		const user = req.session?.user || req.user;
+		
+		if (!user) {
 			return res.status(401).json({
 				"code": "401",
-				"msg": "Unauthorized. Please login to continue."
+				"msg": "Unauthorized. Please login to continue.",
+				"success": false
 			});
 		}
 		
-		const userRole = req.session.user.Role;
+		const userRole = user.Role || user.role;
 		if (userRole !== 'admin' && userRole !== 'subadmin') {
 			return res.status(403).json({
 				"code": "403",
@@ -170,7 +179,6 @@ var add = async function (req, res) {
 		}
 		
 		const result = await userManagement.find({Email: req.body.Email, IsDeleted: false}).exec();
-		console.log("Results ------------->", result);
 		
 		if (result.length == 0) {
 			var newUser = new userManagement();
@@ -178,7 +186,15 @@ var add = async function (req, res) {
 			newUser.Password = newUser.generateHash(req.body.Password);
 			newUser.Name = req.body.Name;
 			newUser.FSGsArr2 = req.body.FSGsArr2;//typeof(req.body.FSGsArr2)!='undefined'?req.body.FSGsArr2:{};
-			newUser.NickName = req.body.Name ? req.body.Name : "";
+			
+			// Set NickName: use provided value, otherwise generate random
+			if (req.body.NickName) {
+				newUser.NickName = req.body.NickName;
+			} else {
+				// Generate random nickname: User + random 6-digit number
+				const randomNum = Math.floor(100000 + Math.random() * 900000);
+				newUser.NickName = `User${randomNum}`;
+			}
 			
 			// Set role (default to 'user')
 			const userRole = req.body.Role || 'user';
@@ -227,7 +243,6 @@ var add = async function (req, res) {
 				if (emailResults.length) {
 					var newHtml = emailResults[0].description.replace(/{Password}/g, req.body.Password);
 					newHtml = newHtml.replace(/{RecipientName}/g, req.body.Name);
-					console.log("**** New Html - - >*****", newHtml);
 					
 					var transporter = nodemailer.createTransport(process.EMAIL_ENGINE.info.smtpOptions);
 					var mailOptions = {
@@ -272,17 +287,20 @@ exports.add = add;
 // Edit User
 var edit = async function (req, res) {
 	try {
-		console.log("inside Edit User Backend - - >", req.body);
 		
 		// Check authorization - only admin and subadmin can edit users
-		if (!req.session || !req.session.user) {
+		// Support both JWT (req.user) and session (req.session.user) authentication
+		const user = req.session?.user || req.user;
+		
+		if (!user) {
 			return res.status(401).json({
 				"code": "401",
-				"msg": "Unauthorized. Please login to continue."
+				"msg": "Unauthorized. Please login to continue.",
+				"success": false
 			});
 		}
 		
-		const userRole = req.session.user.Role;
+		const userRole = user.Role || user.role;
 		if (userRole !== 'admin' && userRole !== 'subadmin') {
 			return res.status(403).json({
 				"code": "403",
@@ -370,21 +388,29 @@ var edit = async function (req, res) {
 			return res.status(404).json({ "code": "404", "msg": "User not found" });
 		}
 		
-		// Check if trying to change to the same role
-		if (req.body.Role && currentUser.Role === req.body.Role) {
+		// Check if there are any actual changes
+		if (Object.keys(fields).length === 0) {
 			return res.status(400).json({
 				"code": "400",
-				"msg": `User is already a ${req.body.Role}`,
-				"currentRole": currentUser.Role
+				"msg": "No fields to update. Please provide at least one field to modify.",
+				"success": false
 			});
 		}
 		
-		// Check if there are any actual changes
-		if (Object.keys(fields).length === 0 && !req.body.Role && !req.body.Permissions) {
-			return res.status(400).json({
-				"code": "400",
-				"msg": "No fields to update. Please provide at least one field to modify."
-			});
+		// If only changing role and it's the same, skip the role change but allow other updates
+		if (req.body.Role && currentUser.Role === req.body.Role) {
+			// Remove role from fields if it's the same - but continue with other updates
+			delete fields.Role;
+			
+			// If role was the ONLY thing being changed, return error
+			if (Object.keys(fields).length === 0) {
+				return res.status(400).json({
+					"code": "400",
+					"msg": `User is already a ${req.body.Role}. No other fields were modified.`,
+					"success": false,
+					"currentRole": currentUser.Role
+				});
+			}
 		}
 		
 		const updatedUser = await userManagement.findOneAndUpdate(
@@ -416,17 +442,20 @@ exports.edit = edit;
 //For Delete User
 var deleteUser = async function(req, res){
 	try {
-		console.log("Deleting user:", req.body);
 		
 		// Check authorization - only admin and subadmin can delete users
-		if (!req.session || !req.session.user) {
+		// Support both JWT (req.user) and session (req.session.user) authentication
+		const user = req.session?.user || req.user;
+		
+		if (!user) {
 			return res.status(401).json({
 				"code": "401",
-				"msg": "Unauthorized. Please login to continue."
+				"msg": "Unauthorized. Please login to continue.",
+				"success": false
 			});
 		}
 		
-		const userRole = req.session.user.Role;
+		const userRole = user.Role || user.role;
 		if (userRole !== 'admin' && userRole !== 'subadmin') {
 			return res.status(403).json({
 				"code": "403",
@@ -500,17 +529,20 @@ exports.deleteUser = deleteUser;
 // For Activating User
 var activateUser = async function (req, res) {
 	try {
-		console.log("Activating user:", req.body);
 		
 		// Check authorization - only admin and subadmin can activate users
-		if (!req.session || !req.session.user) {
+		// Support both JWT (req.user) and session (req.session.user) authentication
+		const user = req.session?.user || req.user;
+		
+		if (!user) {
 			return res.status(401).json({
 				"code": "401",
-				"msg": "Unauthorized. Please login to continue."
+				"msg": "Unauthorized. Please login to continue.",
+				"success": false
 			});
 		}
 		
-		const userRole = req.session.user.Role;
+		const userRole = user.Role || user.role;
 		if (userRole !== 'admin' && userRole !== 'subadmin') {
 			return res.status(403).json({
 				"code": "403",
@@ -583,17 +615,20 @@ exports.activateUser = activateUser;
 // For Deactivating User
 var deactivateUser = async function (req, res) {
 	try {
-		console.log("Deactivating user:", req.body);
 		
 		// Check authorization - only admin and subadmin can deactivate users
-		if (!req.session || !req.session.user) {
+		// Support both JWT (req.user) and session (req.session.user) authentication
+		const user = req.session?.user || req.user;
+		
+		if (!user) {
 			return res.status(401).json({
 				"code": "401",
-				"msg": "Unauthorized. Please login to continue."
+				"msg": "Unauthorized. Please login to continue.",
+				"success": false
 			});
 		}
 		
-		const userRole = req.session.user.Role;
+		const userRole = user.Role || user.role;
 		if (userRole !== 'admin' && userRole !== 'subadmin') {
 			return res.status(403).json({
 				"code": "403",
@@ -663,103 +698,117 @@ var deactivateUser = async function (req, res) {
 exports.deactivateUser = deactivateUser;
 
 //To Search Specific Users
-var searchQuery = function (req, res) {
-	var searchparam = req.body.searchText ? req.body.searchText : "";
-    var conditions = {
-		IsDeleted:false,
-		$or: [
-			{Name: {$regex: new RegExp(searchparam, "i")}},
-			{NickName: {$regex: new RegExp(searchparam, "i")}},
-			{Email: {$regex: new RegExp(searchparam, "i")}}
-		]
-	};
-	var fields = {
-		Name : true,
-		NickName : true,
-		Email : true,
-		Gender : true,
-		FSGsArr2 : true,
-		CreatedOn : true,
-		ModifiedOn : true,
-		Status : true,
-		AllowCreate : true,
-		ProfilePic: true
-	};
-	
-	var sortObj = {
-		ModifiedOn:-1
-	};
-	
-	var offset = req.body.offset ? req.body.offset : 0;
-	var limit = req.body.limit ? req.body.limit : 100;
-	   
-	userManagement.find(conditions , fields).sort(sortObj).skip(offset).limit(limit).exec(function (err, result) {
-		if (err) {
-			res.json(err);
+var searchQuery = async function (req, res) {
+	try {
+		var searchparam = req.body.searchText ? req.body.searchText : "";
+		var conditions = {
+			IsDeleted:false,
+			$or: [
+				{Name: {$regex: new RegExp(searchparam, "i")}},
+				{NickName: {$regex: new RegExp(searchparam, "i")}},
+				{Email: {$regex: new RegExp(searchparam, "i")}}
+			]
+		};
+		var fields = {
+			Name : true,
+			NickName : true,
+			Email : true,
+			Gender : true,
+			FSGsArr2 : true,
+			CreatedOn : true,
+			ModifiedOn : true,
+			Status : true,
+			AllowCreate : true,
+			ProfilePic: true,
+			UserName: true,
+			LastActiveTime: true,
+			Role: true
+		};
+		
+		var sortObj = {
+			ModifiedOn:-1
+		};
+		
+		var offset = req.body.offset ? req.body.offset : 0;
+		var limit = req.body.limit ? req.body.limit : 100;
+		
+		const result = await userManagement.find(conditions , fields).sort(sortObj).skip(offset).limit(limit).exec();
+		
+		if (result.length == 0) {
+			res.json({"code": "404", "msg": "Not Found", "success": false});
 		} else {
-			if (result.length == 0) {
-				res.json({"code": "404", "msg": "Not Found"})
-			} else {
-				userManagement.find(conditions , fields).count().exec(function (err, dataCount) {
-					if (!err) {
-						res.json({"code": "200", "msg": "Success", "response": result, "count": dataCount})
-					} else {
-						res.json({"code": "200", "msg": "Success", "response": result, "count": 0})
-					}
-				});
-			}
+			const dataCount = await userManagement.countDocuments(conditions).exec();
+			res.json({
+				"code": "200", 
+				"msg": "Success", 
+				"success": true,
+				"response": result, 
+				"count": dataCount
+			});
 		}
-	});
+	} catch (err) {
+		console.error('Error in searchQuery:', err);
+		res.status(500).json({
+			"code": "500", 
+			"msg": "Error searching users", 
+			"success": false,
+			"error": err.message
+		});
+	}
 };
 exports.searchQuery = searchQuery;
 
 //To Search Specific Users
-var searchRequestInvitation = function (req, res) {
-	var searchparam = req.body.searchText ? req.body.searchText : "";
-    var conditions = {
-		IsDeleted:false,
-		$or: [
-			{Name: {$regex: new RegExp(searchparam, "i")}},
-			{NickName: {$regex: new RegExp(searchparam, "i")}},
-			{Email: {$regex: new RegExp(searchparam, "i")}}
-		]
-	};
-	var fields = {
-		Name : true,
-		NickName : true,
-		Email : true,
-		Gender : true,
-		FSGsArr2 : true,
-		CreatedOn : true,
-		ModifiedOn : true,
-		Status : true,
-		AllowCreate : true
-	};
-	
-	var sortObj = {
-		ModifiedOn:-1
-	};
-	
-	var offset = req.body.offset ? req.body.offset : 0;
-	var limit = req.body.limit ? req.body.limit : 100;
-	   
-	RequestInvitation.find(conditions , fields).sort(sortObj).skip(offset).limit(limit).exec(function (err, result) {
-		if (err) {
-			res.json(err);
+var searchRequestInvitation = async function (req, res) {
+	try {
+		var searchparam = req.body.searchText ? req.body.searchText : "";
+		var conditions = {
+			IsDeleted:false,
+			$or: [
+				{Name: {$regex: new RegExp(searchparam, "i")}},
+				{Email: {$regex: new RegExp(searchparam, "i")}}
+			]
+		};
+		var fields = {
+			Name : true,
+			Email : true,
+			Gender : true,
+			CreatedOn : true,
+			ModifiedOn : true,
+			Status : true,
+			RequestedAt: true
+		};
+		
+		var sortObj = {
+			ModifiedOn:-1
+		};
+		
+		var offset = req.body.offset ? req.body.offset : 0;
+		var limit = req.body.limit ? req.body.limit : 100;
+		
+		const result = await RequestInvitation.find(conditions , fields).sort(sortObj).skip(offset).limit(limit).exec();
+		
+		if (result.length == 0) {
+			res.json({"code": "404", "msg": "Not Found", "success": false});
 		} else {
-			if (result.length == 0) {
-				res.json({"code": "404", "msg": "Not Found"})
-			} else {
-				RequestInvitation.find(conditions , fields).count().exec(function (err, dataCount) {
-					if (!err) {
-						res.json({"code": "200", "msg": "Success", "response": result, "count": dataCount})
-					} else {
-						res.json({"code": "200", "msg": "Success", "response": result, "count": 0})
-					}
-				});
-			}
+			const dataCount = await RequestInvitation.countDocuments(conditions).exec();
+			res.json({
+				"code": "200", 
+				"msg": "Success", 
+				"success": true,
+				"response": result, 
+				"count": dataCount
+			});
 		}
-	});
+	} catch (err) {
+		console.error('Error in searchRequestInvitation:', err);
+		res.status(500).json({
+			"code": "500", 
+			"msg": "Error searching invitations", 
+			"success": false,
+			"error": err.message
+		});
+	}
 };
 exports.searchRequestInvitation = searchRequestInvitation;
 
@@ -768,7 +817,6 @@ var findPerPage = async function (req, res) {
     var conditions = {
 		IsDeleted:false
 	};
-	var fields = {};
 	
 	var sortObj = {
 		LastActiveTime : -1,
@@ -778,72 +826,83 @@ var findPerPage = async function (req, res) {
 	var offset = req.body.offset ? req.body.offset : 0;
 	var limit = req.body.limit ? req.body.limit : 100;
 	
-	userManagement.aggregate([
-		{ $match : conditions }, 
-		{ $sort : sortObj },
-		{ $skip: offset },
-		{ $limit: limit },
-		{ 
-			$lookup: {     
-					"from": "StreamEmailTracker",     
-					"localField": "Email",     
-					"foreignField": "UserEmail",     
-					"as": "StreamEmailTrackerData"
+	try {
+		const result = await userManagement.aggregate([
+			{ $match : conditions }, 
+			{ $sort : sortObj },
+			{ $skip: offset },
+			{ $limit: limit },
+			{ 
+				$lookup: {     
+						"from": "StreamEmailTracker",     
+						"localField": "Email",     
+						"foreignField": "UserEmail",     
+						"as": "StreamEmailTrackerData"
+				}
+			},
+			{
+			  $project: {
+				 "_id" : "$_id",
+				"UserName" : "$UserName",
+				"referralCode" : "HFG4d",
+				"NickName" : "$NickName",
+				"Name" : "$Name",
+				"Email" : "$Email",
+				"MarketingEmail" : "$MarketingEmail",
+				"Subdomain_profilePic" : "$Subdomain_profilePic",
+				"Subdomain_description" : "$Subdomain_description",
+				"Subdomain_title" : "$Subdomain_title",
+				"Subdomain_name" : "$Subdomain_name",
+				"Subdomain" : "$Subdomain",
+				"ApplicationPolicyAccepted" : "$ApplicationPolicyAccepted",
+				"BrowserPolicyAccepted" : "$BrowserPolicyAccepted",
+				"EmailConfirmationStatus" : "$EmailConfirmationStatus",
+				"Status" : "$Status",
+				"ModifiedOn" : "$ModifiedOn",
+				"CreatedOn" : "$CreatedOn",
+				"AllowCreate" : "$AllowCreate",
+				"Gender" : "$Gender",
+				"Settings" : "$Settings",
+				"FSGsArr" : "$FSGsArr",
+				"ProfilePic" : "$ProfilePic",
+				"CreditAmount" : "$CreditAmount",
+				"IsCredit" : "$IsCredit",
+				"JournalId" : "$JournalId",
+				"AllFoldersId" : "$AllFoldersId",
+				"AllPagesId" : "$AllPagesId",
+				"Birthdate" : "$Birthdate",
+				"LastActiveTime" : "$LastActiveTime",
+				"FSGsArr2" : "$FSGsArr2",
+				"StreamEmailTrackerCount": { $cond: { if: { $isArray: "$StreamEmailTrackerData" }, then: { $size: "$StreamEmailTrackerData" }, else: 0} },
+				// Exclude password from final result (double safety)
+				Password: "$$REMOVE",
+				resetPasswordToken: "$$REMOVE",
+				resetPasswordExpires: "$$REMOVE"
+			  }
 			}
-		},
-		{
-		  $project: {
-			 "_id" : "$_id",
-			"UserName" : "$UserName",
-			"referralCode" : "HFG4d",
-			"NickName" : "$NickName",
-			"Name" : "$Name",
-			"Email" : "$Email",
-			"MarketingEmail" : "$MarketingEmail",
-			"Subdomain_profilePic" : "$Subdomain_profilePic",
-			"Subdomain_description" : "$Subdomain_description",
-			"Subdomain_title" : "$Subdomain_title",
-			"Subdomain_name" : "$Subdomain_name",
-			"Subdomain" : "$Subdomain",
-			"ApplicationPolicyAccepted" : "$ApplicationPolicyAccepted",
-			"BrowserPolicyAccepted" : "$BrowserPolicyAccepted",
-			"EmailConfirmationStatus" : "$EmailConfirmationStatus",
-			"Status" : "$Status",
-			"ModifiedOn" : "$ModifiedOn",
-			"CreatedOn" : "$CreatedOn",
-			"AllowCreate" : "$AllowCreate",
-			"Gender" : "$Gender",
-			"Settings" : "$Settings",
-			"FSGsArr" : "$FSGsArr",
-			"ProfilePic" : "$ProfilePic",
-			"CreditAmount" : "$CreditAmount",
-			"IsCredit" : "$IsCredit",
-			"JournalId" : "$JournalId",
-			"AllFoldersId" : "$AllFoldersId",
-			"AllPagesId" : "$AllPagesId",
-			"Birthdate" : "$Birthdate",
-			"LastActiveTime" : "$LastActiveTime",
-			"FSGsArr2" : "$FSGsArr2",
-			 "StreamEmailTrackerCount": { $cond: { if: { $isArray: "$StreamEmailTrackerData" }, then: { $size: "$StreamEmailTrackerData" }, else: 0} }
-		  }
+		]).exec();
+		
+		if (result.length == 0) {
+			res.json({"code": "404", "msg": "Not Found", "success": false});
+		} else {
+			const dataCount = await userManagement.countDocuments(conditions).exec();
+			res.json({
+				"code": "200", 
+				"msg": "Success", 
+				"success": true,
+				"response": result, 
+				"count": dataCount
+			});
 		}
-	]).exec(function (err, result) {
-        if (err) {
-            res.json(err);
-        } else {
-            if (result.length == 0) {
-                res.json({"code": "404", "msg": "Not Found"})
-            } else {
-                userManagement.find(conditions , fields).count().exec(function (err, dataCount) {
-                    if (!err) {
-                        res.json({"code": "200", "msg": "Success", "response": result, "count": dataCount})
-                    } else {
-                        res.json({"code": "200", "msg": "Success", "response": result, "count": 0})
-                    }
-                });
-			}
-        }
-    });
+	} catch (err) {
+		console.error('Error in findPerPage:', err);
+		res.status(500).json({
+			"code": "500", 
+			"msg": "Error fetching users", 
+			"success": false,
+			"error": err.message
+		});
+	}
 	
 	/*
 	userManagement.find(conditions , fields).sort(sortObj).skip(offset).limit(limit).exec(function (err, result) {
@@ -868,55 +927,134 @@ var findPerPage = async function (req, res) {
 exports.findPerPage = findPerPage;
 
 //To Get Data Per Page
-var viewRequestInvitation = function (req, res) {
-    var conditions = {
-		IsDeleted:false
-	};
-	var fields = {};
-	
-	var sortObj = {
-		ModifiedOn:-1
-	};
-	
-	var offset = req.body.offset ? req.body.offset : 0;
-	var limit = req.body.limit ? req.body.limit : 100;
-	
-	RequestInvitation.find(conditions , fields).sort(sortObj).skip(offset).limit(limit).exec(function (err, result) {
-        if (err) {
-            res.json(err);
-        } else {
-            if (result.length == 0) {
-                res.json({"code": "404", "msg": "Not Found"})
-            } else {
-                RequestInvitation.find(conditions , fields).count().exec(function (err, dataCount) {
-                    if (!err) {
-                        res.json({"code": "200", "msg": "Success", "response": result, "count": dataCount})
-                    } else {
-                        res.json({"code": "200", "msg": "Success", "response": result, "count": 0})
-                    }
-                });
-			}
-        }
-    });
+var viewRequestInvitation = async function (req, res) {
+	try {
+		var conditions = {
+			IsDeleted:false
+		};
+		var fields = {};
+		
+		var sortObj = {
+			ModifiedOn:-1
+		};
+		
+		var offset = req.body.offset ? req.body.offset : 0;
+		var limit = req.body.limit ? req.body.limit : 100;
+		
+		const result = await RequestInvitation.find(conditions , fields).sort(sortObj).skip(offset).limit(limit).exec();
+		
+		if (result.length == 0) {
+			res.json({"code": "404", "msg": "Not Found", "success": false});
+		} else {
+			const dataCount = await RequestInvitation.countDocuments(conditions).exec();
+			res.json({
+				"code": "200", 
+				"msg": "Success", 
+				"success": true,
+				"response": result, 
+				"count": dataCount
+			});
+		}
+	} catch (err) {
+		console.error('Error in viewRequestInvitation:', err);
+		res.status(500).json({
+			"code": "500", 
+			"msg": "Error fetching invitations", 
+			"success": false,
+			"error": err.message
+		});
+	}
 }
 exports.viewRequestInvitation = viewRequestInvitation;
 
 // For setUnsetCreate User
-var setUnsetCreate = function (req, res) {
-    var fields = {
-        AllowCreate: req.body.AllowCreate
-    };
-    console.log("inside Backend Controller - -  - - - - ->",req.body);
-    var query = {_id: req.body.UserId};
-    var options = {multi: true};
-    userManagement.update(query, {$set: fields}, options, callback)
-    function callback(err, numAffected) {
-        if (err) {
-            res.json(err)
-        } else {
-            findAll(req, res)
-        }
-    }
+var setUnsetCreate = async function (req, res) {
+	try {
+		// Check authorization
+		const user = req.session?.user || req.user;
+		
+		if (!user) {
+			return res.status(401).json({
+				"code": "401",
+				"msg": "Unauthorized. Please login to continue.",
+				"success": false
+			});
+		}
+		
+		const userRole = user.Role || user.role;
+		if (userRole !== 'admin' && userRole !== 'subadmin') {
+			return res.status(403).json({
+				"code": "403",
+				"msg": "Access denied. Only admins and subadmins can modify permissions.",
+				"success": false
+			});
+		}
+		
+		// Validate required fields
+		if (!req.body.UserId) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": "Missing required field: UserId is required",
+				"success": false
+			});
+		}
+		
+		if (req.body.AllowCreate === undefined) {
+			return res.status(400).json({
+				"code": "400",
+				"msg": "Missing required field: AllowCreate is required",
+				"success": false
+			});
+		}
+		
+		var fields = {
+			AllowCreate: req.body.AllowCreate
+		};
+		var query = {_id: req.body.UserId};
+		
+		const result = await userManagement.updateOne(query, {$set: fields}).exec();
+		
+		if (result.matchedCount === 0) {
+			return res.status(404).json({
+				"code": "404",
+				"msg": "User not found",
+				"success": false,
+				"userId": req.body.UserId
+			});
+		}
+		
+		if (result.modifiedCount === 0) {
+			return res.status(200).json({
+				"code": "200",
+				"msg": "No changes made - AllowCreate was already set to this value",
+				"success": true,
+				"currentValue": req.body.AllowCreate
+			});
+		}
+		
+		// Fetch the updated user to confirm
+		const updatedUser = await userManagement.findById(req.body.UserId).exec();
+		
+		res.json({
+			"code": "200",
+			"msg": "AllowCreate permission updated successfully",
+			"success": true,
+			"user": {
+				"_id": updatedUser._id,
+				"Name": updatedUser.Name,
+				"Email": updatedUser.Email,
+				"AllowCreate": updatedUser.AllowCreate
+			}
+		});
+	} catch (err) {
+		console.error('Error in setUnsetCreate:', err);
+		res.status(500).json({
+			"code": "500",
+			"msg": "Error updating create permission",
+			"success": false,
+			"error": err.message
+		});
+	}
 };
 exports.setUnsetCreate = setUnsetCreate;
 
