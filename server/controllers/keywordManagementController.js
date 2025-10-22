@@ -998,191 +998,326 @@ var keywordParsar_aggregate = function( req , res ){
 	var inputText = req.body.inputText ? req.body.inputText.toLowerCase().trim() : "";
 	inputText = inputText.replace(/["']/g, "");
 	
-	console.log("🔍 DEBUG: Starting keywordParsar_aggregate");
 	console.log("🔍 DEBUG: inputText =", inputText);
 	console.log("🔍 DEBUG: keywordsArr =", keywordsArr);
 	
-	// Modern aggregation pipeline replaces the old mapReduce approach
+	// Use groupTags with Tags array instead of alltags collection
+	// This replicates the exact logic from scrpt but uses groupTags.Tags
 	
-	// Original logic converted to modern syntax (same exact behavior as mapReduce)
-	var query = { 	//need to add MediaCount in condition.
-		status : {
-			$in : [1,3]
-		},
-		MetaMetaTagID : { 
-			$nin : process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase 
-		}/*,
-		MediaCount : {  
-			$gt : 0
-		}*/
-	};
+	// Use the exact same approach as scrpt: $text search + mapReduce logic
+	console.log("🔍 DEBUG: Using $text search approach like scrpt...");
 	
-	console.log("🔍 DEBUG: Query =", JSON.stringify(query));
+	// Set a timeout to prevent hanging (increased to 45 seconds for large datasets)
+	var timeoutId = setTimeout(function() {
+		console.log("🔍 DEBUG: Request timeout - returning empty response");
+		if (!res.headersSent) {
+			res.json({
+				"code": "200",
+				"msg": "Success",
+				"response": {
+					"inputText": inputText,
+					"matchedArr": [],
+					"suggestedArr": [],
+					"newGT": [],
+					"removeGT": [],
+					"result": []
+				}
+			});
+		}
+	}, 45000); // 45 second timeout
 	
-	// Use modern MongoDB aggregation pipeline (better than mapReduce)
-	const pipeline = [
-		{
-			$match: query
-		},
-		{
-			$addFields: {
-				lowercaseTitle: {
-					$toLower: {
-						$ifNull: ["$GroupTagTitle", ""]
+	// First, let's check what's actually in the database without any filters
+	console.log("🔍 DEBUG: First checking what data exists in groupTags collection...");
+	keywordModel.find({}).limit(5).then(function(allGroupTags) {
+		console.log("🔍 DEBUG: Total groupTags in database (first 5):", allGroupTags.length);
+		if(allGroupTags.length > 0) {
+			console.log("🔍 DEBUG: Sample groupTag structure:", JSON.stringify(allGroupTags[0], null, 2));
+			console.log("🔍 DEBUG: Does it have Tags array?", allGroupTags[0].Tags ? "YES" : "NO");
+			if(allGroupTags[0].Tags && allGroupTags[0].Tags.length > 0) {
+				console.log("🔍 DEBUG: Sample Tag:", JSON.stringify(allGroupTags[0].Tags[0], null, 2));
+			}
+		}
+		
+		// Now try $text search like scrpt does - this requires a text index on the collection
+		return keywordModel.find({ 
+			$text: { $search: inputText },  // Use MongoDB text search like scrpt
+			status: { $in: [1, 3] },
+			MetaMetaTagID: { 
+				$nin: process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase 
+			}
+		}).limit(100);
+		
+	}).then(function(groupTags) {
+		clearTimeout(timeoutId);
+		
+		console.log("🔍 DEBUG: Found", groupTags.length, "groupTags with $text search");
+		
+		// Debug: Show sample data
+		if(groupTags.length > 0) {
+			console.log("🔍 DEBUG: Sample groupTag:", JSON.stringify(groupTags[0], null, 2));
+		}
+		
+		// Process tags manually (simpler than aggregation)
+		var matchedArr = [];
+		var suggestedArr = [];
+		var difference = [];
+		var difference_neg = [];
+		var totalTagsProcessed = 0;
+		
+		// First pass: Check if GroupTagTitle itself matches any input word (PRIORITY)
+		for(var i = 0; i < groupTags.length; i++) {
+			var groupTag = groupTags[i];
+			var groupTagTitle = groupTag.GroupTagTitle ? groupTag.GroupTagTitle.toLowerCase().trim() : "";
+			
+			if(groupTagTitle != "" && groupTagTitle != null) {
+				// Check if GroupTagTitle matches input text
+				if (new RegExp("\\b" + groupTagTitle + "\\b").test(inputText)) {
+					console.log("🔍 DEBUG: Found GroupTagTitle match:", groupTagTitle);
+					
+					// Return top 10 tags from this groupTag
+					var topTags = groupTag.Tags ? groupTag.Tags.filter(function(t) { return t.status === 1; }).slice(0, 10) : [];
+					
+					var keywordObj = {
+						keyword: {
+							title: groupTagTitle,
+							id: groupTag._id,
+							groupTitle: groupTag.GroupTagTitle,
+							tags: topTags,  // Top 10 tags from THIS groupTag
+							from: 'ans'
+						}
+					};
+					
+					if(groupTagTitle == inputText) {
+						matchedArr.push(keywordObj);
+						suggestedArr.push(keywordObj);
+					} else {
+						suggestedArr.push(keywordObj);
 					}
+					difference.push(keywordObj);
 				}
 			}
-		},
-		{
-			$addFields: {
-				trimmedTitle: {
-					$trim: {
-						input: "$lowercaseTitle"
-					}
-				}
-			}
-		},
-		{
-			$match: {
-				trimmedTitle: { $ne: "" }
-			}
-		},
-		{
-			$addFields: {
-				debugInfo: {
-					$concat: ["Found GroupTag: ", "$trimmedTitle", " for input: ", inputText]
-				}
-			}
-		},
-		{
-			$addFields: {
-				isExactMatch: {
-					$eq: ["$trimmedTitle", inputText]
-				},
-				isWordMatch: {
-					$regexMatch: {
-						input: inputText,
-						regex: {
-							$concat: ["\\b", "$trimmedTitle", "\\b"]
+		}
+		
+		// Second pass: Check individual tags (only if not already found via GroupTagTitle)
+		for(var i = 0; i < groupTags.length; i++) {
+			var groupTag = groupTags[i];
+			
+			// Process each tag in the Tags array
+			if(groupTag.Tags && groupTag.Tags.length > 0) {
+				for(var j = 0; j < groupTag.Tags.length; j++) {
+					var tag = groupTag.Tags[j];
+					totalTagsProcessed++;
+					
+					if(tag.status === 1 && tag.TagTitle) { // Only active tags
+						var keywordTitle = tag.TagTitle.toLowerCase().trim();
+						
+						// Use scrpt's exact regex logic
+						if (new RegExp("\\b" + keywordTitle + "\\b").test(inputText)) {
+							// Check if this keyword is already in suggestedArr
+							var alreadyExists = suggestedArr.some(function(item) {
+								return item.keyword.title === keywordTitle;
+							});
+							
+							if(!alreadyExists) {
+								// Return top 10 tags from this groupTag
+								var topTags = groupTag.Tags.filter(function(t) { return t.status === 1; }).slice(0, 10);
+								
+								var keywordObj = {
+									keyword: {
+										title: keywordTitle,
+										id: groupTag._id,
+										tagId: tag._id,
+										groupTitle: groupTag.GroupTagTitle,
+										tags: topTags,
+										from: 'ans'
+									}
+								};
+								
+								if(keywordTitle == inputText) {
+									matchedArr.push(keywordObj);
+									suggestedArr.push(keywordObj);
+								} else {
+									suggestedArr.push(keywordObj);
+								}
+								difference.push(keywordObj);
+							}
 						}
 					}
 				}
 			}
-		},
-		{
-			$match: {
-				isWordMatch: true
-			}
-		},
-		{
-			$group: {
-				_id: "$trimmedTitle",
-				keyword: {
-					$first: {
-						title: "$trimmedTitle",
-						id: "$_id",
-						from: "ans"
-					}
-				},
-				isExactMatch: { $first: "$isExactMatch" }
-			}
-		},
-		{
-			$project: {
-				_id: 1,
-				keyword: 1,
-				isExactMatch: 1
-			}
-		}
-	];
-	
-	console.log("🔍 DEBUG: Pipeline =", JSON.stringify(pipeline, null, 2));
-
-	// First, let's check what GroupTags exist in the database
-	keywordModel.find(query).limit(5).then(function(debugResult){
-		console.log("🔍 DEBUG: Found GroupTags in database =", debugResult.length);
-		if(debugResult.length > 0) {
-			console.log("🔍 DEBUG: Sample GroupTag =", JSON.stringify(debugResult[0], null, 2));
 		}
 		
-		// Let's also check the collection name and model
-		console.log("🔍 DEBUG: Collection name =", keywordModel.collection.name);
-		console.log("🔍 DEBUG: Model name =", keywordModel.modelName);
-		
-		// Let's also check ALL GroupTags without any filters
-		keywordModel.find({}).limit(3).then(function(allGroupTags){
-			console.log("🔍 DEBUG: Total GroupTags in database =", allGroupTags.length);
-			if(allGroupTags.length > 0) {
-				console.log("🔍 DEBUG: Sample GroupTag (no filters) =", JSON.stringify(allGroupTags[0], null, 2));
-			}
-			
-			// Let's check specifically for GroupTags with title "tax"
-			keywordModel.find({"GroupTagTitle": "tax"}).then(function(taxGroupTags){
-				console.log("🔍 DEBUG: GroupTags with title 'tax' =", taxGroupTags.length);
-				if(taxGroupTags.length > 0) {
-					console.log("🔍 DEBUG: Tax GroupTag =", JSON.stringify(taxGroupTags[0], null, 2));
-				}
-				
-				// Now run the aggregation
-				keywordModel.aggregate(pipeline).then(function(result){
-					console.log("🔍 DEBUG: Aggregation completed successfully");
-					console.log("🔍 DEBUG: Raw result =", JSON.stringify(result, null, 2));
-					console.log("🔍 DEBUG: Result length =", result.length);
-		
-		// Process aggregation results to match original mapReduce output format
-				var matchedArr = [];
-				var suggestedArr = [];
-				var difference = [];
-				var difference_neg = [];
-				
-		for(var i = 0; i < result.length; i++) {
-			var keyword = result[i].keyword;
-			console.log("🔍 DEBUG: Processing result", i, "=", JSON.stringify(keyword));
-			console.log("🔍 DEBUG: isExactMatch =", result[i].isExactMatch);
-			
-			if(result[i].isExactMatch) {
-				matchedArr.push(keyword);
-				suggestedArr.push(keyword);
-				console.log("🔍 DEBUG: Added to matchedArr and suggestedArr (exact match)");
-			} else {
-				suggestedArr.push(keyword);
-				console.log("🔍 DEBUG: Added to suggestedArr only (partial match)");
-			}
-			difference.push(keyword);
-		}
+		console.log("🔍 DEBUG: Total tags processed:", totalTagsProcessed);
 		
 		console.log("🔍 DEBUG: Final matchedArr =", JSON.stringify(matchedArr));
 		console.log("🔍 DEBUG: Final suggestedArr =", JSON.stringify(suggestedArr));
 		console.log("🔍 DEBUG: Final difference =", JSON.stringify(difference));
+		
+		// Create response in the exact same format as scrpt
+		var response = {
+			"inputText": inputText,
+			"matchedArr": matchedArr,
+			"suggestedArr": suggestedArr,
+			"newGT": difference,
+			"removeGT": difference_neg,
+			"result": suggestedArr  // Frontend expects this
+		};
+		
+		console.log("🔍 DEBUG: Final response =", JSON.stringify(response, null, 2));
+		res.json({"code":"200","msg":"Success","response":response});
+		return;
+		
+	}).catch(function(err) {
+		clearTimeout(timeoutId);
+		console.log("🔍 DEBUG: Query error =", err);
+		
+		// If text index doesn't exist, fall back to simpler search
+		if (err.message && (err.message.includes('text index') || err.message.includes('text search'))) {
+			console.log("🔍 DEBUG: No text index found, falling back to simpler search...");
+			console.log("🔍 DEBUG: Error message:", err.message);
+			
+			// Fallback: Get limited groupTags and manually search (optimized for speed)
+			keywordModel.find({ 
+				status: { $in: [1, 3] },
+				MetaMetaTagID: { 
+					$nin: process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase 
+				}
+			}, { _id: 1, GroupTagTitle: 1, Tags: 1, MediaCount: 1 }) // Only fetch necessary fields
+			.sort({ MediaCount: -1 }) // Sort by MediaCount descending (most popular first)
+			.limit(500) // Increased limit to ensure we find relevant keywords
+			.lean() // Use lean() for faster queries
+			.then(function(groupTags) {
+				clearTimeout(timeoutId);
+				
+				console.log("🔍 DEBUG: Fallback - Found", groupTags.length, "groupTags");
+				
+				if(groupTags.length > 0) {
+					console.log("🔍 DEBUG: Sample groupTag:", JSON.stringify(groupTags[0], null, 2));
+				}
+				
+				var matchedArr = [];
+				var suggestedArr = [];
+				var difference = [];
+				var difference_neg = [];
+				var totalTagsChecked = 0;
+				var inputWords = inputText.split(/\s+/);
+				
+				console.log("🔍 DEBUG: Input words to search:", inputWords);
+				
+				// First pass: Check if GroupTagTitle itself matches any input word
+				// This takes priority over matching individual tags
+				for(var i = 0; i < groupTags.length; i++) {
+					var groupTag = groupTags[i];
+					var groupTagTitle = groupTag.GroupTagTitle ? groupTag.GroupTagTitle.toLowerCase().trim() : "";
+					
+					if(groupTagTitle != "" && groupTagTitle != null) {
+						// Check if GroupTagTitle matches input text
+						if (new RegExp("\\b" + groupTagTitle + "\\b").test(inputText)) {
+							console.log("🔍 DEBUG: Found GroupTagTitle match:", groupTagTitle);
+							
+							// Return top 5 tags from this groupTag as separate keyword objects
+							var topTags = groupTag.Tags ? groupTag.Tags.filter(function(t) { return t.status === 1; }).slice(0, 5) : [];
+							
+							// Create separate keyword object for each tag
+							for(var k = 0; k < topTags.length; k++) {
+								var tag = topTags[k];
+								var keywordObj = {
+									keyword: {
+										title: tag.TagTitle,
+										id: groupTag._id,
+										tagId: tag._id,
+										groupTitle: groupTag.GroupTagTitle,
+										tags: topTags,  // Keep all tags for reference
+										from: 'ans'
+									}
+								};
+								
+								if(groupTagTitle == inputText) {
+									matchedArr.push(keywordObj);
+									suggestedArr.push(keywordObj);
+								} else {
+									suggestedArr.push(keywordObj);
+								}
+								difference.push(keywordObj);
+							}
+						}
+					}
+				}
+				
+				// Second pass: Check individual tags (only if not already found in GroupTagTitle)
+				for(var i = 0; i < groupTags.length; i++) {
+					var groupTag = groupTags[i];
+					
+					if(groupTag.Tags && groupTag.Tags.length > 0) {
+						for(var j = 0; j < groupTag.Tags.length; j++) {
+							var tag = groupTag.Tags[j];
+							totalTagsChecked++;
+							
+							if(tag.status === 1 && tag.TagTitle) {
+								var keywordTitle = tag.TagTitle.toLowerCase().trim();
+								
+								if (new RegExp("\\b" + keywordTitle + "\\b").test(inputText)) {
+									// Check if this keyword is already in suggestedArr from GroupTagTitle match
+									var alreadyExists = suggestedArr.some(function(item) {
+										return item.keyword.title === keywordTitle;
+									});
+									
+									if(!alreadyExists) {
+										// Return top 10 tags from this groupTag
+										var topTags = groupTag.Tags.filter(function(t) { return t.status === 1; }).slice(0, 10);
+										
+										var keywordObj = {
+											keyword: {
+												title: keywordTitle,
+												id: groupTag._id,
+												tagId: tag._id,
+												groupTitle: groupTag.GroupTagTitle,
+												tags: topTags,
+												from: 'ans'
+											}
+										};
+										
+										if(keywordTitle == inputText) {
+											matchedArr.push(keywordObj);
+											suggestedArr.push(keywordObj);
+										} else {
+											suggestedArr.push(keywordObj);
+										}
+										difference.push(keywordObj);
+									}
+								}
+							}
+						}
+					}
+				}
+				
+				console.log("🔍 DEBUG: Total tags checked:", totalTagsChecked);
+				console.log("🔍 DEBUG: Matches found:", suggestedArr.length);
 				
 				var response = {
-					"inputText":inputText,
-					"matchedArr":matchedArr,
-					"suggestedArr":suggestedArr,
-					"newGT":difference,
-					"removeGT":difference_neg,
-					"result": result
+					"inputText": inputText,
+					"matchedArr": matchedArr,
+					"suggestedArr": suggestedArr,
+					"newGT": difference,
+					"removeGT": difference_neg,
+					"result": suggestedArr
 				};
-			console.log("🔍 DEBUG: Final response =", JSON.stringify(response, null, 2));
-				res.json({"code":"200","msg":"Success","response":response});return;
-		}).catch(function(err) {
-			console.log("🔍 DEBUG: Aggregation error =", err);
-			res.json({"status":"error","message":err});
+				
+				console.log("🔍 DEBUG: Fallback response =", JSON.stringify(response, null, 2));
+				res.json({"code":"200","msg":"Success","response":response});
 			return;
-		});
-				}).catch(function(err) {
-					console.log("🔍 DEBUG: Tax GroupTag query error =", err);
-					res.json({"status":"error","message":err});
-					return;
-				});
-			}).catch(function(err) {
-				console.log("🔍 DEBUG: All GroupTags query error =", err);
-				res.json({"status":"error","message":err});
-				return;
+				
+			}).catch(function(fallbackErr) {
+				console.log("🔍 DEBUG: Fallback error =", fallbackErr);
+				if (!res.headersSent) {
+					res.json({"status":"error","message":"No keywords found"});
+				}
 			});
-		}).catch(function(err) {
-			console.log("🔍 DEBUG: Database query error =", err);
-			res.json({"status":"error","message":err});
+		} else {
+			if (!res.headersSent) {
+					res.json({"status":"error","message":err});
+			}
+		}
 			return;
 		});
 }
