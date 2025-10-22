@@ -15,9 +15,15 @@ module.exports = function(){
 	process.urls = {};
 
 	// Use environment variables for URLs instead of hardcoded values
-	process.AppAccessProtocal = process.env.APP_PROTOCOL || 'https://';
-	process.AppBaseURL = process.env.APP_BASE_URL || 'www.scrpt.com';
+	// FOR LOCAL DEVELOPMENT: Using localhost:3000 for email verification links
+	process.AppAccessProtocal = process.env.APP_PROTOCOL || 'http://';
+	process.AppBaseURL = process.env.APP_BASE_URL || 'localhost:3000';
 	process.HOST_URL = process.AppAccessProtocal + process.AppBaseURL;
+	
+	// FOR PRODUCTION: Uncomment this and comment above
+	// process.AppAccessProtocal = process.env.APP_PROTOCOL || 'https://';
+	// process.AppBaseURL = process.env.APP_BASE_URL || 'www.scrpt.com';
+	// process.HOST_URL = process.AppAccessProtocal + process.AppBaseURL;
 	process.perUserSpace = 524288000;   //500 MB
 
 	process.CAPSULE_VERIFIER = ["manishpodiyal@gmail.com","scrptco@gmail.com"];
