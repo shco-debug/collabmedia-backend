@@ -11,4 +11,7 @@ module.exports = function(router){
         router.post('/edit', function(req,res){
 		emailTemplate.edit(req,res);
 	})
+	router.post('/delete', function(req,res){
+		emailTemplate.deleteTemplate(req,res);
+	})
 }

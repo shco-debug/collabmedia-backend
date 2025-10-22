@@ -55,3 +55,41 @@ var edit = async function(req,res){
     }
 };
 exports.edit = edit;
+
+
+// Delete Email Template
+var deleteTemplate = async function(req, res) {
+    try {
+        const templateId = req.body.id || req.body._id;
+        
+        if (!templateId) {
+            return res.status(400).json({
+                "code": "400",
+                "msg": "Template ID is required"
+            });
+        }
+
+        const query = { _id: templateId };
+        const result = await emailTemplate.deleteOne(query).exec();
+        
+        if (result.deletedCount > 0) {
+            res.json({
+                "code": "200",
+                "msg": "Template deleted successfully"
+            });
+        } else {
+            res.status(404).json({
+                "code": "404",
+                "msg": "Template not found"
+            });
+        }
+    } catch (err) {
+        console.error('Error deleting email template:', err);
+        res.status(500).json({
+            "code": "500",
+            "msg": "Internal server error",
+            "error": err.message
+        });
+    }
+};
+exports.deleteTemplate = deleteTemplate;
