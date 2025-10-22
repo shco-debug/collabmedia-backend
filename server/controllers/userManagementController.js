@@ -1058,6 +1058,142 @@ var setUnsetCreate = async function (req, res) {
 };
 exports.setUnsetCreate = setUnsetCreate;
 
+// Upload user avatar
+var uploadAvatar = async function (req, res) {
+	try {
+		const formidable = require('formidable');
+		const fs = require('fs');
+		const sharp = require('sharp');
+		const { uploadToS3 } = require('../utilities/awsS3Utils');
+		const mongoose = require('mongoose');
+
+		console.log('📤 uploadAvatar function called');
+
+		// Parse form data using formidable v3 API
+		const form = new formidable.IncomingForm({
+			maxFileSize: 10 * 1024 * 1024, // 10MB limit
+			keepExtensions: true
+		});
+
+		// Use promise-based parse (formidable v3+)
+		const [fields, files] = await form.parse(req);
+
+		console.log('📋 Parsed fields:', fields);
+		console.log('📁 Parsed files:', Object.keys(files));
+
+		// Get user ID from form fields (formidable v3 returns arrays)
+		const userIdArray = fields._id || fields.id || fields.userId;
+		const userId = Array.isArray(userIdArray) ? userIdArray[0] : userIdArray;
+		
+		if (!userId) {
+			return res.status(400).json({
+				code: "400",
+				msg: "Missing required field: _id or id is required to identify the user"
+			});
+		}
+
+		console.log('👤 User ID:', userId);
+
+		// Get uploaded file (formidable v3 returns arrays)
+		const avatarArray = files.avatar || files.file || files.image;
+		const avatarFile = Array.isArray(avatarArray) ? avatarArray[0] : avatarArray;
+		
+		if (!avatarFile) {
+			return res.status(400).json({
+				code: "400",
+				msg: "No file uploaded. Please select an image file."
+			});
+		}
+
+		console.log('📷 Avatar file:', avatarFile.originalFilename || avatarFile.name);
+
+		// Read file buffer
+		const fileBuffer = await fs.promises.readFile(avatarFile.filepath);
+
+		// Generate unique filename
+		const timestamp = Date.now();
+		const randomId = Math.floor(Math.random() * 1000000);
+		const baseFileName = `profile_${timestamp}_${randomId}`;
+
+		// Process image with Sharp - resize to 300x300
+		console.log('🖼️ Processing image with Sharp...');
+		const processedImageBuffer = await sharp(fileBuffer)
+			.resize(300, 300, {
+				fit: 'cover',
+				position: 'center'
+			})
+			.webp({
+				quality: 85,
+				effort: 6
+			})
+			.toBuffer();
+
+		console.log('✅ Image processed. Size:', processedImageBuffer.length);
+
+		// Create temp file object for S3 upload
+		const tempFile = {
+			path: null,
+			originalname: `${baseFileName}.webp`,
+			mimetype: 'image/webp',
+			size: processedImageBuffer.length,
+			buffer: processedImageBuffer
+		};
+
+		// Upload to S3
+		console.log('☁️ Uploading to S3...');
+		const s3Result = await uploadToS3(tempFile, 'scrptMedia/profilePics');
+		console.log('✅ Uploaded to S3:', s3Result.fileUrl);
+
+		// Update user's ProfilePic in database
+		const updateQuery = { _id: userId }; // Mongoose handles string to ObjectId conversion automatically
+		const updateData = { ProfilePic: s3Result.fileUrl };
+
+		const updatedUser = await userManagement.findOneAndUpdate(
+			updateQuery,
+			{ $set: updateData },
+			{ new: true }
+		).exec();
+
+		if (!updatedUser) {
+			return res.status(404).json({
+				code: "404",
+				msg: "User not found"
+			});
+		}
+
+		console.log('✅ Database updated for user:', updatedUser.Name);
+
+		// Clean up temp file
+		try {
+			await fs.promises.unlink(avatarFile.filepath);
+			console.log('🗑️ Temp file cleaned up');
+		} catch (unlinkErr) {
+			console.log('⚠️ Temp file cleanup skipped');
+		}
+
+		res.json({
+			code: "200",
+			msg: "Avatar updated successfully",
+			ProfilePic: s3Result.fileUrl,
+			user: {
+				_id: updatedUser._id,
+				Name: updatedUser.Name,
+				ProfilePic: updatedUser.ProfilePic
+			}
+		});
+
+	} catch (error) {
+		console.error('❌ Upload avatar error:', error);
+		console.error('Error stack:', error.stack);
+		res.status(500).json({
+			code: "500",
+			msg: "Error uploading avatar",
+			error: error.message
+		});
+	}
+};
+exports.uploadAvatar = uploadAvatar;
+
 var getMySales_V1 = function ( req , res ){
     var textSearch = req.query.text ? req.query.text : "";
     if(textSearch == ""){
