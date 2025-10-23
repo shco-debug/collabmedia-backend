@@ -340,10 +340,8 @@ module.exports = function(router){
 		mediaActionLogs.addMediaAction(req,res)
 	})
 	
-	router.post('/media/searchEngine',function(req,res){
-		//mediaSearchEngine.search_v_4(req,res)
-		mediaSearchEngine.search_v_5(req,res)	//added on 16092014
-	})
+	// REMOVED: Broken /media/searchEngine route - use /media/searchEngine from mediaRoutes.js instead
+	// The working endpoint is handled by MediaSearchApisV2Controller.getSearchGalleryMedias
 	
 	router.post('/media/createSinglePost',function(req,res){
 		media.createSinglePost(req,res)

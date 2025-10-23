@@ -3221,6 +3221,29 @@ const createSinglePost = async (req, res) => {
     const mainImageUrl =
       blendImage1Url || (mediaUrls.length > 0 ? mediaUrls[0] : null);
 
+    // Determine MediaType and ContentType based on postType
+    let mediaType = "Image";
+    let contentType = "image/webp";
+    let addedHow = blendImage1Url || blendImage2Url ? "blending" : "user_upload";
+    
+    if (postType === "html") {
+      mediaType = "HTML";
+      contentType = "text/html";
+      addedHow = "user_upload";
+    } else if (postType === "video") {
+      mediaType = "Video";
+      contentType = "video/mp4";
+      addedHow = "user_upload";
+    } else if (postType === "audio") {
+      mediaType = "Audio";
+      contentType = "audio/mp3";
+      addedHow = "user_upload";
+    } else if (postType === "text") {
+      mediaType = "Notes";
+      contentType = "text/plain";
+      addedHow = "user_upload";
+    }
+
     // Prepare media data
     const mediaData = {
       Title: title || "Untitled Post",
@@ -3236,11 +3259,11 @@ const createSinglePost = async (req, res) => {
       Collection: [],
       Status: 1,
       AddedWhere: "directToPf",
-      AddedHow: blendImage1Url || blendImage2Url ? "blending" : "user_upload",
+      AddedHow: addedHow,
       IsDeleted: 0,
       Content: content,
-      MediaType: "Image",
-      ContentType: "image/webp",
+      MediaType: mediaType,
+      ContentType: contentType,
       thumbnail: mainImageUrl,
       Lightness: blendSettings.lightness1
         ? String(
@@ -3251,25 +3274,28 @@ const createSinglePost = async (req, res) => {
         : "0",
       DominantColors: "",
       MetaData: metadata,
-      BlendSettings: {
-        // Use consistent keys like other implementations
-        image1Url: blendImage1Url,
-        image2Url: blendImage2Url,
-        blendMode: blendSettings.blendMode || "multiply",
-        lightness1: blendSettings.lightness1 || 0.8,
-        lightness2: blendSettings.lightness2 || 0.8,
-        keywords: blendSettings.Keywords || [],
-        selectedKeywords: blendSettings.SelectedKeywords || [],
-        PostStatement: blendSettings.PostStatement || content,
-        PostStreamType: blendSettings.PostStreamType || "Image",
-        UpdatedOn: Date.now(),
-        // Keep original structure for backward compatibility (only URLs, not base64)
-        blendImage1: blendImage1Url,
-        blendImage2: blendImage2Url,
-        isSelected: blendSettings.isSelected || false,
-        selectedVariantIndex: blendSettings.selectedVariantIndex || 0,
-        // Do NOT spread the original blendSettings to avoid including base64 data
-      },
+      // Only include BlendSettings if there's actual blend data (for image posts)
+      ...(postType === "image" && (blendImage1Url || blendImage2Url || Object.keys(blendSettings).length > 0) ? {
+        BlendSettings: {
+          // Use consistent keys like other implementations
+          image1Url: blendImage1Url,
+          image2Url: blendImage2Url,
+          blendMode: blendSettings.blendMode || "multiply",
+          lightness1: blendSettings.lightness1 || 0.8,
+          lightness2: blendSettings.lightness2 || 0.8,
+          keywords: blendSettings.Keywords || [],
+          selectedKeywords: blendSettings.SelectedKeywords || [],
+          PostStatement: postStatement || content,
+          PostStreamType: mediaType,
+          UpdatedOn: Date.now(),
+          // Keep original structure for backward compatibility (only URLs, not base64)
+          blendImage1: blendImage1Url,
+          blendImage2: blendImage2Url,
+          isSelected: blendSettings.isSelected || false,
+          selectedVariantIndex: blendSettings.selectedVariantIndex || 0,
+          // Do NOT spread the original blendSettings to avoid including base64 data
+        }
+      } : {}),
       IsUnsplashImage: false,
       ViewsCount: 0,
       Views: {},
@@ -3311,8 +3337,8 @@ const createSinglePost = async (req, res) => {
         PostedOn: Date.now(),
         ThemeID: null,
         ThemeTitle: "No Theme",
-        MediaType: "Image",
-        ContentType: "image/webp",
+        MediaType: mediaType,
+        ContentType: contentType,
         Content: content,
         Votes: [],
         Marks: [],
