@@ -3133,6 +3133,53 @@ var getSearchGalleryMedias = async function (req, res) {
 	var login_user_id = String(req.session.user._id);
 	var outCollection = "UserMedia_"+login_user_id;
 	
+	// Handle both old format (array of strings) and new format (array of objects with groupTagId and tagId)
+	var keywordGroupTagIds = [];
+	var keywordTagIds = [];
+	var validatedGroupTagIds = [];
+	
+	if (selectedKeywords.length > 0) {
+		if (typeof selectedKeywords[0] === 'string') {
+			// Old format: array of GroupTag IDs - use directly
+			keywordGroupTagIds = selectedKeywords;
+			validatedGroupTagIds = selectedKeywords;
+		} else if (typeof selectedKeywords[0] === 'object' && selectedKeywords[0].groupTagId) {
+			// New format: array of objects with groupTagId and tagId
+			keywordGroupTagIds = selectedKeywords.map(kw => kw.groupTagId).filter(id => id);
+			keywordTagIds = selectedKeywords.map(kw => kw.tagId).filter(id => id);
+			
+			// Validate that the specified tags actually exist in the GroupTags
+			// Query GroupTags collection to verify the tags exist
+			if (keywordTagIds.length > 0) {
+				try {
+					// Find GroupTags that contain at least one of the specified tag IDs in their Tags array
+					var validationResult = await GroupTag.find({
+						_id: { $in: keywordGroupTagIds },
+						'Tags._id': { $in: keywordTagIds.map(id => new mongoose.Types.ObjectId(id)) },
+						status: { $in: [1, 3] }
+					}, { _id: 1 });
+					
+					// Extract the validated GroupTag IDs
+					validatedGroupTagIds = validationResult.map(gt => String(gt._id));
+					
+					// If no GroupTags were validated, fall back to using the provided GroupTag IDs
+					if (validatedGroupTagIds.length === 0) {
+						validatedGroupTagIds = keywordGroupTagIds;
+					}
+				} catch (validationError) {
+					console.log('Tag validation error, using provided GroupTag IDs:', validationError.message);
+					validatedGroupTagIds = keywordGroupTagIds;
+				}
+			} else {
+				// No tag IDs provided, use GroupTag IDs directly
+				validatedGroupTagIds = keywordGroupTagIds;
+			}
+		}
+	}
+	
+	// Use the validated GroupTag IDs for the rest of the function
+	selectedKeywords = validatedGroupTagIds;
+	
 	var allWords = [];
 	for(var i = 0; i < mp_selectedWords.length; i++) {
 		mp_selectedWords[i] = typeof mp_selectedWords[i] == 'string' ? mp_selectedWords[i] : null;
@@ -3147,39 +3194,24 @@ var getSearchGalleryMedias = async function (req, res) {
 	
 	var familySetArr = [];
 	if(allWords.length) {
+		// Search in GroupTags collection using Tags array
+		// Match either GroupTagTitle OR any TagTitle within the Tags array
 		var familyset_conditions = {
 			$or : [
 				{GroupTagTitle:{ $in : allWords }},
-				{MainGroupTagTitle:{ $in : allWords }}
+				{"Tags.TagTitle": { $in : allWords }}
 			],
 			status : { $in : [1, 3] },
 			MetaMetaTagID : { $nin : [] }
 		};
 		
-		var familySetResult_main = await keywordModel_allTags.find(familyset_conditions);
+		// Find matching GroupTags
+		var familySetResult = await GroupTag.find(familyset_conditions, {_id: 1, GroupTagTitle: 1, Tags: 1});
+		familySetResult = familySetResult ? familySetResult : [];
 		
-		var allWords2 = [];
-		for(var i = 0; i < familySetResult_main.length; i++) {
-			familySetResult_main[i].GroupTagTitle = typeof familySetResult_main[i].GroupTagTitle == 'string' ? familySetResult_main[i].GroupTagTitle : null;
-			if(familySetResult_main[i].GroupTagTitle) {
-				if(allWords2.indexOf(familySetResult_main[i].GroupTagTitle) < 0){
-					allWords2.push(new RegExp("^"+familySetResult_main[i].GroupTagTitle.toLowerCase().trim()+"$", "i"));
-				}
-			}
-		}
-
-		familyset_conditions["$or"] = [
-			//{GroupTagTitle:{ $in : allWords2 }},
-			{MainGroupTagTitle:{ $in : allWords2 }}
-		];
-
-		var familySetResult = await keywordModel_allTags.find(familyset_conditions);
-
-
-		var familySetResult = familySetResult ? familySetResult : [];
-		
+		// Extract GroupTag IDs from results
 		for(var i = 0; i < familySetResult.length; i++) {
-			var gt_id = familySetResult[i].gt_id ? String(familySetResult[i].gt_id) : null;
+			var gt_id = familySetResult[i]._id ? String(familySetResult[i]._id) : null;
 			if(gt_id) {
 				if(familySetArr.indexOf(gt_id) < 0) {
 					familySetArr.push(gt_id);
