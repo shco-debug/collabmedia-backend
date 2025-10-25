@@ -10277,41 +10277,37 @@ var generatePostBlendImage_INTERNAL_API = async function (req, res) {
 };
 
 //start stream public page apis
-var myStreamPosts = async function (req, res) {
-  req.body.IsQS = req.body.IsQS ? req.body.IsQS : false;
-  var StreamType = req.body.StreamType ? req.body.StreamType : null;
-  var OwnerId = req.body.OwnerId ? req.body.OwnerId : null;
-  var CapsuleId = req.body.CapsuleId ? req.body.CapsuleId : null;
-  var loginUserId = req.session.user._id;
+const myStreamPosts = async (req, res) => {
+  req.body.IsQS = req.body.IsQS || false;
+  const StreamType = req.body.StreamType || null;
+  const OwnerId = req.body.OwnerId || null;
+  const CapsuleId = req.body.CapsuleId || null;
+  const loginUserId = req.session.user._id;
   req.body.OwnerId = OwnerId;
 
-  var CapsuleData_cond = {};
-  CapsuleData_cond._id = new ObjectId(CapsuleId);
-  var CapsuleData = await Capsule.findOne(CapsuleData_cond, {
-    OriginatedFrom: 1,
-    IsOwnerPostsForMember: 1,
-    IsPurchaseNeededForAllPosts: 1,
-    OwnerAnswer: 1,
-    StreamFlow: 1,
-    LaunchDate: 1,
-  });
-  CapsuleData = typeof CapsuleData == "object" ? CapsuleData : null;
+  const CapsuleData = await Capsule.findOne(
+    { _id: new ObjectId(CapsuleId) },
+    {
+      OriginatedFrom: 1,
+      IsOwnerPostsForMember: 1,
+      IsPurchaseNeededForAllPosts: 1,
+      OwnerAnswer: 1,
+      StreamFlow: 1,
+      LaunchDate: 1,
+    }
+  );
+
   if (!CapsuleData) {
     return res.json({ code: "404", message: "No stream found.", results: [] });
   }
-  var IsOwnerAnswerAllowed = CapsuleData.OwnerAnswer
-    ? CapsuleData.OwnerAnswer
-    : false;
+  
+  const IsOwnerAnswerAllowed = CapsuleData.OwnerAnswer || false;
   req.body.IsOwnerAnswerAllowed = IsOwnerAnswerAllowed;
-  req.body.StreamFlow = CapsuleData.StreamFlow ? CapsuleData.StreamFlow : null;
+  req.body.StreamFlow = CapsuleData.StreamFlow || null;
   req.body.CapsuleData = CapsuleData;
 
-  var IsOwnerPostsForMember = CapsuleData.IsOwnerPostsForMember
-    ? CapsuleData.IsOwnerPostsForMember
-    : false;
-  var IsPurchaseNeededForAllPosts = CapsuleData.IsPurchaseNeededForAllPosts
-    ? CapsuleData.IsPurchaseNeededForAllPosts
-    : false;
+  const IsOwnerPostsForMember = CapsuleData.IsOwnerPostsForMember || false;
+  const IsPurchaseNeededForAllPosts = CapsuleData.IsPurchaseNeededForAllPosts || false;
 
   if (StreamType == "Group" && String(OwnerId) != String(loginUserId)) {
     var cond = {
@@ -10398,9 +10394,10 @@ var myStreamPosts = async function (req, res) {
       IsDeleted: false,
     };
 
+    // ✅ Show only DELIVERED posts with DateOfDelivery <= today (users see posts that were sent to them)
     var finalConditions = {
       DateOfDelivery: { $lte: todayEnd },
-      Delivered: false,
+      Delivered: true,
     };
     var todayYear = todayEnd.getFullYear();
     var todayTimestamp = todayEnd.getTime();
@@ -10521,7 +10518,7 @@ var myStreamPosts = async function (req, res) {
     }
 
     //allocate table to each one-to-one meeting for normal table case
-    SyncedPost.aggregate([
+    const syncedPostsResults = await SyncedPost.aggregate([
       { $match: conditions },
       { $unwind: "$EmailEngineDataSets" },
       {
@@ -10611,10 +10608,9 @@ var myStreamPosts = async function (req, res) {
       { $sort: sortBy },
       { $skip: 0 },
       { $limit: 500 },
-    ])
-      .allowDiskUse(true)
-      .exec(async function (err, syncedPostsResults) {
-        syncedPostsResults = syncedPostsResults ? syncedPostsResults : [];
+    ]).allowDiskUse(true).exec();
+
+    // Handle empty results for Group streams
         if (StreamType == "Group" && !syncedPostsResults.length) {
           if (!StreamLaunchDate) {
             return res.json({
@@ -10624,7 +10620,6 @@ var myStreamPosts = async function (req, res) {
             });
           }
           var OwnerBirthdate = new Date(StreamLaunchDate);
-          //OwnerBirthdate.setFullYear(todayYear);
           var OBTimestamp = OwnerBirthdate.getTime();
 
           if (todayTimestamp >= OBTimestamp) {
@@ -10636,270 +10631,234 @@ var myStreamPosts = async function (req, res) {
           } else {
             return myStreamPosts__GroupStream_OwnerCase_InfoPosts(req, res);
           }
+    }
+
+    var streamPosts = [];
+    try {
+      //allocate table and update meeting record
+      for (let loop = 0; loop < syncedPostsResults.length; loop++) {
+        var dataRecord = syncedPostsResults[loop];
+
+        dataRecord.SharedByUser = dataRecord.SharedByUser
+          ? dataRecord.SharedByUser[0]
+          : {};
+
+        dataRecord.SocialPageId = null;
+        dataRecord.SocialPostId = null;
+
+        dataRecord.PageData = dataRecord.PageData
+          ? dataRecord.PageData[0]
+          : {};
+        dataRecord.PageData.OriginatedFrom = dataRecord.PageData
+          .OriginatedFrom
+          ? dataRecord.PageData.OriginatedFrom
+          : null;
+        dataRecord.PageData.Medias = dataRecord.PageData.Medias
+          ? dataRecord.PageData.Medias
+          : [];
+
+        //there might be cases where the actual post or page has been deleted - In this case the post will no longer be visible in the social page
+
+        dataRecord.SocialPageId = dataRecord.PageData.OriginatedFrom
+          ? dataRecord.PageData.OriginatedFrom
+          : null;
+        dataRecord.PostType = "Post";
+        dataRecord.KeyPostType = null;
+
+        var GroupStreamPostIds = [];
+        for (var i = 0; i < dataRecord.PageData.Medias.length; i++) {
+          if (
+            String(dataRecord.PostId) ==
+              String(dataRecord.PageData.Medias[i]._id) &&
+            dataRecord.PageData.Medias[i].OriginatedFrom
+          ) {
+            dataRecord.SocialPostId =
+        dataRecord.PageData.Medias[i].OriginatedFrom;
+            dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
+              ? dataRecord.PageData.Medias[i].PostType
+              : "Post";
+
+            dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
+              ? dataRecord.PageData.Medias[i].MediaType
+              : "";
+            dataRecord.ContentType = dataRecord.PageData.Medias[i]
+              .ContentType
+              ? dataRecord.PageData.Medias[i].ContentType
+              : "";
+            if (dataRecord.PostType == "KeyPost") {
+        dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
+                .KeyPostType
+                ? dataRecord.PageData.Medias[i].KeyPostType
+                : "Comment";
+            }
+
+            break;
+          }
         }
-        if (!err) {
-          var streamPosts = [];
-          try {
-            //allocate table and update meeting record
-            for (let loop = 0; loop < syncedPostsResults.length; loop++) {
-              var dataRecord = syncedPostsResults[loop];
 
-              dataRecord.SharedByUser = dataRecord.SharedByUser
-                ? dataRecord.SharedByUser[0]
+        if (!dataRecord.SocialPostId) {
+          GroupStreamPostIds.push(ObjectId(String(dataRecord.PostId)));
+        }
+
+        //GroupStream Post fetching flow
+        if (GroupStreamPostIds.length) {
+          var PostArr = await Page.aggregate([
+            { $match: { "Medias._id": { $in: GroupStreamPostIds } } },
+            { $unwind: "$Medias" },
+            { $match: { "Medias._id": { $in: GroupStreamPostIds } } },
+            {
+              $project: {
+                _id: "$Medias._id",
+                PostedOn: "$Medias.PostedOn",
+                UpdatedOn: "$Medias.UpdatedOn",
+                Votes: "$Medias.Votes",
+                Marks: "$Medias.Marks",
+                IsOnlyForOwner: "$Medias.IsOnlyForOwner",
+                IsAdminApproved: "$Medias.IsAdminApproved",
+                PostPrivacySetting: "$Medias.PostPrivacySetting",
+                Themes: "$Medias.Themes",
+                TaggedUsers: "$Medias.TaggedUsers",
+                IsUnsplashImage: "$Medias.IsUnsplashImage",
+                IsAddedFromStream: "$Medias.IsAddedFromStream",
+                IsPostForUser: "$Medias.IsPostForUser",
+                IsPostForTeam: "$Medias.IsPostForTeam",
+                IsEditorPicked: "$Medias.IsEditorPicked",
+                Lightness: "$Medias.Lightness",
+                DominantColors: "$Medias.DominantColors",
+                PostType: "$Medias.PostType",
+                KeyPostType: "$Medias.KeyPostType",
+                MediaID: "$Medias.MediaID",
+                MediaURL: "$Medias.MediaURL",
+                Title: "$Medias.Title",
+                Prompt: "$Medias.Prompt",
+                Locator: "$Medias.Locator",
+                PostedBy: "$Medias.PostedBy",
+                ThemeID: "$Medias.ThemeID",
+                ThemeTitle: "$Medias.ThemeTitle",
+                MediaType: "$Medias.MediaType",
+                ContentType: "$Medias.ContentType",
+                Content: "$Medias.Content",
+                OwnerId: "$Medias.OwnerId",
+                thumbnail: "$Medias.thumbnail",
+                PostStatement: "$Medias.PostStatement",
+                StreamId: "$Medias.StreamId",
+                QuestionPostId: "$Medias.QuestionPostId",
+                SurpriseSelectedWords: "$Medias.SurpriseSelectedWords",
+              },
+            },
+            {
+              $lookup: {
+                from: "users",
+                localField: "PostedBy",
+                foreignField: "_id",
+                as: "SharedByUser",
+              },
+            },
+          ]);
+
+          console.log(
+            "PostArr.length 11---------------------------- ",
+            PostArr.length
+          );
+          PostArr = Array.isArray(PostArr) ? PostArr : [];
+          console.log(
+            "PostArr.length 22---------------------------- ",
+            PostArr.length
+          );
+
+          for (var k = 0; k < PostArr.length; k++) {
+            PostArr[k].OriginatedFrom = PostArr[k]._id;
+            if (
+              String(dataRecord.PostId) == String(PostArr[k]._id) &&
+              PostArr[k].OriginatedFrom
+            ) {
+        dataRecord.SharedByUser = PostArr[k].SharedByUser.length
+                ? PostArr[k].SharedByUser[0]
                 : {};
+        dataRecord.SocialPostId = PostArr[k].OriginatedFrom;
+        dataRecord.PostType = PostArr[k].PostType
+                ? PostArr[k].PostType
+                : "Post";
 
-              dataRecord.SocialPageId = null;
-              dataRecord.SocialPostId = null;
-
-              dataRecord.PageData = dataRecord.PageData
-                ? dataRecord.PageData[0]
-                : {};
-              dataRecord.PageData.OriginatedFrom = dataRecord.PageData
-                .OriginatedFrom
-                ? dataRecord.PageData.OriginatedFrom
-                : null;
-              dataRecord.PageData.Medias = dataRecord.PageData.Medias
-                ? dataRecord.PageData.Medias
-                : [];
-
-              //there might be cases where the actual post or page has been deleted - In this case the post will no longer be visible in the social page
-
-              dataRecord.SocialPageId = dataRecord.PageData.OriginatedFrom
-                ? dataRecord.PageData.OriginatedFrom
-                : null;
-              dataRecord.PostType = "Post";
-              dataRecord.KeyPostType = null;
-
-              var GroupStreamPostIds = [];
-              for (var i = 0; i < dataRecord.PageData.Medias.length; i++) {
-                if (
-                  String(dataRecord.PostId) ==
-                    String(dataRecord.PageData.Medias[i]._id) &&
-                  dataRecord.PageData.Medias[i].OriginatedFrom
-                ) {
-                  dataRecord.SocialPostId =
-                    dataRecord.PageData.Medias[i].OriginatedFrom;
-                  dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
-                    ? dataRecord.PageData.Medias[i].PostType
-                    : "Post";
-
-                  dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
-                    ? dataRecord.PageData.Medias[i].MediaType
-                    : "";
-                  dataRecord.ContentType = dataRecord.PageData.Medias[i]
-                    .ContentType
-                    ? dataRecord.PageData.Medias[i].ContentType
-                    : "";
-                  if (dataRecord.PostType == "KeyPost") {
-                    dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
-                      .KeyPostType
-                      ? dataRecord.PageData.Medias[i].KeyPostType
-                      : "Comment";
-                  }
-
-                  break;
-                }
+        dataRecord.MediaType = PostArr[k].MediaType
+                ? PostArr[k].MediaType
+                : "";
+        dataRecord.ContentType = PostArr[k].ContentType
+                ? PostArr[k].ContentType
+                : "";
+              if (dataRecord.PostType == "KeyPost") {
+          dataRecord.KeyPostType = PostArr[k].KeyPostType
+                  ? PostArr[k].KeyPostType
+                  : "Comment";
               }
 
-              if (!dataRecord.SocialPostId) {
-                GroupStreamPostIds.push(ObjectId(String(dataRecord.PostId)));
+              if (
+                PostArr[k].PostType == "AnswerPost" &&
+                PostArr[k].MediaType != "Notes"
+              ) {
+                //dataRecord.hexcode_blendedImage = PostArr[k].PostImage;
+          dataRecord.PostType = "GeneralPost";
+          dataRecord.VisualUrls = [];
+          dataRecord.VisualUrls[0] = dataRecord.PostImage;
+          dataRecord.VisualUrls[1] = dataRecord.PostImage;
               }
 
-              //GroupStream Post fetching flow
-              if (GroupStreamPostIds.length) {
-                var PostArr = await Page.aggregate([
-                  { $match: { "Medias._id": { $in: GroupStreamPostIds } } },
-                  { $unwind: "$Medias" },
-                  { $match: { "Medias._id": { $in: GroupStreamPostIds } } },
-                  {
-                    $project: {
-                      _id: "$Medias._id",
-                      PostedOn: "$Medias.PostedOn",
-                      UpdatedOn: "$Medias.UpdatedOn",
-                      Votes: "$Medias.Votes",
-                      Marks: "$Medias.Marks",
-                      IsOnlyForOwner: "$Medias.IsOnlyForOwner",
-                      IsAdminApproved: "$Medias.IsAdminApproved",
-                      PostPrivacySetting: "$Medias.PostPrivacySetting",
-                      Themes: "$Medias.Themes",
-                      TaggedUsers: "$Medias.TaggedUsers",
-                      IsUnsplashImage: "$Medias.IsUnsplashImage",
-                      IsAddedFromStream: "$Medias.IsAddedFromStream",
-                      IsPostForUser: "$Medias.IsPostForUser",
-                      IsPostForTeam: "$Medias.IsPostForTeam",
-                      IsEditorPicked: "$Medias.IsEditorPicked",
-                      Lightness: "$Medias.Lightness",
-                      DominantColors: "$Medias.DominantColors",
-                      PostType: "$Medias.PostType",
-                      KeyPostType: "$Medias.KeyPostType",
-                      MediaID: "$Medias.MediaID",
-                      MediaURL: "$Medias.MediaURL",
-                      Title: "$Medias.Title",
-                      Prompt: "$Medias.Prompt",
-                      Locator: "$Medias.Locator",
-                      PostedBy: "$Medias.PostedBy",
-                      ThemeID: "$Medias.ThemeID",
-                      ThemeTitle: "$Medias.ThemeTitle",
-                      MediaType: "$Medias.MediaType",
-                      ContentType: "$Medias.ContentType",
-                      Content: "$Medias.Content",
-                      OwnerId: "$Medias.OwnerId",
-                      thumbnail: "$Medias.thumbnail",
-                      PostStatement: "$Medias.PostStatement",
-                      StreamId: "$Medias.StreamId",
-                      QuestionPostId: "$Medias.QuestionPostId",
-                      SurpriseSelectedWords: "$Medias.SurpriseSelectedWords",
-                    },
-                  },
-                  {
-                    $lookup: {
-                      from: "users",
-                      localField: "PostedBy",
-                      foreignField: "_id",
-                      as: "SharedByUser",
-                    },
-                  },
-                ]);
+              break;
+            }
+          }
+        }
 
-                console.log(
-                  "PostArr.length 11---------------------------- ",
-                  PostArr.length
-                );
-                PostArr = Array.isArray(PostArr) ? PostArr : [];
-                console.log(
-                  "PostArr.length 22---------------------------- ",
-                  PostArr.length
-                );
+        if (!dataRecord.SocialPageId || !dataRecord.SocialPostId) {
+          continue;
+        }
+        dataRecord.hexcode_blendedImage = null;
 
-                for (var k = 0; k < PostArr.length; k++) {
-                  PostArr[k].OriginatedFrom = PostArr[k]._id;
-                  if (
-                    String(dataRecord.PostId) == String(PostArr[k]._id) &&
-                    PostArr[k].OriginatedFrom
-                  ) {
-                    dataRecord.SharedByUser = PostArr[k].SharedByUser.length
-                      ? PostArr[k].SharedByUser[0]
-                      : {};
-                    dataRecord.SocialPostId = PostArr[k].OriginatedFrom;
-                    dataRecord.PostType = PostArr[k].PostType
-                      ? PostArr[k].PostType
-                      : "Post";
-
-                    dataRecord.MediaType = PostArr[k].MediaType
-                      ? PostArr[k].MediaType
-                      : "";
-                    dataRecord.ContentType = PostArr[k].ContentType
-                      ? PostArr[k].ContentType
-                      : "";
-                    if (dataRecord.PostType == "KeyPost") {
-                      dataRecord.KeyPostType = PostArr[k].KeyPostType
-                        ? PostArr[k].KeyPostType
-                        : "Comment";
-                    }
-
-                    if (
-                      PostArr[k].PostType == "AnswerPost" &&
-                      PostArr[k].MediaType != "Notes"
-                    ) {
-                      //dataRecord.hexcode_blendedImage = PostArr[k].PostImage;
-                      dataRecord.PostType = "GeneralPost";
-                      dataRecord.VisualUrls = [];
-                      dataRecord.VisualUrls[0] = dataRecord.PostImage;
-                      dataRecord.VisualUrls[1] = dataRecord.PostImage;
-                    }
-
-                    /*
-									if(PostArr[k].PostType == 'AnswerPost' && PostArr[k].MediaType != 'Notes') {
-										PostArr[k].IsOnetimeStream = PostArr[k].IsOnetimeStream || false;
-
-										if(PostArr[k].IsOnetimeStream) {
-											dataRecord.IsOnetimeStream = true;
-											dataRecord.IsOnlyPostImage = true;
-											dataRecord.VisualUrls = [];
-											dataRecord.VisualUrls[0] = dataRecord.PostImage;
-											dataRecord.VisualUrls[1] = dataRecord.PostImage;
-										} else {
-											dataRecord.PostType = 'GeneralPost';
-											dataRecord.VisualUrls = [];
-											dataRecord.VisualUrls[0] = dataRecord.PostImage;
-											dataRecord.VisualUrls[1] = dataRecord.PostImage;
-										}
-									}*/
-
-                    /*
-									if(PostArr[k].PostType == 'AnswerPost') {
-										PostArr[k].IsOnetimeStream = PostArr[k].IsOnetimeStream || false;
-										if(PostArr[k].IsOnetimeStream) {
-											dataRecord.IsOnetimeStream = true;
-											dataRecord.IsOnlyPostImage = true;
-											if(PostArr[k].MediaType == 'Notes') {
-												dataRecord.VisualUrls = [];
-											}
-										} else {
-											//dataRecord.hexcode_blendedImage = PostArr[k].PostImage;
-											//dataRecord.PostType = 'GeneralPost';
-											dataRecord.VisualUrls = [];
-											dataRecord.VisualUrls[0] = dataRecord.PostImage;
-											dataRecord.VisualUrls[1] = dataRecord.PostImage;
-										}
-									}*/
-
-                    break;
-                  }
-                }
-              }
-
-              if (!dataRecord.SocialPageId || !dataRecord.SocialPostId) {
-                continue;
-              }
-              dataRecord.hexcode_blendedImage = null;
-
-              dataRecord.VisualUrls = dataRecord.VisualUrls
-                ? dataRecord.VisualUrls
-                : [];
-              dataRecord.PostStatement = dataRecord.PostStatement
+        dataRecord.VisualUrls = dataRecord.VisualUrls
+          ? dataRecord.VisualUrls
+          : [];
+        dataRecord.PostStatement = dataRecord.PostStatement
                 ? dataRecord.PostStatement
                 : "";
-              dataRecord.Subject = dataRecord.Subject
+        dataRecord.Subject = dataRecord.Subject
                 ? dataRecord.Subject
                 : null;
-              dataRecord.TextAboveVisual = dataRecord.TextAboveVisual
+        dataRecord.TextAboveVisual = dataRecord.TextAboveVisual
                 ? dataRecord.TextAboveVisual
                 : "";
-              dataRecord.TextBelowVisual = dataRecord.TextBelowVisual
+        dataRecord.TextBelowVisual = dataRecord.TextBelowVisual
                 ? dataRecord.TextBelowVisual
                 : "";
-              dataRecord.SoundFileUrl = dataRecord.SoundFileUrl
+        dataRecord.SoundFileUrl = dataRecord.SoundFileUrl
                 ? dataRecord.SoundFileUrl
                 : "";
-              dataRecord.BlendMode = dataRecord.BlendMode
+        dataRecord.BlendMode = dataRecord.BlendMode
                 ? dataRecord.BlendMode
                 : "hard-light";
-              dataRecord.EmailTemplate = dataRecord.EmailTemplate
+        dataRecord.EmailTemplate = dataRecord.EmailTemplate
                 ? dataRecord.EmailTemplate
                 : "PracticalThinker";
 
-              dataRecord.CapsuleId = dataRecord.CapsuleId
+        dataRecord.CapsuleId = dataRecord.CapsuleId
                 ? dataRecord.CapsuleId
                 : null;
-              dataRecord.PageId = dataRecord.PageId ? dataRecord.PageId : null;
-              dataRecord.PostId = dataRecord.PostId ? dataRecord.PostId : null;
+        dataRecord.PageId = dataRecord.PageId ? dataRecord.PageId : null;
+        dataRecord.PostId = dataRecord.PostId ? dataRecord.PostId : null;
 
-              dataRecord.CapsuleData =
+        dataRecord.CapsuleData =
                 typeof dataRecord.CapsuleData == "object"
                   ? dataRecord.CapsuleData.length > 0
                     ? dataRecord.CapsuleData[0]
                     : {}
                   : {};
-              dataRecord.CapsuleData.MetaData = dataRecord.CapsuleData.MetaData
+        dataRecord.CapsuleData.MetaData = dataRecord.CapsuleData.MetaData
                 ? dataRecord.CapsuleData.MetaData
                 : {};
-              dataRecord.CapsuleData.MetaData.publisher = dataRecord.CapsuleData
+        dataRecord.CapsuleData.MetaData.publisher = dataRecord.CapsuleData
                 .MetaData.publisher
                 ? dataRecord.CapsuleData.MetaData.publisher
                 : "The Scrpt Co.";
 
-              dataRecord.SharedByUserName = dataRecord.CapsuleData.MetaData
+        dataRecord.SharedByUserName = dataRecord.CapsuleData.MetaData
                 .publisher
                 ? dataRecord.CapsuleData.MetaData.publisher
                 : "NA";
@@ -10912,7 +10871,7 @@ var myStreamPosts = async function (req, res) {
 
               console.log(
                 "dataRecord.VisualUrls.length ---------------------- ",
-                dataRecord.VisualUrls.length
+          dataRecord.VisualUrls.length
               );
               if (dataRecord.VisualUrls.length == 1) {
                 PostImage1 = dataRecord.VisualUrls[0];
@@ -10980,120 +10939,100 @@ var myStreamPosts = async function (req, res) {
                     ? "Surprise__Post_2Image_OUTLOOK"
                     : "Surprise__Post_OUTLOOK";
               }
-              dataRecord.hexcode_blendedImage = blendedImage;
+        dataRecord.hexcode_blendedImage = blendedImage;
 
               if (dataRecord.MediaType == "Video") {
-                dataRecord.hexcode_blendedImage =
-                  dataRecord.hexcode_blendedImage.replace(
+          dataRecord.hexcode_blendedImage =
+            dataRecord.hexcode_blendedImage.replace(
                     "/Media/img/",
                     "/Media/video/"
                   );
-                dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+          dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-                dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
+          dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-              }
-
-              var CapsuleData = {
-                IsOnlyPostImage: dataRecord.CapsuleData.IsOnlyPostImage
-                  ? dataRecord.CapsuleData.IsOnlyPostImage
-                  : false,
-              };
-              dataRecord.CapsuleData = CapsuleData;
-
-              delete dataRecord.PageData;
-
-              //if(StreamType == 'Group' && dataRecord.PostType == 'InfoPostOwner') {
-              if (StreamType == "Group") {
-                let loginUserName = req.session.user.Name.split(" ")[0];
-                let sharedbyusername =
-                  dataRecord.SharedByUser.Name.split(" ")[0];
-                dataRecord.PostStatement = dataRecord.PostStatement.replace(
-                  /{Owner}/g,
-                  loginUserName
-                );
-                dataRecord.PostStatement = dataRecord.PostStatement.replace(
-                  /{OwnerName}/g,
-                  loginUserName
-                );
-                dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
-                  /{Owner}/g,
-                  loginUserName
-                );
-                dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
-                  /{OwnerName}/g,
-                  loginUserName
-                );
-
-                //dataRecord.PostStatement = dataRecord.PostStatement.replace(/{Member}/g, loginUserName);
-                //dataRecord.PostStatement = dataRecord.PostStatement.replace(/{MemberName}/g, loginUserName);
-                //dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(/{Member}/g, loginUserName);
-                //dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(/{MemberName}/g, loginUserName);
-              }
-              /*if(dataRecord.VisualUrls[0] === 'https://www.scrpt.com/assets/Media/img/300/') {
-							dataRecord.VisualUrls = [];
-						}*/
-              streamPosts.push(dataRecord);
-            }
-            return res.json({
-              code: "200",
-              message: "success",
-              results: streamPosts,
-            });
-          } catch (error) {
-            console.log("error --------- ", error);
-            return res.json({
-              code: "501",
-              message: "Something went wrong.",
-              caughtError: error,
-              results: [],
-            });
-          }
-        } else {
-          return res.json({
-            code: "501",
-            message: "Something went wrong.",
-            results: [],
-          });
         }
+
+        const capsuleDataSimplified = {
+          IsOnlyPostImage: dataRecord.CapsuleData.IsOnlyPostImage
+            ? dataRecord.CapsuleData.IsOnlyPostImage
+            : false,
+        };
+        dataRecord.CapsuleData = capsuleDataSimplified;
+
+        delete dataRecord.PageData;
+
+        //if(StreamType == 'Group' && dataRecord.PostType == 'InfoPostOwner') {
+        if (StreamType == "Group") {
+          let loginUserName = req.session.user.Name.split(" ")[0];
+          let sharedbyusername =
+            dataRecord.SharedByUser.Name.split(" ")[0];
+          dataRecord.PostStatement = dataRecord.PostStatement.replace(
+            /{Owner}/g,
+            loginUserName
+          );
+          dataRecord.PostStatement = dataRecord.PostStatement.replace(
+            /{OwnerName}/g,
+            loginUserName
+          );
+          dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
+            /{Owner}/g,
+            loginUserName
+          );
+          dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
+            /{OwnerName}/g,
+            loginUserName
+          );
+        }
+        
+        streamPosts.push(dataRecord);
+      }
+      return res.json({
+        code: "200",
+        message: "success",
+        results: streamPosts,
       });
+    } catch (error) {
+      console.log("error --------- ", error);
+      return res.json({
+        code: "501",
+        message: "Something went wrong.",
+        caughtError: error,
+        results: [],
+      });
+    }
   }
 };
 
-var myStreamPosts_friendAsOwner = async function (req, res) {
-  //console.log("<<<<<<<<<<<<<<<<<<<<<<<<<<<<<< myStreamPosts_friendAsOwner >>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>   "); return;
-
-  req.body.IsQS = req.body.IsQS ? req.body.IsQS : false;
-  var StreamType = req.body.StreamType ? req.body.StreamType : null;
-  var OwnerId = req.body.OwnerId ? req.body.OwnerId : null;
-  var CapsuleId = req.body.CapsuleId ? req.body.CapsuleId : null;
-  var loginUserId = OwnerId; //req.session.user._id;
-  var CapsuleData =
+const myStreamPosts_friendAsOwner = async (req, res) => {
+  req.body.IsQS = req.body.IsQS || false;
+  const StreamType = req.body.StreamType || null;
+  const OwnerId = req.body.OwnerId || null;
+  const CapsuleId = req.body.CapsuleId || null;
+  const loginUserId = OwnerId; //req.session.user._id;
+  const CapsuleData =
     typeof req.body.CapsuleData == "object" ? req.body.CapsuleData : null;
   if (!CapsuleData) {
     return res.json({ code: "404", message: "No stream found.", results: [] });
   }
 
-  var OwnerDetails = await User.findOne(
+  const OwnerDetails = await User.findOne(
     { _id: new ObjectId(OwnerId), IsDeleted: 0 },
     { Name: 1, Email: 1, Birthdate: 1 }
   );
-  OwnerDetails = typeof OwnerDetails == "object" ? OwnerDetails : null;
 
   if (!CapsuleId || !OwnerDetails) {
     return res.json({ code: "404", message: "No stream found.", results: [] });
   }
 
-  var todayEnd = new Date();
-  //var todayTimestamp = todayEnd.getTime();
-
+  const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  var conditions = {
+  const conditions = {
     CapsuleId: new ObjectId(CapsuleId),
     SyncedBy: new ObjectId(loginUserId),
     IsDeleted: false,
@@ -11101,16 +11040,10 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
   };
 
   if (StreamType == "Group") {
-    var todayYear = todayEnd.getFullYear();
-    var todayTimestamp = todayEnd.getTime();
+    const todayTimestamp = todayEnd.getTime();
+    const StreamLaunchDate = CapsuleData.LaunchDate || null;
 
-    var StreamLaunchDate = CapsuleData.LaunchDate
-      ? CapsuleData.LaunchDate
-      : null;
-
-    CapsuleData.StreamFlow = CapsuleData.StreamFlow
-      ? CapsuleData.StreamFlow
-      : "Birthday";
+    CapsuleData.StreamFlow = CapsuleData.StreamFlow || "Birthday";
     if (CapsuleData.StreamFlow == "Birthday") {
       if (!StreamLaunchDate) {
         return res.json({
@@ -11119,9 +11052,8 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
           results: [],
         });
       }
-      var OwnerBirthdate = new Date(StreamLaunchDate);
-      //OwnerBirthdate.setFullYear(todayYear);
-      var OBTimestamp = OwnerBirthdate.getTime();
+      const OwnerBirthdate = new Date(StreamLaunchDate);
+      const OBTimestamp = OwnerBirthdate.getTime();
       if (todayTimestamp < OBTimestamp) {
         return myStreamPosts__GroupStream_OwnerCase_InfoPosts(req, res);
       }
@@ -11136,9 +11068,8 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
           results: [],
         });
       }
-      var OwnerBirthdate = new Date(StreamLaunchDate);
-      //OwnerBirthdate.setFullYear(todayYear);
-      var OBTimestamp = OwnerBirthdate.getTime();
+      const OwnerBirthdate = new Date(StreamLaunchDate);
+      const OBTimestamp = OwnerBirthdate.getTime();
       if (todayTimestamp < OBTimestamp) {
         return myStreamPosts__GroupStream_OwnerCase_InfoPosts(req, res);
       }
@@ -11146,7 +11077,7 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
   }
 
   //allocate table to each one-to-one meeting for normal table case
-  SyncedPost.aggregate([
+  const syncedPostsResults = await SyncedPost.aggregate([
     { $match: conditions },
     { $unwind: "$EmailEngineDataSets" },
     {
@@ -11248,79 +11179,67 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
     { $sort: { DateOfDelivery: -1 } },
     { $skip: 0 },
     { $limit: 500 },
-  ])
-    .allowDiskUse(true)
-    .exec(async function (err, syncedPostsResults) {
-      console.log("!!!!!!!!!!!!!!!!!!!!11---------------ERROR = ", err);
+  ]).allowDiskUse(true).exec();
 
-      syncedPostsResults = syncedPostsResults ? syncedPostsResults : [];
-      console.log(
-        "9999999999999999999999999999999 syncedPostsResults.length ---------------------",
-        syncedPostsResults.length
-      );
-      //return;
-      if (StreamType == "Group" && !syncedPostsResults.length) {
-        return myStreamPosts__GroupStream_OwnerCase_InfoPosts(req, res);
-      }
-      console.log(
-        "@@@@@@@@@@@@@@@@@@@@@@@@@@@2235------------------------syncedPostsResults.length = ",
-        syncedPostsResults.length
-      );
-      if (!err) {
-        var streamPosts = [];
-        try {
-          //allocate table and update meeting record
-          for (let loop = 0; loop < syncedPostsResults.length; loop++) {
-            var dataRecord = syncedPostsResults[loop];
+  // Handle empty results for Group streams
+  if (StreamType == "Group" && !syncedPostsResults.length) {
+    return myStreamPosts__GroupStream_OwnerCase_InfoPosts(req, res);
+  }
 
-            dataRecord.SharedByUser = dataRecord.SharedByUser
-              ? dataRecord.SharedByUser[0]
-              : {};
+  var streamPosts = [];
+  try {
+    //allocate table and update meeting record
+    for (let loop = 0; loop < syncedPostsResults.length; loop++) {
+      var dataRecord = syncedPostsResults[loop];
 
-            dataRecord.SocialPageId = null;
-            dataRecord.SocialPostId = null;
+      dataRecord.SharedByUser = dataRecord.SharedByUser
+        ? dataRecord.SharedByUser[0]
+        : {};
 
-            dataRecord.PageData = dataRecord.PageData
-              ? dataRecord.PageData[0]
-              : {};
-            dataRecord.PageData.OriginatedFrom = dataRecord.PageData
-              .OriginatedFrom
-              ? dataRecord.PageData.OriginatedFrom
-              : null;
-            dataRecord.PageData.Medias = dataRecord.PageData.Medias
-              ? dataRecord.PageData.Medias
-              : [];
+      dataRecord.SocialPageId = null;
+      dataRecord.SocialPostId = null;
 
-            //there might be cases where the actual post or page has been deleted - In this case the post will no longer be visible in the social page
+      dataRecord.PageData = dataRecord.PageData
+        ? dataRecord.PageData[0]
+        : {};
+      dataRecord.PageData.OriginatedFrom = dataRecord.PageData
+        .OriginatedFrom
+        ? dataRecord.PageData.OriginatedFrom
+        : null;
+      dataRecord.PageData.Medias = dataRecord.PageData.Medias
+        ? dataRecord.PageData.Medias
+        : [];
 
-            dataRecord.SocialPageId = dataRecord.PageData.OriginatedFrom
-              ? dataRecord.PageData.OriginatedFrom
-              : null;
-            dataRecord.PostType = "Post";
-            dataRecord.KeyPostType = null;
+      //there might be cases where the actual post or page has been deleted - In this case the post will no longer be visible in the social page
 
-            var GroupStreamPostIds = [];
-            for (var i = 0; i < dataRecord.PageData.Medias.length; i++) {
+      dataRecord.SocialPageId = dataRecord.PageData.OriginatedFrom
+        ? dataRecord.PageData.OriginatedFrom
+        : null;
+      dataRecord.PostType = "Post";
+      dataRecord.KeyPostType = null;
+
+      var GroupStreamPostIds = [];
+      for (var i = 0; i < dataRecord.PageData.Medias.length; i++) {
               if (
                 String(dataRecord.PostId) ==
                   String(dataRecord.PageData.Medias[i]._id) &&
-                dataRecord.PageData.Medias[i].OriginatedFrom
+          dataRecord.PageData.Medias[i].OriginatedFrom
               ) {
-                dataRecord.SocialPostId =
-                  dataRecord.PageData.Medias[i].OriginatedFrom;
-                dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
+          dataRecord.SocialPostId =
+            dataRecord.PageData.Medias[i].OriginatedFrom;
+          dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
                   ? dataRecord.PageData.Medias[i].PostType
                   : "Post";
 
-                dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
+          dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
                   ? dataRecord.PageData.Medias[i].MediaType
                   : "";
-                dataRecord.ContentType = dataRecord.PageData.Medias[i]
+          dataRecord.ContentType = dataRecord.PageData.Medias[i]
                   .ContentType
                   ? dataRecord.PageData.Medias[i].ContentType
                   : "";
                 if (dataRecord.PostType == "KeyPost") {
-                  dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
+            dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
                     .KeyPostType
                     ? dataRecord.PageData.Medias[i].KeyPostType
                     : "Comment";
@@ -11406,22 +11325,22 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
                   String(dataRecord.PostId) == String(PostArr[k]._id) &&
                   PostArr[k].OriginatedFrom
                 ) {
-                  dataRecord.SharedByUser = PostArr[k].SharedByUser.length
+            dataRecord.SharedByUser = PostArr[k].SharedByUser.length
                     ? PostArr[k].SharedByUser[0]
                     : {};
-                  dataRecord.SocialPostId = PostArr[k].OriginatedFrom;
-                  dataRecord.PostType = PostArr[k].PostType
+            dataRecord.SocialPostId = PostArr[k].OriginatedFrom;
+            dataRecord.PostType = PostArr[k].PostType
                     ? PostArr[k].PostType
                     : "Post";
 
-                  dataRecord.MediaType = PostArr[k].MediaType
+            dataRecord.MediaType = PostArr[k].MediaType
                     ? PostArr[k].MediaType
                     : "";
-                  dataRecord.ContentType = PostArr[k].ContentType
+            dataRecord.ContentType = PostArr[k].ContentType
                     ? PostArr[k].ContentType
                     : "";
                   if (dataRecord.PostType == "KeyPost") {
-                    dataRecord.KeyPostType = PostArr[k].KeyPostType
+              dataRecord.KeyPostType = PostArr[k].KeyPostType
                       ? PostArr[k].KeyPostType
                       : "Comment";
                   }
@@ -11431,10 +11350,10 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
                     PostArr[k].MediaType != "Notes"
                   ) {
                     //dataRecord.hexcode_blendedImage = PostArr[k].PostImage;
-                    dataRecord.PostType = "GeneralPost";
-                    dataRecord.VisualUrls = [];
-                    dataRecord.VisualUrls[0] = dataRecord.PostImage;
-                    dataRecord.VisualUrls[1] = dataRecord.PostImage;
+              dataRecord.PostType = "GeneralPost";
+              dataRecord.VisualUrls = [];
+              dataRecord.VisualUrls[0] = dataRecord.PostImage;
+              dataRecord.VisualUrls[1] = dataRecord.PostImage;
                   }
 
                   break;
@@ -11503,7 +11422,7 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
 
             console.log(
               "dataRecord.VisualUrls.length ---------------------- ",
-              dataRecord.VisualUrls.length
+        dataRecord.VisualUrls.length
             );
             if (dataRecord.VisualUrls.length == 1) {
               PostImage1 = dataRecord.VisualUrls[0];
@@ -11573,27 +11492,27 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
             dataRecord.hexcode_blendedImage = blendedImage;
 
             if (dataRecord.MediaType == "Video") {
-              dataRecord.hexcode_blendedImage =
-                dataRecord.hexcode_blendedImage.replace(
+        dataRecord.hexcode_blendedImage =
+          dataRecord.hexcode_blendedImage.replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-              dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+        dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                 "/Media/img/",
                 "/Media/video/"
               );
-              dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
+        dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
                 "/Media/img/",
                 "/Media/video/"
               );
             }
 
-            var CapsuleData = {
+            const capsuleDataLocal = {
               IsOnlyPostImage: dataRecord.CapsuleData.IsOnlyPostImage
                 ? dataRecord.CapsuleData.IsOnlyPostImage
                 : false,
             };
-            dataRecord.CapsuleData = CapsuleData;
+            dataRecord.CapsuleData = capsuleDataLocal;
 
             delete dataRecord.PageData;
 
@@ -11601,19 +11520,19 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
             if (StreamType == "Group") {
               let loginUserName = OwnerDetails.Name.split(" ")[0];
               let sharedbyusername = dataRecord.SharedByUser.Name.split(" ")[0];
-              dataRecord.PostStatement = dataRecord.PostStatement.replace(
+        dataRecord.PostStatement = dataRecord.PostStatement.replace(
                 /{Owner}/g,
                 loginUserName
               );
-              dataRecord.PostStatement = dataRecord.PostStatement.replace(
+        dataRecord.PostStatement = dataRecord.PostStatement.replace(
                 /{OwnerName}/g,
                 loginUserName
               );
-              dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
+        dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
                 /{Owner}/g,
                 loginUserName
               );
-              dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
+        dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
                 /{OwnerName}/g,
                 loginUserName
               );
@@ -11626,37 +11545,29 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
 
             streamPosts.push(dataRecord);
           }
-          return res.json({
-            code: "200",
-            message: "success",
-            results: streamPosts,
-          });
-        } catch (error) {
-          console.log("error --------- ", error);
-          return res.json({
-            code: "501",
-            message: "Something went wrong.",
-            caughtError: error,
-            results: [],
-          });
-        }
-      } else {
+        return res.json({
+          code: "200",
+          message: "success",
+          results: streamPosts,
+        });
+      } catch (error) {
+        console.log("error --------- ", error);
         return res.json({
           code: "501",
           message: "Something went wrong.",
+          caughtError: error,
           results: [],
         });
       }
-    });
 };
 
 //start stream public page apis
-var myStreamPosts__GS_MemCaseAfterFinish = async function (req, res) {
-  req.body.IsQS = req.body.IsQS ? req.body.IsQS : false;
-  var StreamType = req.body.StreamType ? req.body.StreamType : null;
-  var OwnerId = req.body.OwnerId ? req.body.OwnerId : null;
-  var CapsuleId = req.body.CapsuleId ? req.body.CapsuleId : null;
-  var loginUserId = req.session.user._id;
+const myStreamPosts__GS_MemCaseAfterFinish = async (req, res) => {
+  req.body.IsQS = req.body.IsQS || false;
+  const StreamType = req.body.StreamType || null;
+  const OwnerId = req.body.OwnerId || null;
+  const CapsuleId = req.body.CapsuleId || null;
+  const loginUserId = req.session.user._id;
 
   if (!CapsuleId) {
     return res.json({
@@ -11667,42 +11578,17 @@ var myStreamPosts__GS_MemCaseAfterFinish = async function (req, res) {
     });
   }
 
-  var conditions = {
+  const conditions = {
     CapsuleId: new ObjectId(CapsuleId),
     SyncedBy: new ObjectId(OwnerId),
     IsDeleted: false,
-    //Status : true,
-    //"EmailEngineDataSets.Delivered" : false
   };
 
-  var todayEnd = new Date();
-  //var todayTimestamp = todayEnd.getTime();
-
+  const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  /*if(StreamType == 'Group') {
-		var todayYear = todayEnd.getFullYear();
-		var todayTimestamp = todayEnd.getTime();
-
-		req.session.user.Birthdate = req.session.user.Birthdate ? req.session.user.Birthdate : null;
-		if(!req.session.user.Birthdate) {
-			return res.json({"code":"200", message : "No stream found.", results: []});
-		}
-
-		var OwnerBirthdate = new Date(req.session.user.Birthdate);
-		OwnerBirthdate.setFullYear(todayYear);
-		var OBTimestamp = OwnerBirthdate.getTime();
-
-		console.log("todayTimestamp = ", todayTimestamp);
-		console.log("OBTimestamp = ", OBTimestamp);
-		if(todayTimestamp < OBTimestamp) {
-			return res.json({"code":"200", message : "No stream found.", results: []});
-		}
-	}*/
-
   //allocate table to each one-to-one meeting for normal table case
-  SyncedPost.aggregate(
-    [
+  const syncedPostsResults = await SyncedPost.aggregate([
       { $match: conditions },
       { $unwind: "$EmailEngineDataSets" },
       {
@@ -11790,23 +11676,17 @@ var myStreamPosts__GS_MemCaseAfterFinish = async function (req, res) {
       { $sort: { DateOfDelivery: -1 } },
       { $skip: 0 },
       { $limit: 500 },
-    ],
-    async function (err, syncedPostsResults) {
-      console.log(
-        "@@@@@@@@@@@@@@@@@@@@@@@@@@@2236------------------------syncedPostsResults.length = ",
-        syncedPostsResults.length
-      );
-      if (!err) {
-        var OwnerDetails = await User.findOne(
-          { _id: new ObjectId(OwnerId), IsDeleted: 0 },
-          { Name: 1, Email: 1, Birthdate: 1 }
-        );
-        OwnerDetails = typeof OwnerDetails == "object" ? OwnerDetails : null;
+    ]).allowDiskUse(true).exec();
 
-        var streamPosts = [];
-        try {
-          //allocate table and update meeting record
-          for (let loop = 0; loop < syncedPostsResults.length; loop++) {
+  const OwnerDetails = await User.findOne(
+    { _id: new ObjectId(OwnerId), IsDeleted: 0 },
+    { Name: 1, Email: 1, Birthdate: 1 }
+  );
+
+  var streamPosts = [];
+  try {
+    //allocate table and update meeting record
+    for (let loop = 0; loop < syncedPostsResults.length; loop++) {
             var dataRecord = syncedPostsResults[loop];
 
             dataRecord.SharedByUser = dataRecord.SharedByUser
@@ -11840,23 +11720,23 @@ var myStreamPosts__GS_MemCaseAfterFinish = async function (req, res) {
               if (
                 String(dataRecord.PostId) ==
                   String(dataRecord.PageData.Medias[i]._id) &&
-                dataRecord.PageData.Medias[i].OriginatedFrom
+          dataRecord.PageData.Medias[i].OriginatedFrom
               ) {
-                dataRecord.SocialPostId =
-                  dataRecord.PageData.Medias[i].OriginatedFrom;
-                dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
+          dataRecord.SocialPostId =
+            dataRecord.PageData.Medias[i].OriginatedFrom;
+          dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
                   ? dataRecord.PageData.Medias[i].PostType
                   : "Post";
 
-                dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
+          dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
                   ? dataRecord.PageData.Medias[i].MediaType
                   : "";
-                dataRecord.ContentType = dataRecord.PageData.Medias[i]
+          dataRecord.ContentType = dataRecord.PageData.Medias[i]
                   .ContentType
                   ? dataRecord.PageData.Medias[i].ContentType
                   : "";
                 if (dataRecord.PostType == "KeyPost") {
-                  dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
+            dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
                     .KeyPostType
                     ? dataRecord.PageData.Medias[i].KeyPostType
                     : "Comment";
@@ -11940,26 +11820,26 @@ var myStreamPosts__GS_MemCaseAfterFinish = async function (req, res) {
                   String(dataRecord.PostId) == String(PostArr[k]._id) &&
                   PostArr[k].OriginatedFrom
                 ) {
-                  dataRecord.SharedByUser = PostArr[k].SharedByUser.length
+            dataRecord.SharedByUser = PostArr[k].SharedByUser.length
                     ? PostArr[k].SharedByUser[0]
                     : {};
                   if (
-                    dataRecord.SharedByUser._id == loginUserId ||
-                    dataRecord.SharedByUser._id == OwnerId
+              dataRecord.SharedByUser._id == loginUserId ||
+              dataRecord.SharedByUser._id == OwnerId
                   ) {
-                    dataRecord.SocialPostId = PostArr[k].OriginatedFrom;
-                    dataRecord.PostType = PostArr[k].PostType
+              dataRecord.SocialPostId = PostArr[k].OriginatedFrom;
+              dataRecord.PostType = PostArr[k].PostType
                       ? PostArr[k].PostType
                       : "Post";
 
-                    dataRecord.MediaType = PostArr[k].MediaType
+              dataRecord.MediaType = PostArr[k].MediaType
                       ? PostArr[k].MediaType
                       : "";
-                    dataRecord.ContentType = PostArr[k].ContentType
+              dataRecord.ContentType = PostArr[k].ContentType
                       ? PostArr[k].ContentType
                       : "";
                     if (dataRecord.PostType == "KeyPost") {
-                      dataRecord.KeyPostType = PostArr[k].KeyPostType
+                dataRecord.KeyPostType = PostArr[k].KeyPostType
                         ? PostArr[k].KeyPostType
                         : "Comment";
                     }
@@ -11969,10 +11849,10 @@ var myStreamPosts__GS_MemCaseAfterFinish = async function (req, res) {
                       PostArr[k].MediaType != "Notes"
                     ) {
                       //dataRecord.hexcode_blendedImage = PostArr[k].PostImage;
-                      dataRecord.PostType = "GeneralPost";
-                      dataRecord.VisualUrls = [];
-                      dataRecord.VisualUrls[0] = dataRecord.PostImage;
-                      dataRecord.VisualUrls[1] = dataRecord.PostImage;
+                dataRecord.PostType = "GeneralPost";
+                dataRecord.VisualUrls = [];
+                dataRecord.VisualUrls[0] = dataRecord.PostImage;
+                dataRecord.VisualUrls[1] = dataRecord.PostImage;
                     }
 
                     break;
@@ -12109,27 +11989,27 @@ var myStreamPosts__GS_MemCaseAfterFinish = async function (req, res) {
             dataRecord.hexcode_blendedImage = blendedImage;
 
             if (dataRecord.MediaType == "Video") {
-              dataRecord.hexcode_blendedImage =
-                dataRecord.hexcode_blendedImage.replace(
+        dataRecord.hexcode_blendedImage =
+          dataRecord.hexcode_blendedImage.replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-              dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+        dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                 "/Media/img/",
                 "/Media/video/"
               );
-              dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
+        dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
                 "/Media/img/",
                 "/Media/video/"
               );
             }
 
-            var CapsuleData = {
+            const capsuleDataLocal = {
               IsOnlyPostImage: dataRecord.CapsuleData.IsOnlyPostImage
                 ? dataRecord.CapsuleData.IsOnlyPostImage
                 : false,
             };
-            dataRecord.CapsuleData = CapsuleData;
+            dataRecord.CapsuleData = capsuleDataLocal;
 
             delete dataRecord.PageData;
 
@@ -12171,93 +12051,83 @@ var myStreamPosts__GS_MemCaseAfterFinish = async function (req, res) {
 
             streamPosts.push(dataRecord);
           }
-          return res.json({
-            code: "200",
-            message: "success",
-            results: streamPosts,
-            stage: "2",
-          });
-        } catch (error) {
-          console.log("error --------- ", error);
-          return res.json({
-            code: "501",
-            message: "Something went wrong.",
-            caughtError: error,
-            results: [],
-          });
-        }
-      } else {
-        return res.json({
-          code: "501",
-          message: "Something went wrong.",
-          results: [],
-        });
-      }
+      return res.json({
+        code: "200",
+        message: "success",
+        results: streamPosts,
+        stage: "2",
+      });
+    } catch (error) {
+      console.log("error --------- ", error);
+      return res.json({
+        code: "501",
+        message: "Something went wrong.",
+        caughtError: error,
+        results: [],
+      });
     }
-  );
 };
 
-var myStreamPosts__GroupStream_MemberCase = async function (req, res) {
+const myStreamPosts__GroupStream_MemberCase = async (req, res) => {
   console.log(
     "------------- myStreamPosts__GroupStream_MemberCase ---------- "
   );
-  var CapsuleId = req.body.CapsuleId ? req.body.CapsuleId : null;
-  var loginUserId = req.session.user._id;
-  var OwnerId = req.body.OwnerId ? req.body.OwnerId : null;
-  var IsQS = req.body.IsQS ? req.body.IsQS : false;
+  const CapsuleId = req.body.CapsuleId || null;
+  const loginUserId = req.session.user._id;
+  const OwnerId = req.body.OwnerId || null;
+  const IsQS = req.body.IsQS || false;
 
   if (!CapsuleId) {
     return res.json({ code: "404", message: "No stream found.", results: [] });
   }
 
-  var streamPageId = await getPageIdByStream(CapsuleId);
+  const streamPageId = await getPageIdByStream(CapsuleId);
   if (!streamPageId) {
     return res.json({ code: "404", message: "No stream found.", results: [] });
   }
   console.log("streamPageId ---------- ", streamPageId);
-  var conditions = {
-    _id: ObjectId(String(streamPageId)),
+  const conditions = {
+    _id: new ObjectId(String(streamPageId)),
     IsDeleted: false,
   };
 
-  var todayEnd = new Date();
+  const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  var PostToPopulate = {
+  const PostToPopulate = {
     "Medias.PostType": { $in: ["InfoPost", "QuestionPost"] },
   };
   //allocate table to each one-to-one meeting for normal table case
-  Page.aggregate(
-    [
-      { $match: conditions },
-      { $match: PostToPopulate },
-      { $unwind: "$Medias" },
-      { $match: PostToPopulate },
-      {
-        $lookup: {
-          from: "Pages",
-          localField: "Medias._id",
-          foreignField: "Medias.QuestionPostId",
-          as: "AnswerPosts",
-        },
+  const syncedPostsResults = await Page.aggregate([
+    { $match: conditions },
+    { $match: PostToPopulate },
+    { $unwind: "$Medias" },
+    { $match: PostToPopulate },
+    {
+      $lookup: {
+        from: "Pages",
+        localField: "Medias._id",
+        foreignField: "Medias.QuestionPostId",
+        as: "AnswerPosts",
       },
-      { $unwind: { path: "$AnswerPosts", preserveNullAndEmptyArrays: true } },
-      {
-        $project: {
-          _id: "$_id",
-          CapsuleId: CapsuleId,
-          PageId: streamPageId,
-          PostId: "$Medias._id",
-          //PostStatement : "$Medias.PostStatement",
-          PostStatement: {
-            $cond: [
-              { $ne: ["$Medias.MediaType", "Notes"] },
-              "$Medias.PostStatement",
-              "$Medias.Content",
-            ],
-          },
-          SyncedBy: "$Medias.PostedBy",
-          ReceiverEmails: "",
+    },
+    { $unwind: { path: "$AnswerPosts", preserveNullAndEmptyArrays: true } },
+    {
+      $project: {
+        _id: "$_id",
+        CapsuleId: CapsuleId,
+        PageId: streamPageId,
+        PostId: "$Medias._id",
+        //PostStatement : "$Medias.PostStatement",
+        PostStatement: {
+          $cond: [
+            { $ne: ["$Medias.MediaType", "Notes"] },
+            "$Medias.PostStatement",
+            "$Medias.Content",
+          ],
+        },
+        SyncedBy: "$Medias.PostedBy",
+        ReceiverEmails: "",
           CreatedOn: "$Medias.PostedOn",
           Delivered: true,
           //VisualUrlsOld : ["$Medias.MediaURL", "$Medias.MediaURL"],
@@ -12658,32 +12528,30 @@ var myStreamPosts__GroupStream_MemberCase = async function (req, res) {
         },
       },
       //{ $match : { DateOfDelivery: {$lte : todayEnd}, Delivered : false } },
-      { $sort: { CreatedOn: -1, _id: 1 } },
-    ],
-    async function (err, syncedPostsResults) {
-      console.log("err ---------------- ", err);
-      console.log(
-        "@@@@@@@@@@@@@@@@@@@@@@@@@@@2------------------------syncedPostsResults.length myStreamPosts__GroupStream_MemberCase = ",
-        syncedPostsResults.length
-      );
-      if (!err) {
-        var OwnerDetails = await User.findOne(
-          { _id: new ObjectId(OwnerId), IsDeleted: 0 },
-          { Name: 1, Email: 1, Birthdate: 1 }
-        );
-        OwnerDetails = typeof OwnerDetails == "object" ? OwnerDetails : null;
+    { $sort: { CreatedOn: -1, _id: 1 } },
+  ]).allowDiskUse(true).exec();
 
-        var streamPosts = [];
-        try {
-          //allocate table and update meeting record
-          for (let loop = 0; loop < syncedPostsResults.length; loop++) {
+  console.log(
+    "@@@@@@@@@@@@@@@@@@@@@@@@@@@2------------------------syncedPostsResults.length myStreamPosts__GroupStream_MemberCase = ",
+    syncedPostsResults.length
+  );
+
+  const OwnerDetails = await User.findOne(
+    { _id: new ObjectId(OwnerId), IsDeleted: 0 },
+    { Name: 1, Email: 1, Birthdate: 1 }
+  );
+
+  var streamPosts = [];
+  try {
+    //allocate table and update meeting record
+    for (let loop = 0; loop < syncedPostsResults.length; loop++) {
             var dataRecord = syncedPostsResults[loop];
 
             dataRecord.AnswerPostsObj = dataRecord.AnswerPostsObj
               ? dataRecord.AnswerPostsObj
               : [];
             for (let ap = 0; ap < dataRecord.AnswerPostsObj.length; ap++) {
-              dataRecord.AnswerPostsObj[ap].SharedByUser = dataRecord
+        dataRecord.AnswerPostsObj[ap].SharedByUser = dataRecord
                 .AnswerPostsObj[ap].SharedByUser
                 ? dataRecord.AnswerPostsObj[ap].SharedByUser[0]
                 : {};
@@ -12718,23 +12586,23 @@ var myStreamPosts__GroupStream_MemberCase = async function (req, res) {
               if (
                 String(dataRecord.PostId) ==
                   String(dataRecord.PageData.Medias[i]._id) &&
-                dataRecord.PageData.Medias[i].OriginatedFrom
+          dataRecord.PageData.Medias[i].OriginatedFrom
               ) {
-                dataRecord.SocialPostId =
-                  dataRecord.PageData.Medias[i].OriginatedFrom;
-                dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
+          dataRecord.SocialPostId =
+            dataRecord.PageData.Medias[i].OriginatedFrom;
+          dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
                   ? dataRecord.PageData.Medias[i].PostType
                   : "Post";
 
-                dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
+          dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
                   ? dataRecord.PageData.Medias[i].MediaType
                   : "";
-                dataRecord.ContentType = dataRecord.PageData.Medias[i]
+          dataRecord.ContentType = dataRecord.PageData.Medias[i]
                   .ContentType
                   ? dataRecord.PageData.Medias[i].ContentType
                   : "";
                 if (dataRecord.PostType == "KeyPost") {
-                  dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
+            dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
                     .KeyPostType
                     ? dataRecord.PageData.Medias[i].KeyPostType
                     : "Comment";
@@ -12811,33 +12679,33 @@ var myStreamPosts__GroupStream_MemberCase = async function (req, res) {
             //}
 
             if (
-              dataRecord.PostType == "QuestionPost" &&
-              dataRecord.MediaType != "Notes"
+        dataRecord.PostType == "QuestionPost" &&
+        dataRecord.MediaType != "Notes"
             ) {
               //dataRecord.hexcode_blendedImage = dataRecord.hexcode_blendedImage.indexOf('unsplash.com') == -1 ? "https://www.scrpt.com/assets/Media/img/600/"+dataRecord.hexcode_blendedImage : dataRecord.hexcode_blendedImage;
               if (
                 typeof dataRecord.VisualUrls[0] == "string" &&
                 typeof dataRecord.VisualUrls[1] == "string"
               ) {
-                dataRecord.VisualUrls[0] =
-                  dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[0] =
+            dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[0]
+                dataRecord.VisualUrls[0]
                     : dataRecord.VisualUrls[0];
-                dataRecord.VisualUrls[1] =
-                  dataRecord.VisualUrls[1].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[1] =
+            dataRecord.VisualUrls[1].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[1]
+                dataRecord.VisualUrls[1]
                     : dataRecord.VisualUrls[1];
               }
 
               if (dataRecord.MediaType == "Video") {
                 //dataRecord.hexcode_blendedImage = dataRecord.hexcode_blendedImage.replace('/Media/img/','/Media/video/');
-                dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+          dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-                dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
+          dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
@@ -12846,33 +12714,33 @@ var myStreamPosts__GroupStream_MemberCase = async function (req, res) {
 
             if (
               (dataRecord.PostType == "InfoPost" ||
-                dataRecord.PostType == "InfoPostOwner") &&
-              dataRecord.MediaType != "Notes"
+          dataRecord.PostType == "InfoPostOwner") &&
+        dataRecord.MediaType != "Notes"
             ) {
               //dataRecord.hexcode_blendedImage = dataRecord.hexcode_blendedImage.indexOf('unsplash.com') == -1 ? "https://www.scrpt.com/assets/Media/img/600/"+dataRecord.hexcode_blendedImage : dataRecord.hexcode_blendedImage;
               if (
                 typeof dataRecord.VisualUrls[0] == "string" &&
                 typeof dataRecord.VisualUrls[1] == "string"
               ) {
-                dataRecord.VisualUrls[0] =
-                  dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[0] =
+            dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[0]
+                dataRecord.VisualUrls[0]
                     : dataRecord.VisualUrls[0];
-                dataRecord.VisualUrls[1] =
-                  dataRecord.VisualUrls[1].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[1] =
+            dataRecord.VisualUrls[1].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[1]
+                dataRecord.VisualUrls[1]
                     : dataRecord.VisualUrls[1];
               }
 
               if (dataRecord.MediaType == "Video") {
                 //dataRecord.hexcode_blendedImage = dataRecord.hexcode_blendedImage.replace('/Media/img/','/Media/video/');
-                dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+          dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-                dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
+          dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
@@ -12976,27 +12844,27 @@ var myStreamPosts__GroupStream_MemberCase = async function (req, res) {
             dataRecord.hexcode_blendedImage = blendedImage;
 
             if (dataRecord.MediaType == "Video") {
-              dataRecord.hexcode_blendedImage =
-                dataRecord.hexcode_blendedImage.replace(
+        dataRecord.hexcode_blendedImage =
+          dataRecord.hexcode_blendedImage.replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-              dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+        dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                 "/Media/img/",
                 "/Media/video/"
               );
-              dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
+        dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
                 "/Media/img/",
                 "/Media/video/"
               );
             }
 
-            var CapsuleData = {
+            const capsuleDataLocal = {
               IsOnlyPostImage: dataRecord.CapsuleData.IsOnlyPostImage
                 ? dataRecord.CapsuleData.IsOnlyPostImage
                 : false,
             };
-            dataRecord.CapsuleData = CapsuleData;
+            dataRecord.CapsuleData = capsuleDataLocal;
 
             delete dataRecord.PageData;
             streamPosts.push(dataRecord);
@@ -13006,24 +12874,15 @@ var myStreamPosts__GroupStream_MemberCase = async function (req, res) {
             message: "success",
             results: streamPosts,
           });
-        } catch (error) {
-          console.log("caughtError -- 9999999", error);
-          return res.json({
-            code: "501",
-            message: "Something went wrong.",
-            caughtError: error,
-            results: [],
-          });
-        }
-      } else {
-        return res.json({
-          code: "501",
-          message: "Something went wrong.",
-          results: [],
-        });
-      }
+    } catch (error) {
+      console.log("caughtError -- 9999999", error);
+      return res.json({
+        code: "501",
+        message: "Something went wrong.",
+        caughtError: error,
+        results: [],
+      });
     }
-  );
 };
 
 var myStreamPosts__GroupStream_MemberCase_prefill = async function (req, res) {
@@ -13548,32 +13407,30 @@ var myStreamPosts__GroupStream_MemberCase_prefill = async function (req, res) {
         },
       },
       //{ $match : { DateOfDelivery: {$lte : todayEnd}, Delivered : false } },
-      { $sort: { CreatedOn: -1, _id: 1 } },
-    ],
-    async function (err, syncedPostsResults) {
-      console.log("err ---------------- ", err);
-      console.log(
-        "@@@@@@@@@@@@@@@@@@@@@@@@@@@2------------------------syncedPostsResults.length myStreamPosts__GroupStream_MemberCase = ",
-        syncedPostsResults.length
-      );
-      if (!err) {
-        var OwnerDetails = await User.findOne(
-          { _id: new ObjectId(OwnerId), IsDeleted: 0 },
-          { Name: 1, Email: 1, Birthdate: 1 }
-        );
-        OwnerDetails = typeof OwnerDetails == "object" ? OwnerDetails : null;
+    { $sort: { CreatedOn: -1, _id: 1 } },
+  ]).allowDiskUse(true).exec();
 
-        var streamPosts = [];
-        try {
-          //allocate table and update meeting record
-          for (let loop = 0; loop < syncedPostsResults.length; loop++) {
+  console.log(
+    "@@@@@@@@@@@@@@@@@@@@@@@@@@@2------------------------syncedPostsResults.length myStreamPosts__GroupStream_MemberCase = ",
+    syncedPostsResults.length
+  );
+
+  const OwnerDetails = await User.findOne(
+    { _id: new ObjectId(OwnerId), IsDeleted: 0 },
+    { Name: 1, Email: 1, Birthdate: 1 }
+  );
+
+  var streamPosts = [];
+  try {
+    //allocate table and update meeting record
+    for (let loop = 0; loop < syncedPostsResults.length; loop++) {
             var dataRecord = syncedPostsResults[loop];
 
             dataRecord.AnswerPostsObj = dataRecord.AnswerPostsObj
               ? dataRecord.AnswerPostsObj
               : [];
             for (let ap = 0; ap < dataRecord.AnswerPostsObj.length; ap++) {
-              dataRecord.AnswerPostsObj[ap].SharedByUser = dataRecord
+        dataRecord.AnswerPostsObj[ap].SharedByUser = dataRecord
                 .AnswerPostsObj[ap].SharedByUser
                 ? dataRecord.AnswerPostsObj[ap].SharedByUser[0]
                 : {};
@@ -13608,23 +13465,23 @@ var myStreamPosts__GroupStream_MemberCase_prefill = async function (req, res) {
               if (
                 String(dataRecord.PostId) ==
                   String(dataRecord.PageData.Medias[i]._id) &&
-                dataRecord.PageData.Medias[i].OriginatedFrom
+          dataRecord.PageData.Medias[i].OriginatedFrom
               ) {
-                dataRecord.SocialPostId =
-                  dataRecord.PageData.Medias[i].OriginatedFrom;
-                dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
+          dataRecord.SocialPostId =
+            dataRecord.PageData.Medias[i].OriginatedFrom;
+          dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
                   ? dataRecord.PageData.Medias[i].PostType
                   : "Post";
 
-                dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
+          dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
                   ? dataRecord.PageData.Medias[i].MediaType
                   : "";
-                dataRecord.ContentType = dataRecord.PageData.Medias[i]
+          dataRecord.ContentType = dataRecord.PageData.Medias[i]
                   .ContentType
                   ? dataRecord.PageData.Medias[i].ContentType
                   : "";
                 if (dataRecord.PostType == "KeyPost") {
-                  dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
+            dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
                     .KeyPostType
                     ? dataRecord.PageData.Medias[i].KeyPostType
                     : "Comment";
@@ -13701,33 +13558,33 @@ var myStreamPosts__GroupStream_MemberCase_prefill = async function (req, res) {
             //}
 
             if (
-              dataRecord.PostType == "QuestionPost" &&
-              dataRecord.MediaType != "Notes"
+        dataRecord.PostType == "QuestionPost" &&
+        dataRecord.MediaType != "Notes"
             ) {
               //dataRecord.hexcode_blendedImage = dataRecord.hexcode_blendedImage.indexOf('unsplash.com') == -1 ? "https://www.scrpt.com/assets/Media/img/600/"+dataRecord.hexcode_blendedImage : dataRecord.hexcode_blendedImage;
               if (
                 typeof dataRecord.VisualUrls[0] == "string" &&
                 typeof dataRecord.VisualUrls[1] == "string"
               ) {
-                dataRecord.VisualUrls[0] =
-                  dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[0] =
+            dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[0]
+                dataRecord.VisualUrls[0]
                     : dataRecord.VisualUrls[0];
-                dataRecord.VisualUrls[1] =
-                  dataRecord.VisualUrls[1].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[1] =
+            dataRecord.VisualUrls[1].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[1]
+                dataRecord.VisualUrls[1]
                     : dataRecord.VisualUrls[1];
               }
 
               if (dataRecord.MediaType == "Video") {
                 //dataRecord.hexcode_blendedImage = dataRecord.hexcode_blendedImage.replace('/Media/img/','/Media/video/');
-                dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+          dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-                dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
+          dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
@@ -13736,33 +13593,33 @@ var myStreamPosts__GroupStream_MemberCase_prefill = async function (req, res) {
 
             if (
               (dataRecord.PostType == "InfoPost" ||
-                dataRecord.PostType == "InfoPostOwner") &&
-              dataRecord.MediaType != "Notes"
+          dataRecord.PostType == "InfoPostOwner") &&
+        dataRecord.MediaType != "Notes"
             ) {
               //dataRecord.hexcode_blendedImage = dataRecord.hexcode_blendedImage.indexOf('unsplash.com') == -1 ? "https://www.scrpt.com/assets/Media/img/600/"+dataRecord.hexcode_blendedImage : dataRecord.hexcode_blendedImage;
               if (
                 typeof dataRecord.VisualUrls[0] == "string" &&
                 typeof dataRecord.VisualUrls[1] == "string"
               ) {
-                dataRecord.VisualUrls[0] =
-                  dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[0] =
+            dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[0]
+                dataRecord.VisualUrls[0]
                     : dataRecord.VisualUrls[0];
-                dataRecord.VisualUrls[1] =
-                  dataRecord.VisualUrls[1].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[1] =
+            dataRecord.VisualUrls[1].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[1]
+                dataRecord.VisualUrls[1]
                     : dataRecord.VisualUrls[1];
               }
 
               if (dataRecord.MediaType == "Video") {
                 //dataRecord.hexcode_blendedImage = dataRecord.hexcode_blendedImage.replace('/Media/img/','/Media/video/');
-                dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+          dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-                dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
+          dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
@@ -13866,27 +13723,27 @@ var myStreamPosts__GroupStream_MemberCase_prefill = async function (req, res) {
             dataRecord.hexcode_blendedImage = blendedImage;
 
             if (dataRecord.MediaType == "Video") {
-              dataRecord.hexcode_blendedImage =
-                dataRecord.hexcode_blendedImage.replace(
+        dataRecord.hexcode_blendedImage =
+          dataRecord.hexcode_blendedImage.replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-              dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+        dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                 "/Media/img/",
                 "/Media/video/"
               );
-              dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
+        dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
                 "/Media/img/",
                 "/Media/video/"
               );
             }
 
-            var CapsuleData = {
+            const capsuleDataLocal = {
               IsOnlyPostImage: dataRecord.CapsuleData.IsOnlyPostImage
                 ? dataRecord.CapsuleData.IsOnlyPostImage
                 : false,
             };
-            dataRecord.CapsuleData = CapsuleData;
+            dataRecord.CapsuleData = capsuleDataLocal;
 
             delete dataRecord.PageData;
             streamPosts.push(dataRecord);
@@ -13896,69 +13753,57 @@ var myStreamPosts__GroupStream_MemberCase_prefill = async function (req, res) {
             message: "success",
             results: streamPosts,
           });
-        } catch (error) {
-          console.log("caughtError -- 9999999", error);
-          return res.json({
-            code: "501",
-            message: "Something went wrong.",
-            caughtError: error,
-            results: [],
-          });
-        }
-      } else {
-        return res.json({
-          code: "501",
-          message: "Something went wrong.",
-          results: [],
-        });
-      }
+    } catch (error) {
+      console.log("caughtError -- 9999999", error);
+      return res.json({
+        code: "501",
+        message: "Something went wrong.",
+        caughtError: error,
+        results: [],
+      });
     }
-  );
 };
 
-var myStreamPosts__GroupStream_OwnerCase_InfoPosts = async function (req, res) {
+const myStreamPosts__GroupStream_OwnerCase_InfoPosts = async (req, res) => {
   console.log(
     "------------- myStreamPosts__GroupStream_OwnerCase_InfoPosts ---------- "
   );
-  var CapsuleId = req.body.CapsuleId ? req.body.CapsuleId : null;
-  var loginUserId = req.session.user._id;
-  var IsQS = req.body.IsQS ? req.body.IsQS : false;
-  var OwnerId = req.body.OwnerId ? req.body.OwnerId : null;
+  const CapsuleId = req.body.CapsuleId || null;
+  const loginUserId = req.session.user._id;
+  const IsQS = req.body.IsQS || false;
+  const OwnerId = req.body.OwnerId || null;
 
   if (!CapsuleId) {
     return res.json({ code: "404", message: "No stream found.", results: [] });
   }
 
-  var streamPageId = await getPageIdByStream(CapsuleId);
+  const streamPageId = await getPageIdByStream(CapsuleId);
   if (!streamPageId) {
     return res.json({ code: "404", message: "No stream found.", results: [] });
   }
   console.log("streamPageId ---------- ", streamPageId);
-  var conditions = {
-    _id: ObjectId(String(streamPageId)),
+  const conditions = {
+    _id: new ObjectId(String(streamPageId)),
     IsDeleted: false,
   };
 
-  var todayEnd = new Date();
+  const todayEnd = new Date();
   todayEnd.setHours(23, 59, 59, 999);
 
-  var TypeOfPostsToShow = [];
+  let TypeOfPostsToShow = [];
   if (String(loginUserId) === String(OwnerId)) {
     TypeOfPostsToShow = ["InfoPostOwner"];
   }
-  var IsOwnerAnswerAllowed = req.body.IsOwnerAnswerAllowed
-    ? req.body.IsOwnerAnswerAllowed
-    : false;
+  const IsOwnerAnswerAllowed = req.body.IsOwnerAnswerAllowed || false;
   if (IsOwnerAnswerAllowed) {
     TypeOfPostsToShow.push("QuestionPost");
   }
 
-  var PostToPopulate = {
+  const PostToPopulate = {
     "Medias.PostType": { $in: TypeOfPostsToShow },
   };
   //allocate table to each one-to-one meeting for normal table case
-  Page.aggregate(
-    [
+  const syncedPostsResults = await Page.aggregate([
       { $match: conditions },
       { $match: PostToPopulate },
       { $unwind: "$Medias" },
@@ -14389,25 +14234,24 @@ var myStreamPosts__GroupStream_OwnerCase_InfoPosts = async function (req, res) {
       },
       //{ $match : { DateOfDelivery: {$lte : todayEnd}, Delivered : false } },
       { $sort: { CreatedOn: -1, _id: 1 } },
-    ],
-    async function (err, syncedPostsResults) {
-      console.log("err ---------------- ", err);
-      console.log(
-        "@@@@@@@@@@@@@@@@@@@@@@@@@@@2------------------------syncedPostsResults.length = ",
-        syncedPostsResults.length
-      );
-      if (!err) {
-        var streamPosts = [];
-        try {
-          //allocate table and update meeting record
-          for (let loop = 0; loop < syncedPostsResults.length; loop++) {
+    ]).allowDiskUse(true).exec();
+
+  console.log(
+    "@@@@@@@@@@@@@@@@@@@@@@@@@@@2------------------------syncedPostsResults.length = ",
+    syncedPostsResults.length
+  );
+
+  var streamPosts = [];
+  try {
+    //allocate table and update meeting record
+    for (let loop = 0; loop < syncedPostsResults.length; loop++) {
             var dataRecord = syncedPostsResults[loop];
 
             dataRecord.AnswerPostsObj = dataRecord.AnswerPostsObj
               ? dataRecord.AnswerPostsObj
               : [];
             for (let ap = 0; ap < dataRecord.AnswerPostsObj.length; ap++) {
-              dataRecord.AnswerPostsObj[ap].SharedByUser = dataRecord
+        dataRecord.AnswerPostsObj[ap].SharedByUser = dataRecord
                 .AnswerPostsObj[ap].SharedByUser
                 ? dataRecord.AnswerPostsObj[ap].SharedByUser[0]
                 : {};
@@ -14442,23 +14286,23 @@ var myStreamPosts__GroupStream_OwnerCase_InfoPosts = async function (req, res) {
               if (
                 String(dataRecord.PostId) ==
                   String(dataRecord.PageData.Medias[i]._id) &&
-                dataRecord.PageData.Medias[i].OriginatedFrom
+          dataRecord.PageData.Medias[i].OriginatedFrom
               ) {
-                dataRecord.SocialPostId =
-                  dataRecord.PageData.Medias[i].OriginatedFrom;
-                dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
+          dataRecord.SocialPostId =
+            dataRecord.PageData.Medias[i].OriginatedFrom;
+          dataRecord.PostType = dataRecord.PageData.Medias[i].PostType
                   ? dataRecord.PageData.Medias[i].PostType
                   : "Post";
 
-                dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
+          dataRecord.MediaType = dataRecord.PageData.Medias[i].MediaType
                   ? dataRecord.PageData.Medias[i].MediaType
                   : "";
-                dataRecord.ContentType = dataRecord.PageData.Medias[i]
+          dataRecord.ContentType = dataRecord.PageData.Medias[i]
                   .ContentType
                   ? dataRecord.PageData.Medias[i].ContentType
                   : "";
                 if (dataRecord.PostType == "KeyPost") {
-                  dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
+            dataRecord.KeyPostType = dataRecord.PageData.Medias[i]
                     .KeyPostType
                     ? dataRecord.PageData.Medias[i].KeyPostType
                     : "Comment";
@@ -14497,24 +14341,24 @@ var myStreamPosts__GroupStream_OwnerCase_InfoPosts = async function (req, res) {
               : "PracticalThinker";
 
             if (
-              dataRecord.PostType == "InfoPostOwner" ||
-              dataRecord.PostType == "QuestionPost"
+        dataRecord.PostType == "InfoPostOwner" ||
+        dataRecord.PostType == "QuestionPost"
             ) {
               let loginUserName = req.session.user.Name.split(" ")[0];
               let sharedbyusername = dataRecord.SharedByUser.Name.split(" ")[0];
-              dataRecord.PostStatement = dataRecord.PostStatement.replace(
+        dataRecord.PostStatement = dataRecord.PostStatement.replace(
                 /{Owner}/g,
                 loginUserName
               );
-              dataRecord.PostStatement = dataRecord.PostStatement.replace(
+        dataRecord.PostStatement = dataRecord.PostStatement.replace(
                 /{OwnerName}/g,
                 loginUserName
               );
-              dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
+        dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
                 /{Owner}/g,
                 loginUserName
               );
-              dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
+        dataRecord.TextBelowVisual = dataRecord.PostStatement.replace(
                 /{OwnerName}/g,
                 loginUserName
               );
@@ -14557,7 +14401,7 @@ var myStreamPosts__GroupStream_OwnerCase_InfoPosts = async function (req, res) {
             var PostImage2 = "";
 
             if (dataRecord.VisualUrls.length == 1) {
-              dataRecord.VisualUrls[0] =
+        dataRecord.VisualUrls[0] =
                 typeof dataRecord.VisualUrls[0] == "string"
                   ? dataRecord.VisualUrls[0]
                   : "";
@@ -14565,15 +14409,15 @@ var myStreamPosts__GroupStream_OwnerCase_InfoPosts = async function (req, res) {
                 typeof dataRecord.VisualUrls[0] == "string" &&
                 typeof dataRecord.VisualUrls[1] == "string"
               ) {
-                dataRecord.VisualUrls[0] =
-                  dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[0] =
+            dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[0]
+                dataRecord.VisualUrls[0]
                     : dataRecord.VisualUrls[0];
               }
 
               if (dataRecord.MediaType == "Video") {
-                dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+          dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
@@ -14584,11 +14428,11 @@ var myStreamPosts__GroupStream_OwnerCase_InfoPosts = async function (req, res) {
             }
 
             if (dataRecord.VisualUrls.length == 2) {
-              dataRecord.VisualUrls[0] =
+        dataRecord.VisualUrls[0] =
                 typeof dataRecord.VisualUrls[0] == "string"
                   ? dataRecord.VisualUrls[0]
                   : "";
-              dataRecord.VisualUrls[1] =
+        dataRecord.VisualUrls[1] =
                 typeof dataRecord.VisualUrls[1] == "string"
                   ? dataRecord.VisualUrls[1]
                   : "";
@@ -14596,24 +14440,24 @@ var myStreamPosts__GroupStream_OwnerCase_InfoPosts = async function (req, res) {
                 typeof dataRecord.VisualUrls[0] == "string" &&
                 typeof dataRecord.VisualUrls[1] == "string"
               ) {
-                dataRecord.VisualUrls[0] =
-                  dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[0] =
+            dataRecord.VisualUrls[0].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[0]
+                dataRecord.VisualUrls[0]
                     : dataRecord.VisualUrls[0];
-                dataRecord.VisualUrls[1] =
-                  dataRecord.VisualUrls[1].indexOf("unsplash.com") == -1
+          dataRecord.VisualUrls[1] =
+            dataRecord.VisualUrls[1].indexOf("unsplash.com") == -1
                     ? "https://www.scrpt.com/assets/Media/img/600/" +
-                      dataRecord.VisualUrls[1]
+                dataRecord.VisualUrls[1]
                     : dataRecord.VisualUrls[1];
               }
 
               if (dataRecord.MediaType == "Video") {
-                dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
+          dataRecord.VisualUrls[0] = dataRecord.VisualUrls[0].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
-                dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
+          dataRecord.VisualUrls[1] = dataRecord.VisualUrls[1].replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
@@ -14685,19 +14529,19 @@ var myStreamPosts__GroupStream_OwnerCase_InfoPosts = async function (req, res) {
             dataRecord.hexcode_blendedImage = blendedImage;
 
             if (dataRecord.MediaType == "Video") {
-              dataRecord.hexcode_blendedImage =
-                dataRecord.hexcode_blendedImage.replace(
+        dataRecord.hexcode_blendedImage =
+          dataRecord.hexcode_blendedImage.replace(
                   "/Media/img/",
                   "/Media/video/"
                 );
             }
 
-            var CapsuleData = {
+            const capsuleDataLocal = {
               IsOnlyPostImage: dataRecord.CapsuleData.IsOnlyPostImage
                 ? dataRecord.CapsuleData.IsOnlyPostImage
                 : false,
             };
-            dataRecord.CapsuleData = CapsuleData;
+            dataRecord.CapsuleData = capsuleDataLocal;
 
             delete dataRecord.PageData;
             streamPosts.push(dataRecord);
@@ -14708,26 +14552,17 @@ var myStreamPosts__GroupStream_OwnerCase_InfoPosts = async function (req, res) {
             results: streamPosts,
           });
         } catch (caughtError) {
-          console.log(
-            "caughtError --------------------------------------------------- ",
-            caughtError
-          );
-          return res.json({
-            code: "501",
-            message: "Something went wrong.",
-            caughtError: caughtError,
-            results: [],
-          });
-        }
-      } else {
+        console.log(
+          "caughtError --------------------------------------------------- ",
+          caughtError
+        );
         return res.json({
           code: "501",
           message: "Something went wrong.",
+          caughtError: caughtError,
           results: [],
         });
       }
-    }
-  );
 };
 
 var addCommentOnSocialPost = async function (req, res) {
@@ -15652,10 +15487,10 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
               if (
                 String(dataRecord.PostId) ==
                   String(dataRecord.PageData.Medias[i]._id) &&
-                dataRecord.PageData.Medias[i].OriginatedFrom
+          dataRecord.PageData.Medias[i].OriginatedFrom
               ) {
-                dataRecord.SocialPostId =
-                  dataRecord.PageData.Medias[i].OriginatedFrom;
+          dataRecord.SocialPostId =
+            dataRecord.PageData.Medias[i].OriginatedFrom;
                 break;
               }
             }
@@ -15787,84 +15622,84 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
 
             if (
               activityMapObj[
-                dataRecord.SocialPostId + "_" + dataRecord.hexcode_blendedImage
+          dataRecord.SocialPostId + "_" + dataRecord.hexcode_blendedImage
               ]
             ) {
               //console.log("INSIDE --------------");
               //dataRecord.ActivityText = activityMapObj[dataRecord.SocialPostId+'_'+dataRecord.hexcode_blendedImage].ActivityText;
-              dataRecord.ActivityTime =
+        dataRecord.ActivityTime =
                 activityMapObj[
-                  dataRecord.SocialPostId +
+            dataRecord.SocialPostId +
                     "_" +
-                    dataRecord.hexcode_blendedImage
+              dataRecord.hexcode_blendedImage
                 ].ActivityTime;
-              dataRecord.MyComments = activityMapObj[
-                dataRecord.SocialPostId + "_" + dataRecord.hexcode_blendedImage
+        dataRecord.MyComments = activityMapObj[
+          dataRecord.SocialPostId + "_" + dataRecord.hexcode_blendedImage
               ].MyComments
                 ? activityMapObj[
-                    dataRecord.SocialPostId +
+              dataRecord.SocialPostId +
                       "_" +
-                      dataRecord.hexcode_blendedImage
+                dataRecord.hexcode_blendedImage
                   ].MyComments
                 : [];
 
-              dataRecord.ActivityObj = {
+        dataRecord.ActivityObj = {
                 LikeActivityArr: activityMapObj[
-                  dataRecord.SocialPostId +
+            dataRecord.SocialPostId +
                     "_" +
-                    dataRecord.hexcode_blendedImage +
+              dataRecord.hexcode_blendedImage +
                     "_LikeActivityArr"
                 ]
                   ? activityMapObj[
-                      dataRecord.SocialPostId +
+                dataRecord.SocialPostId +
                         "_" +
-                        dataRecord.hexcode_blendedImage +
+                  dataRecord.hexcode_blendedImage +
                         "_LikeActivityArr"
                     ]
                   : [],
                 CommentActivityArr: activityMapObj[
-                  dataRecord.SocialPostId +
+            dataRecord.SocialPostId +
                     "_" +
-                    dataRecord.hexcode_blendedImage +
+              dataRecord.hexcode_blendedImage +
                     "_CommentActivityArr"
                 ]
                   ? activityMapObj[
-                      dataRecord.SocialPostId +
+                dataRecord.SocialPostId +
                         "_" +
-                        dataRecord.hexcode_blendedImage +
+                  dataRecord.hexcode_blendedImage +
                         "_CommentActivityArr"
                     ]
                   : [],
               };
 
-              dataRecord.ActivityObj.CommentActivityArr = dataRecord.ActivityObj
+        dataRecord.ActivityObj.CommentActivityArr = dataRecord.ActivityObj
                 .CommentActivityArr
                 ? dataRecord.ActivityObj.CommentActivityArr
                 : [];
 
               if (dataRecord.ActivityObj.CommentActivityArr.length) {
                 var uniqueCommentArray =
-                  dataRecord.ActivityObj.CommentActivityArr.filter(function (
+            dataRecord.ActivityObj.CommentActivityArr.filter(function (
                     item,
                     pos
                   ) {
                     return (
-                      dataRecord.ActivityObj.CommentActivityArr.indexOf(item) ==
+                dataRecord.ActivityObj.CommentActivityArr.indexOf(item) ==
                       pos
                     );
                   });
 
                 if (uniqueCommentArray.length == 1) {
-                  dataRecord.ActivityText =
+            dataRecord.ActivityText =
                     uniqueCommentArray[0] + " commented";
                 } else if (uniqueCommentArray.length == 2) {
-                  dataRecord.ActivityText =
+            dataRecord.ActivityText =
                     uniqueCommentArray[0] +
                     " and " +
                     uniqueCommentArray[1] +
                     " commented";
                 } else if (uniqueCommentArray.length > 2) {
-                  dataRecord.ActivityText =
+            dataRecord.ActivityText =
                     uniqueCommentArray[0] +
                     ", " +
                     uniqueCommentArray[1] +
@@ -15876,25 +15711,25 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
 
               if (dataRecord.ActivityObj.LikeActivityArr.length) {
                 var uniqueLikeArray =
-                  dataRecord.ActivityObj.LikeActivityArr.filter(function (
+            dataRecord.ActivityObj.LikeActivityArr.filter(function (
                     item,
                     pos
                   ) {
                     return (
-                      dataRecord.ActivityObj.LikeActivityArr.indexOf(item) ==
+                dataRecord.ActivityObj.LikeActivityArr.indexOf(item) ==
                       pos
                     );
                   });
 
                 if (uniqueLikeArray.length == 1) {
-                  dataRecord.ActivityText = dataRecord.ActivityText
+            dataRecord.ActivityText = dataRecord.ActivityText
                     ? dataRecord.ActivityText +
                       " and " +
                       uniqueLikeArray[0] +
                       " liked this post."
                     : uniqueLikeArray[0] + " liked this post.";
                 } else if (uniqueLikeArray.length == 2) {
-                  dataRecord.ActivityText = dataRecord.ActivityText
+            dataRecord.ActivityText = dataRecord.ActivityText
                     ? dataRecord.ActivityText +
                       " and " +
                       uniqueLikeArray[0] +
@@ -15906,7 +15741,7 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
                       uniqueLikeArray[1] +
                       " liked this post.";
                 } else if (uniqueLikeArray.length > 2) {
-                  dataRecord.ActivityText = dataRecord.ActivityText
+            dataRecord.ActivityText = dataRecord.ActivityText
                     ? dataRecord.ActivityText +
                       " and " +
                       uniqueLikeArray[0] +
@@ -15923,7 +15758,7 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
                       " members liked this post.";
                 }
               } else {
-                dataRecord.ActivityText = dataRecord.ActivityText
+          dataRecord.ActivityText = dataRecord.ActivityText
                   ? dataRecord.ActivityText + " on this post."
                   : "";
               }
@@ -16642,84 +16477,84 @@ var userStreamsPostsWithActivities_GroupCase_V2 = async function (req, res) {
 
             if (
               activityMapObj[
-                dataRecord.SocialPostId + "_" + dataRecord.hexcode_blendedImage
+          dataRecord.SocialPostId + "_" + dataRecord.hexcode_blendedImage
               ]
             ) {
               //console.log("INSIDE --------------");
               //dataRecord.ActivityText = activityMapObj[dataRecord.SocialPostId+'_'+dataRecord.hexcode_blendedImage].ActivityText;
-              dataRecord.ActivityTime =
+        dataRecord.ActivityTime =
                 activityMapObj[
-                  dataRecord.SocialPostId +
+            dataRecord.SocialPostId +
                     "_" +
-                    dataRecord.hexcode_blendedImage
+              dataRecord.hexcode_blendedImage
                 ].ActivityTime;
-              dataRecord.MyComments = activityMapObj[
-                dataRecord.SocialPostId + "_" + dataRecord.hexcode_blendedImage
+        dataRecord.MyComments = activityMapObj[
+          dataRecord.SocialPostId + "_" + dataRecord.hexcode_blendedImage
               ].MyComments
                 ? activityMapObj[
-                    dataRecord.SocialPostId +
+              dataRecord.SocialPostId +
                       "_" +
-                      dataRecord.hexcode_blendedImage
+                dataRecord.hexcode_blendedImage
                   ].MyComments
                 : [];
 
-              dataRecord.ActivityObj = {
+        dataRecord.ActivityObj = {
                 LikeActivityArr: activityMapObj[
-                  dataRecord.SocialPostId +
+            dataRecord.SocialPostId +
                     "_" +
-                    dataRecord.hexcode_blendedImage +
+              dataRecord.hexcode_blendedImage +
                     "_LikeActivityArr"
                 ]
                   ? activityMapObj[
-                      dataRecord.SocialPostId +
+                dataRecord.SocialPostId +
                         "_" +
-                        dataRecord.hexcode_blendedImage +
+                  dataRecord.hexcode_blendedImage +
                         "_LikeActivityArr"
                     ]
                   : [],
                 CommentActivityArr: activityMapObj[
-                  dataRecord.SocialPostId +
+            dataRecord.SocialPostId +
                     "_" +
-                    dataRecord.hexcode_blendedImage +
+              dataRecord.hexcode_blendedImage +
                     "_CommentActivityArr"
                 ]
                   ? activityMapObj[
-                      dataRecord.SocialPostId +
+                dataRecord.SocialPostId +
                         "_" +
-                        dataRecord.hexcode_blendedImage +
+                  dataRecord.hexcode_blendedImage +
                         "_CommentActivityArr"
                     ]
                   : [],
               };
 
-              dataRecord.ActivityObj.CommentActivityArr = dataRecord.ActivityObj
+        dataRecord.ActivityObj.CommentActivityArr = dataRecord.ActivityObj
                 .CommentActivityArr
                 ? dataRecord.ActivityObj.CommentActivityArr
                 : [];
 
               if (dataRecord.ActivityObj.CommentActivityArr.length) {
                 var uniqueCommentArray =
-                  dataRecord.ActivityObj.CommentActivityArr.filter(function (
+            dataRecord.ActivityObj.CommentActivityArr.filter(function (
                     item,
                     pos
                   ) {
                     return (
-                      dataRecord.ActivityObj.CommentActivityArr.indexOf(item) ==
+                dataRecord.ActivityObj.CommentActivityArr.indexOf(item) ==
                       pos
                     );
                   });
 
                 if (uniqueCommentArray.length == 1) {
-                  dataRecord.ActivityText =
+            dataRecord.ActivityText =
                     uniqueCommentArray[0] + " commented";
                 } else if (uniqueCommentArray.length == 2) {
-                  dataRecord.ActivityText =
+            dataRecord.ActivityText =
                     uniqueCommentArray[0] +
                     " and " +
                     uniqueCommentArray[1] +
                     " commented";
                 } else if (uniqueCommentArray.length > 2) {
-                  dataRecord.ActivityText =
+            dataRecord.ActivityText =
                     uniqueCommentArray[0] +
                     ", " +
                     uniqueCommentArray[1] +
@@ -16731,25 +16566,25 @@ var userStreamsPostsWithActivities_GroupCase_V2 = async function (req, res) {
 
               if (dataRecord.ActivityObj.LikeActivityArr.length) {
                 var uniqueLikeArray =
-                  dataRecord.ActivityObj.LikeActivityArr.filter(function (
+            dataRecord.ActivityObj.LikeActivityArr.filter(function (
                     item,
                     pos
                   ) {
                     return (
-                      dataRecord.ActivityObj.LikeActivityArr.indexOf(item) ==
+                dataRecord.ActivityObj.LikeActivityArr.indexOf(item) ==
                       pos
                     );
                   });
 
                 if (uniqueLikeArray.length == 1) {
-                  dataRecord.ActivityText = dataRecord.ActivityText
+            dataRecord.ActivityText = dataRecord.ActivityText
                     ? dataRecord.ActivityText +
                       " and " +
                       uniqueLikeArray[0] +
                       " liked this post."
                     : uniqueLikeArray[0] + " liked this post.";
                 } else if (uniqueLikeArray.length == 2) {
-                  dataRecord.ActivityText = dataRecord.ActivityText
+            dataRecord.ActivityText = dataRecord.ActivityText
                     ? dataRecord.ActivityText +
                       " and " +
                       uniqueLikeArray[0] +
@@ -16761,7 +16596,7 @@ var userStreamsPostsWithActivities_GroupCase_V2 = async function (req, res) {
                       uniqueLikeArray[1] +
                       " liked this post.";
                 } else if (uniqueLikeArray.length > 2) {
-                  dataRecord.ActivityText = dataRecord.ActivityText
+            dataRecord.ActivityText = dataRecord.ActivityText
                     ? dataRecord.ActivityText +
                       " and " +
                       uniqueLikeArray[0] +
@@ -16778,7 +16613,7 @@ var userStreamsPostsWithActivities_GroupCase_V2 = async function (req, res) {
                       " members liked this post.";
                 }
               } else {
-                dataRecord.ActivityText = dataRecord.ActivityText
+          dataRecord.ActivityText = dataRecord.ActivityText
                   ? dataRecord.ActivityText + " on this post."
                   : "";
               }
@@ -17347,68 +17182,68 @@ var userStreamsPostsWithActivities = async function (req, res) {
               //console.log("loop = ", loop);
               var dataRecord = syncedPostsResults[loop];
               //console.log("dataRecord = ", dataRecord);
-              dataRecord.SharedByUser = dataRecord.SharedByUser
+        dataRecord.SharedByUser = dataRecord.SharedByUser
                 ? dataRecord.SharedByUser[0]
                 : {};
 
               delete dataRecord.PageData;
 
-              dataRecord.ActivityText = "";
-              dataRecord.ActivityTime = "";
-              dataRecord.MyComments = [];
+        dataRecord.ActivityText = "";
+        dataRecord.ActivityTime = "";
+        dataRecord.MyComments = [];
 
               if (!dataRecord.SocialPageId || !dataRecord.SocialPostId) {
                 continue;
               }
 
-              dataRecord.hexcode_blendedImage = null;
+        dataRecord.hexcode_blendedImage = null;
 
-              dataRecord.VisualUrls = dataRecord.VisualUrls
+        dataRecord.VisualUrls = dataRecord.VisualUrls
                 ? dataRecord.VisualUrls
                 : [];
-              dataRecord.PostStatement = dataRecord.PostStatement
+        dataRecord.PostStatement = dataRecord.PostStatement
                 ? dataRecord.PostStatement
                 : "";
-              dataRecord.Subject = dataRecord.Subject
+        dataRecord.Subject = dataRecord.Subject
                 ? dataRecord.Subject
                 : null;
-              dataRecord.TextAboveVisual = dataRecord.TextAboveVisual
+        dataRecord.TextAboveVisual = dataRecord.TextAboveVisual
                 ? dataRecord.TextAboveVisual
                 : "";
-              dataRecord.TextBelowVisual = dataRecord.TextBelowVisual
+        dataRecord.TextBelowVisual = dataRecord.TextBelowVisual
                 ? dataRecord.TextBelowVisual
                 : "";
-              dataRecord.SoundFileUrl = dataRecord.SoundFileUrl
+        dataRecord.SoundFileUrl = dataRecord.SoundFileUrl
                 ? dataRecord.SoundFileUrl
                 : "";
-              dataRecord.BlendMode = dataRecord.BlendMode
+        dataRecord.BlendMode = dataRecord.BlendMode
                 ? dataRecord.BlendMode
                 : "hard-light";
-              dataRecord.EmailTemplate = dataRecord.EmailTemplate
+        dataRecord.EmailTemplate = dataRecord.EmailTemplate
                 ? dataRecord.EmailTemplate
                 : "PracticalThinker";
 
-              dataRecord.CapsuleId = dataRecord.CapsuleId
+        dataRecord.CapsuleId = dataRecord.CapsuleId
                 ? dataRecord.CapsuleId
                 : null;
-              dataRecord.PageId = dataRecord.PageId ? dataRecord.PageId : null;
-              dataRecord.PostId = dataRecord.PostId ? dataRecord.PostId : null;
+        dataRecord.PageId = dataRecord.PageId ? dataRecord.PageId : null;
+        dataRecord.PostId = dataRecord.PostId ? dataRecord.PostId : null;
 
-              dataRecord.CapsuleData =
+        dataRecord.CapsuleData =
                 typeof dataRecord.CapsuleData == "object"
                   ? dataRecord.CapsuleData.length > 0
                     ? dataRecord.CapsuleData[0]
                     : {}
                   : {};
-              dataRecord.CapsuleData.MetaData = dataRecord.CapsuleData.MetaData
+        dataRecord.CapsuleData.MetaData = dataRecord.CapsuleData.MetaData
                 ? dataRecord.CapsuleData.MetaData
                 : {};
-              dataRecord.CapsuleData.MetaData.publisher = dataRecord.CapsuleData
+        dataRecord.CapsuleData.MetaData.publisher = dataRecord.CapsuleData
                 .MetaData.publisher
                 ? dataRecord.CapsuleData.MetaData.publisher
                 : "The Scrpt Co.";
 
-              dataRecord.SharedByUserName = dataRecord.CapsuleData.MetaData
+        dataRecord.SharedByUserName = dataRecord.CapsuleData.MetaData
                 .publisher
                 ? dataRecord.CapsuleData.MetaData.publisher
                 : "NA";
@@ -17479,93 +17314,93 @@ var userStreamsPostsWithActivities = async function (req, res) {
                     ? "Surprise__Post_2Image_OUTLOOK"
                     : "Surprise__Post_OUTLOOK";
               }
-              dataRecord.hexcode_blendedImage = blendedImage;
+        dataRecord.hexcode_blendedImage = blendedImage;
 
               if (
                 activityMapObj[
-                  dataRecord.SocialPostId +
+            dataRecord.SocialPostId +
                     "_" +
-                    dataRecord.hexcode_blendedImage
+              dataRecord.hexcode_blendedImage
                 ]
               ) {
                 //console.log("INSIDE --------------");
                 //dataRecord.ActivityText = activityMapObj[dataRecord.SocialPostId+'_'+dataRecord.hexcode_blendedImage].ActivityText;
-                dataRecord.ActivityTime =
+          dataRecord.ActivityTime =
                   activityMapObj[
-                    dataRecord.SocialPostId +
+              dataRecord.SocialPostId +
                       "_" +
-                      dataRecord.hexcode_blendedImage
+                dataRecord.hexcode_blendedImage
                   ].ActivityTime;
-                dataRecord.MyComments = activityMapObj[
-                  dataRecord.SocialPostId +
+          dataRecord.MyComments = activityMapObj[
+            dataRecord.SocialPostId +
                     "_" +
-                    dataRecord.hexcode_blendedImage
+              dataRecord.hexcode_blendedImage
                 ].MyComments
                   ? activityMapObj[
-                      dataRecord.SocialPostId +
+                dataRecord.SocialPostId +
                         "_" +
-                        dataRecord.hexcode_blendedImage
+                  dataRecord.hexcode_blendedImage
                     ].MyComments
                   : [];
 
-                dataRecord.ActivityObj = {
+          dataRecord.ActivityObj = {
                   LikeActivityArr: activityMapObj[
-                    dataRecord.SocialPostId +
+              dataRecord.SocialPostId +
                       "_" +
-                      dataRecord.hexcode_blendedImage +
+                dataRecord.hexcode_blendedImage +
                       "_LikeActivityArr"
                   ]
                     ? activityMapObj[
-                        dataRecord.SocialPostId +
+                  dataRecord.SocialPostId +
                           "_" +
-                          dataRecord.hexcode_blendedImage +
+                    dataRecord.hexcode_blendedImage +
                           "_LikeActivityArr"
                       ]
                     : [],
                   CommentActivityArr: activityMapObj[
-                    dataRecord.SocialPostId +
+              dataRecord.SocialPostId +
                       "_" +
-                      dataRecord.hexcode_blendedImage +
+                dataRecord.hexcode_blendedImage +
                       "_CommentActivityArr"
                   ]
                     ? activityMapObj[
-                        dataRecord.SocialPostId +
+                  dataRecord.SocialPostId +
                           "_" +
-                          dataRecord.hexcode_blendedImage +
+                    dataRecord.hexcode_blendedImage +
                           "_CommentActivityArr"
                       ]
                     : [],
                 };
 
-                dataRecord.ActivityObj.CommentActivityArr = dataRecord
+          dataRecord.ActivityObj.CommentActivityArr = dataRecord
                   .ActivityObj.CommentActivityArr
                   ? dataRecord.ActivityObj.CommentActivityArr
                   : [];
 
                 if (dataRecord.ActivityObj.CommentActivityArr.length) {
                   var uniqueCommentArray =
-                    dataRecord.ActivityObj.CommentActivityArr.filter(function (
+              dataRecord.ActivityObj.CommentActivityArr.filter(function (
                       item,
                       pos
                     ) {
                       return (
-                        dataRecord.ActivityObj.CommentActivityArr.indexOf(
+                  dataRecord.ActivityObj.CommentActivityArr.indexOf(
                           item
                         ) == pos
                       );
                     });
 
                   if (uniqueCommentArray.length == 1) {
-                    dataRecord.ActivityText =
+              dataRecord.ActivityText =
                       uniqueCommentArray[0] + " commented";
                   } else if (uniqueCommentArray.length == 2) {
-                    dataRecord.ActivityText =
+              dataRecord.ActivityText =
                       uniqueCommentArray[0] +
                       " and " +
                       uniqueCommentArray[1] +
                       " commented";
                   } else if (uniqueCommentArray.length > 2) {
-                    dataRecord.ActivityText =
+              dataRecord.ActivityText =
                       uniqueCommentArray[0] +
                       ", " +
                       uniqueCommentArray[1] +
@@ -17577,25 +17412,25 @@ var userStreamsPostsWithActivities = async function (req, res) {
 
                 if (dataRecord.ActivityObj.LikeActivityArr.length) {
                   var uniqueLikeArray =
-                    dataRecord.ActivityObj.LikeActivityArr.filter(function (
+              dataRecord.ActivityObj.LikeActivityArr.filter(function (
                       item,
                       pos
                     ) {
                       return (
-                        dataRecord.ActivityObj.LikeActivityArr.indexOf(item) ==
+                  dataRecord.ActivityObj.LikeActivityArr.indexOf(item) ==
                         pos
                       );
                     });
 
                   if (uniqueLikeArray.length == 1) {
-                    dataRecord.ActivityText = dataRecord.ActivityText
+              dataRecord.ActivityText = dataRecord.ActivityText
                       ? dataRecord.ActivityText +
                         " and " +
                         uniqueLikeArray[0] +
                         " liked this post."
                       : uniqueLikeArray[0] + " liked this post.";
                   } else if (uniqueLikeArray.length == 2) {
-                    dataRecord.ActivityText = dataRecord.ActivityText
+              dataRecord.ActivityText = dataRecord.ActivityText
                       ? dataRecord.ActivityText +
                         " and " +
                         uniqueLikeArray[0] +
@@ -17607,7 +17442,7 @@ var userStreamsPostsWithActivities = async function (req, res) {
                         uniqueLikeArray[1] +
                         " liked this post.";
                   } else if (uniqueLikeArray.length > 2) {
-                    dataRecord.ActivityText = dataRecord.ActivityText
+              dataRecord.ActivityText = dataRecord.ActivityText
                       ? dataRecord.ActivityText +
                         " and " +
                         uniqueLikeArray[0] +
@@ -17624,7 +17459,7 @@ var userStreamsPostsWithActivities = async function (req, res) {
                         " members liked this post.";
                   }
                 } else {
-                  dataRecord.ActivityText = dataRecord.ActivityText
+            dataRecord.ActivityText = dataRecord.ActivityText
                     ? dataRecord.ActivityText + " on this post."
                     : "";
                 }
@@ -19316,6 +19151,17 @@ async function createMembersUserAccount(newUsers, OwnerDetails, StreamId) {
   return newUserAccountEmailIdMap;
 }
 
+/**
+ * Modern implementation of sendCoffeeInvitationEmail
+ * Sends a coffee invitation email with post details
+ * @param {Object} memberObj - Member object with Name and Email
+ * @param {Object} OwnerDetails - Owner details with Name and Email
+ * @param {String} PostStatement - Post content/statement
+ * @param {Array} VisualUrls - Array of image URLs
+ * @param {String} BlendMode - Blend mode for images
+ * @param {String} openingText - Custom opening text for email
+ * @returns {Promise<Object>} Email send result
+ */
 async function sendCoffeeInvitationEmail(
   memberObj,
   OwnerDetails,
@@ -19324,66 +19170,131 @@ async function sendCoffeeInvitationEmail(
   BlendMode,
   openingText
 ) {
-  var PostImage1 = VisualUrls[0] || "";
-  var PostImage2 = VisualUrls[1] || "";
-  var condition = {};
-  condition.name = "Stream__PostCoffeeInvitation";
+  try {
+    // Input validation
+    if (!memberObj?.Email || !OwnerDetails?.Email) {
+      console.error('❌ Invalid email addresses provided');
+      return { success: false, error: 'Invalid email addresses' };
+    }
 
-  var results = await EmailTemplate.find(condition, {});
-  results = Array.isArray(results) ? results : [];
-  if (!results.length) {
-    return;
-  }
+    // Extract image URLs
+    const [PostImage1 = '', PostImage2 = ''] = VisualUrls || [];
 
-  var body = memberObj || {};
-  var newHtml = results[0].description.replace(
-    /{RecipientName}/g,
-    body.Name.split(" ")[0]
-  );
-  newHtml = newHtml.replace(/{RecipientEmail}/g, body.Email);
-  newHtml = newHtml.replace(
-    /{SharedByUserName}/g,
-    OwnerDetails.Name.split(" ")[0]
-  );
-  newHtml = newHtml.replace(/{PostStatement}/g, PostStatement);
-  newHtml = newHtml.replace(/{PostImage1}/g, PostImage1);
-  newHtml = newHtml.replace(/{PostImage2}/g, PostImage2);
-  newHtml = newHtml.replace(/{BlendMode}/g, BlendMode);
-  newHtml = newHtml.replace(/{OpeningText}/g, openingText);
+    // Fetch email template
+    const emailTemplate = await EmailTemplate.findOne({ 
+      name: "Stream__PostCoffeeInvitation" 
+    });
 
-  const $ = cheerio.load(newHtml);
-  $(".post-tooltip-box").remove();
-  newHtml = $.html();
+    if (!emailTemplate) {
+      console.error('❌ Email template "Stream__PostCoffeeInvitation" not found');
+      return { success: false, error: 'Email template not found' };
+    }
 
-  results[0].subject = results[0].subject ? results[0].subject : "";
-  results[0].subject = results[0].subject.replace(
-    /{SharedByUserName}/g,
-    OwnerDetails.Name.split(" ")[0]
-  );
-  results[0].subject = results[0].subject.replace(
-    /{RecipientName}/g,
-    body.Name.split(" ")[0]
-  );
+    // Extract first names for personalization
+    const recipientFirstName = memberObj.Name?.split(" ")[0] || 'Friend';
+    const senderFirstName = OwnerDetails.Name?.split(" ")[0] || 'User';
 
-  var transporter = nodemailer.createTransport(
-    process.EMAIL_ENGINE.info.smtpOptions
-  );
-  var mailOptions = {
-    from: process.EMAIL_ENGINE.info.senderLine,
-    to: body.Email,
+    // Replace template variables using template literals and object destructuring
+    const templateVariables = {
+      RecipientName: recipientFirstName,
+      RecipientEmail: memberObj.Email,
+      SharedByUserName: senderFirstName,
+      PostStatement: PostStatement || '',
+      PostImage1,
+      PostImage2,
+      BlendMode: BlendMode || 'hard-light',
+      OpeningText: openingText || ''
+    };
+
+    // Process HTML template
+    let emailHtml = emailTemplate.description || '';
+    Object.entries(templateVariables).forEach(([key, value]) => {
+      const regex = new RegExp(`{${key}}`, 'g');
+      emailHtml = emailHtml.replace(regex, value);
+    });
+
+    // Remove tooltip boxes using cheerio
+    const $ = cheerio.load(emailHtml);
+    $('.post-tooltip-box').remove();
+    emailHtml = $.html();
+
+    // Process email subject
+    let emailSubject = emailTemplate.subject || 'Scrpt Coffee Invitation';
+    emailSubject = emailSubject
+      .replace(/{SharedByUserName}/g, senderFirstName)
+      .replace(/{RecipientName}/g, recipientFirstName);
+
+    // Get SMTP configuration
+    const smtpConfig = process.EMAIL_ENGINE?.info?.smtpOptions;
+    const senderLine = process.EMAIL_ENGINE?.info?.senderLine || 'Scrpt <hello@lifeattimes.com>';
+
+    if (!smtpConfig) {
+      console.error('❌ SMTP configuration not found');
+      return { success: false, error: 'SMTP configuration missing' };
+    }
+
+    // Create transporter with modern configuration
+    const transporter = nodemailer.createTransport({
+      ...smtpConfig,
+      pool: true, // Use pooled connections for better performance
+      maxConnections: 5,
+      maxMessages: 100,
+      logger: false, // Disable detailed logging in production
+      debug: process.env.NODE_ENV === 'development'
+    });
+
+    // Verify SMTP connection (optional but recommended)
+    try {
+      await transporter.verify();
+      console.log('✅ SMTP connection verified');
+    } catch (verifyError) {
+      console.error('⚠️ SMTP verification failed, proceeding anyway:', verifyError.message);
+    }
+
+    // Email options
+    const mailOptions = {
+      from: senderLine,
+      to: memberObj.Email,
     replyTo: OwnerDetails.Email,
     cc: OwnerDetails.Email,
-    subject: results[0].subject ? results[0].subject : "Scrpt",
-    html: newHtml,
-  };
-  transporter.sendMail(mailOptions, function (error, info) {
-    if (error) {
-      return console.log(error);
-    }
-    console.log(
-      "sendCoffeeInvitationEmail---------Message sent: " + info.response
-    );
-  });
+      subject: emailSubject,
+      html: emailHtml,
+      // Add text version for better deliverability
+      text: htmlToText(emailHtml, {
+        wordwrap: 130,
+        preserveNewlines: true
+      })
+    };
+
+    // Send email with async/await
+    console.log(`📧 Sending coffee invitation to ${memberObj.Email}...`);
+    const info = await transporter.sendMail(mailOptions);
+    
+    console.log(`✅ Coffee invitation sent successfully!`);
+    console.log(`   - To: ${memberObj.Email}`);
+    console.log(`   - Message ID: ${info.messageId}`);
+    console.log(`   - Response: ${info.response}`);
+
+    // Close transporter
+    transporter.close();
+
+    return { 
+      success: true, 
+      messageId: info.messageId,
+      recipient: memberObj.Email 
+    };
+
+  } catch (error) {
+    console.error('❌ Error sending coffee invitation email:', error);
+    console.error('   - Recipient:', memberObj?.Email);
+    console.error('   - Error message:', error.message);
+    
+    return { 
+      success: false, 
+      error: error.message,
+      recipient: memberObj?.Email 
+    };
+  }
 }
 
 var stream__addMembers = async function (req, res) {
@@ -19817,44 +19728,135 @@ var stream__addMembers = async function (req, res) {
   });
 };
 
-var stream__sendCoffeeInvitation = async function (req, res) {
-  //var OwnerId = req.body.OwnerId ? ObjectId(req.body.OwnerId) : null;
-  var OwnerId = req.session.user._id ? new ObjectId(req.session.user._id) : null;
-  var members = req.body.members ? req.body.members : [];
-  var postObj = req.body.postObj || null;
-  var PostStatement = postObj.PostStatement
-    ? postObj.PostStatement
-    : postObj.Content;
-  PostStatement = PostStatement || "";
+/**
+ * Modern implementation of stream__sendCoffeeInvitation
+ * Sends coffee invitations to multiple members with post details
+ * @route POST /journal/stream__sendCoffeeInvitation
+ * @param {Object} req.body.members - Array of member objects {Name, Email}
+ * @param {Object} req.body.postObj - Post object with PostStatement/Content and VisualUrls
+ * @param {String} req.body.openingText - Custom opening text for invitation
+ * @returns {Object} Response with success/error status
+ */
+const stream__sendCoffeeInvitation = async (req, res) => {
+  try {
+    console.log('🚀 stream__sendCoffeeInvitation - Starting...');
+    
+    // Validate session
+    if (!req.session?.user?._id) {
+      console.error('❌ Unauthorized: No user session found');
+      return res.status(401).json({ 
+        code: 401, 
+        message: "Unauthorized. Please login." 
+      });
+    }
 
-  var VisualUrls = Array.isArray(postObj.VisualUrls) ? postObj.VisualUrls : [];
-  if (VisualUrls.length == 1) {
-    VisualUrls.push(VisualUrls[0]);
-  }
+    // Extract and validate input using destructuring
+    const { members = [], postObj, openingText = '' } = req.body;
+    const OwnerId = new ObjectId(req.session.user._id);
 
-  var BlendMode = postObj.BlendMode || "hard-light";
-  var openingText = req.body.openingText || "";
+    // Validate postObj
+    if (!postObj) {
+      console.error('❌ Missing postObj in request body');
+      return res.status(400).json({ 
+        code: 400, 
+        message: "Post object is required." 
+      });
+    }
 
-  if (!OwnerId || !PostStatement || VisualUrls.length < 2) {
-    // || !members.length
-    return res.json({ code: 501, message: "Wrong input." });
-  }
+    // Extract post statement (try PostStatement first, fallback to Content)
+    const PostStatement = postObj.PostStatement || postObj.Content || '';
+    
+    if (!PostStatement.trim()) {
+      console.error('❌ Empty post statement');
+      return res.status(400).json({ 
+        code: 400, 
+        message: "Post statement/content is required." 
+      });
+    }
 
-  var OwnerDetails = await User.findOne(
+    // Extract and validate visual URLs
+    let VisualUrls = Array.isArray(postObj.VisualUrls) ? postObj.VisualUrls : [];
+    
+    // If only one image provided, duplicate it for blending
+    if (VisualUrls.length === 1) {
+      VisualUrls = [VisualUrls[0], VisualUrls[0]];
+      console.log('ℹ️ Only one image provided, duplicating for blend effect');
+    }
+
+    if (VisualUrls.length < 2) {
+      console.error('❌ Insufficient visual URLs');
+      return res.status(400).json({ 
+        code: 400, 
+        message: "At least 2 images are required for coffee invitation." 
+      });
+    }
+
+    // Extract blend mode
+    const BlendMode = postObj.BlendMode || 'hard-light';
+
+    // Validate members array
+    if (!Array.isArray(members) || members.length === 0) {
+      console.error('❌ No members provided');
+      return res.status(400).json({ 
+        code: 400, 
+        message: "At least one member is required." 
+      });
+    }
+
+    console.log(`📊 Request details:
+      - Owner ID: ${OwnerId}
+      - Members count: ${members.length}
+      - Post statement length: ${PostStatement.length} chars
+      - Visual URLs count: ${VisualUrls.length}
+      - Blend mode: ${BlendMode}
+    `);
+
+    // Fetch owner details
+    const OwnerDetails = await User.findOne(
     { _id: OwnerId, IsDeleted: 0 },
     { Name: 1, Email: 1, Birthdate: 1 }
-  );
-  OwnerDetails = typeof OwnerDetails == "object" ? OwnerDetails : null;
+    ).lean(); // Use .lean() for better performance
 
   if (!OwnerDetails) {
-    return res.json({ code: 501, message: "Wrong input." });
-  }
+      console.error('❌ Owner not found or deleted');
+      return res.status(404).json({ 
+        code: 404, 
+        message: "User not found." 
+      });
+    }
 
-  for (var i = 0; i < members.length; i++) {
-    var member = members[i];
-    //check member email and save as friend
-    saveAsFriend(req.session.user, member);
-    sendCoffeeInvitationEmail(
+    console.log(`✅ Owner found: ${OwnerDetails.Name} (${OwnerDetails.Email})`);
+
+    // Process members concurrently for better performance
+    const results = {
+      total: members.length,
+      successful: 0,
+      failed: 0,
+      errors: []
+    };
+
+    // Use Promise.allSettled for concurrent processing with error tracking
+    const emailPromises = members.map(async (member, index) => {
+      try {
+        // Validate member email
+        if (!member?.Email) {
+          console.error(`⚠️ Member ${index + 1}: Missing email address`);
+          return { 
+            success: false, 
+            member: member?.Name || 'Unknown', 
+            error: 'Missing email' 
+          };
+        }
+
+        console.log(`📨 Processing member ${index + 1}/${members.length}: ${member.Email}`);
+
+        // Save as friend (don't await to improve performance)
+        saveAsFriend(req.session.user, member).catch(err => {
+          console.error(`⚠️ Failed to save ${member.Email} as friend:`, err.message);
+        });
+
+        // Send coffee invitation email
+        const emailResult = await sendCoffeeInvitationEmail(
       member,
       OwnerDetails,
       PostStatement,
@@ -19862,8 +19864,85 @@ var stream__sendCoffeeInvitation = async function (req, res) {
       BlendMode,
       openingText
     );
+
+        return {
+          ...emailResult,
+          member: member.Name,
+          email: member.Email
+        };
+
+      } catch (error) {
+        console.error(`❌ Error processing member ${member?.Email}:`, error.message);
+        return { 
+          success: false, 
+          member: member?.Name || 'Unknown',
+          email: member?.Email,
+          error: error.message 
+        };
+      }
+    });
+
+    // Wait for all emails to be processed
+    const emailResults = await Promise.allSettled(emailPromises);
+
+    // Process results
+    emailResults.forEach((result, index) => {
+      if (result.status === 'fulfilled' && result.value?.success) {
+        results.successful++;
+      } else {
+        results.failed++;
+        results.errors.push({
+          member: members[index]?.Name || 'Unknown',
+          email: members[index]?.Email,
+          error: result.value?.error || result.reason?.message || 'Unknown error'
+        });
+      }
+    });
+
+    console.log(`
+📊 Coffee Invitation Summary:
+   - Total members: ${results.total}
+   - Successfully sent: ${results.successful}
+   - Failed: ${results.failed}
+    `);
+
+    if (results.errors.length > 0) {
+      console.log('⚠️ Failed invitations:', results.errors);
+    }
+
+    // Return response based on results
+    if (results.successful === 0) {
+      return res.status(500).json({ 
+        code: 500, 
+        message: "Failed to send any invitations.",
+        details: results
+      });
+    }
+
+    if (results.failed > 0) {
+      return res.status(207).json({ // 207 Multi-Status
+        code: 207, 
+        message: `Invitations sent to ${results.successful} out of ${results.total} members.`,
+        details: results
+      });
+    }
+
+    return res.status(200).json({ 
+      code: 200, 
+      message: "All invitations sent successfully.",
+      details: results
+    });
+
+  } catch (error) {
+    console.error('❌ Fatal error in stream__sendCoffeeInvitation:', error);
+    console.error('   Stack trace:', error.stack);
+    
+    return res.status(500).json({ 
+      code: 500, 
+      message: "Internal server error while sending invitations.",
+      error: process.env.NODE_ENV === 'development' ? error.message : undefined
+    });
   }
-  return res.json({ code: 200, message: "Invitation sent." });
 };
 
 var stream__getMembersList = async function (req, res) {

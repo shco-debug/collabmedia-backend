@@ -490,7 +490,7 @@ ContentPage.create = async (req, res) => {
     data.CreaterId = userId;
     data.OwnerId = userId;
 
-    data.ChapterId = req.body.chapter_id ? req.body.chapter_id : null;
+    data.ChapterId = req.headers.chapter_id ? req.headers.chapter_id : null;
     data.PageType = req.body.page_type ? req.body.page_type : "content";
     data.Title = req.body.title ? req.body.title : "";
 
@@ -519,7 +519,14 @@ ContentPage.create = async (req, res) => {
       result: result,
     };
 
-    await pushPageId(data.ChapterId, result._id);
+    // Push page ID to chapter
+    try {
+      await pushPageId(data.ChapterId, result._id);
+    } catch (pushError) {
+      console.log("❌ Error pushing page to chapter:", pushError);
+      // Don't fail the entire request if chapter update fails
+    }
+
     res.json(response);
   } catch (err) {
     console.log(err);
@@ -2466,24 +2473,45 @@ ContentPage.dashEditCreate = function (req, res) {
 // To push page id in chapter by arun sahani 20-05-2016
 var pushPageId = async function (chapterId, pageId) {
   try {
+    console.log(`🔄 PUSHING PAGE ID: ${pageId} to CHAPTER: ${chapterId}`);
+    
     // Skip if chapterId is invalid (null or falsy)
     if (!chapterId) {
-      console.log("Skipping chapter update - invalid chapterId:", chapterId);
+      console.log("⚠️ Skipping chapter update - invalid chapterId:", chapterId);
       return;
     }
 
-    const result = await Chapter.updateOne(
+    // First check if chapter exists
+    const chapter = await Chapter.findById(chapterId);
+    if (!chapter) {
+      throw new Error(`Chapter ${chapterId} not found`);
+    }
+    
+    console.log(`📋 Chapter found: ${chapter.Title}`);
+    console.log(`📋 Current pages count: ${chapter.pages ? chapter.pages.length : 0}`);
+    
+    // Check if page already exists in chapter
+    if (chapter.pages && chapter.pages.includes(pageId)) {
+      console.log(`⚠️ Page ${pageId} already exists in chapter`);
+      return;
+    }
+
+    // Update chapter with new page
+    const updateResult = await Chapter.updateOne(
       { _id: chapterId },
       { $push: { pages: pageId } }
     );
-
-    if (result.modifiedCount > 0) {
-      console.log("page saved in chapter successfully.");
-    } else {
-      console.log("Chapter not found or no changes made");
-    }
+    
+    console.log(`✅ Update result:`, updateResult);
+    console.log(`✅ page saved in chapter successfully.`);
+    
+    // Verify the update
+    const updatedChapter = await Chapter.findById(chapterId);
+    console.log(`📋 Updated pages count: ${updatedChapter.pages ? updatedChapter.pages.length : 0}`);
+    
   } catch (err) {
-    console.log("Error updating chapter with page ID:", err);
+    console.log("❌ Error in pushPageId:", err);
+    throw err; // Re-throw to be caught by caller
   }
 };
 //My Pages Apis

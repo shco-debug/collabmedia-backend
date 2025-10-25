@@ -27,5 +27,10 @@ module.exports = function(router){
 		MediaActionLogs.getCommentLikes(req, res);
 	});
 
+	// Get private comments (filtered by privacy settings and user permissions)
+	router.post('/getPrivateComments', function(req, res){
+		MediaActionLogs.getPrivateComments(req, res);
+	});
+
 };
 

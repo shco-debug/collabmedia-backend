@@ -97,7 +97,7 @@ module.exports = function(req, res, next){
 			'/addMjImageToMedia__INTERNAL_API',
 			'/addUnsplashImageToMedia__INTERNAL_API',
 			// '/createSinglePost' - removed to require authentication
-			'/updatePostPrivacy',
+			// '/updatePostPrivacy' - removed to require JWT authentication
 			'/createBlend'
 		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);

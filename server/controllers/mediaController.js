@@ -2969,14 +2969,19 @@ const createSinglePost = async (req, res) => {
       pageId, // Optional - if provided, adds to page; if not, creates independent post
     } = req.body;
 
-    const userId = req.session.user ? req.session.user._id : null;
-
-    if (!userId) {
+    // Check if user is logged in (support both JWT and session)
+    const userFromSession = req.session?.user;
+    const userFromJWT = req.user;
+    
+    if (!userFromSession && !userFromJWT) {
       return res.status(401).json({
         code: 401,
         message: "User not authenticated",
       });
     }
+
+    // Get user ID from JWT (preferred) or session (fallback)
+    const userId = userFromJWT?.userId || userFromSession?._id;
 
     // Extract media URLs and blend settings
     let mediaUrls = [];
@@ -3192,12 +3197,14 @@ const createSinglePost = async (req, res) => {
     // Prepare Location array with all images (original + blended)
     const locationArray = [];
 
-    // Add original images
+    // Add original media (images, videos, audio)
     if (mediaUrls.length > 0) {
       mediaUrls.forEach((url, index) => {
+        const mediaItem = mediaArray[index];
         locationArray.push({
           Size: "original",
           URL: url,
+          Duration: mediaItem?.duration || null, // Include duration for video/audio
         });
       });
     }
@@ -3419,9 +3426,12 @@ const createSinglePost = async (req, res) => {
 // Get user's own posts with privacy filtering and pagination
 const getUserPosts = async (req, res) => {
   try {
-    // Check if user is logged in
-    if (!req.session.user || !req.session.user._id) {
-      console.log("❌ Authentication failed - no valid session");
+    // Check if user is logged in (support both JWT and session)
+    const userFromSession = req.session?.user;
+    const userFromJWT = req.user;
+    
+    if (!userFromSession && !userFromJWT) {
+      console.log("❌ Authentication failed - no valid JWT or session");
       return res.status(401).json({
         code: 401,
         message: "Authentication required",
@@ -3429,7 +3439,8 @@ const getUserPosts = async (req, res) => {
       });
     }
 
-    const userId = req.session.user._id;
+    // Get user ID from JWT (preferred) or session (fallback)
+    const userId = userFromJWT?.userId || userFromSession?._id;
 
     // Extract query parameters with defaults
     const {
@@ -3471,10 +3482,8 @@ const getUserPosts = async (req, res) => {
         break;
       case "private":
       case "OnlyForOwner":
-        // Include both OnlyForOwner AND PublicWithName posts for owner
-        conditions.PostPrivacySetting = {
-          $in: ["OnlyForOwner", "PublicWithName"],
-        };
+        // Only include OnlyForOwner posts (truly private)
+        conditions.PostPrivacySetting = "OnlyForOwner";
         break;
       case "friends":
         conditions.PostPrivacySetting = "InvitedFriends";
@@ -3716,6 +3725,20 @@ const getUserPosts = async (req, res) => {
                     $and: [
                       { $eq: ["$$this.Action", "Comment"] },
                       { $eq: ["$$this.IsDeleted", false] },
+                      // Privacy filtering: Show public comments OR user's own private comments
+                      {
+                        $or: [
+                          { $not: { $ifNull: ["$$this.PrivacySetting", false] } },  // No privacy setting
+                          { $eq: ["$$this.PrivacySetting", "PublicWithName"] },
+                          { $eq: ["$$this.PrivacySetting", "PublicWithoutName"] },
+                          { 
+                            $and: [
+                              { $in: ["$$this.PrivacySetting", ["OnlyForOwner", "InvitedFriends"]] },
+                              { $eq: ["$$this.UserId", new mongoose.Types.ObjectId(userId)] }
+                            ]
+                          }
+                        ]
+                      }
                     ],
                   },
                 },
@@ -3728,6 +3751,7 @@ const getUserPosts = async (req, res) => {
                     user: {
                       $arrayElemAt: ["$$comment.user", 0],
                     },
+                    // Will add comment likes in next stage
                   },
                 ],
               },
@@ -3815,6 +3839,119 @@ const getUserPosts = async (req, res) => {
           commentCount: 1,
         },
       },
+      // Add comment likes for each comment
+      {
+        $addFields: {
+          comments: {
+            $map: {
+              input: "$comments",
+              as: "comment",
+              in: {
+                $mergeObjects: [
+                  "$$comment",
+                  {
+                    likeCount: {
+                      $cond: {
+                        if: { $ifNull: ["$$comment._id", false] },
+                        then: "$$comment._id",
+                        else: 0
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      // Lookup comment likes from MediaActionLogs
+      {
+        $lookup: {
+          from: "MediaActionLogs",
+          let: { postId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$MediaId", "$$postId"] },
+                    { $eq: ["$IsDeleted", false] },
+                    // Support both old and new comment like formats
+                    {
+                      $or: [
+                        // New format: Action: "Vote", ActionLevel: "post" with Comment field
+                        {
+                          $and: [
+                            { $eq: ["$Action", "Vote"] },
+                            { $eq: ["$ActionLevel", "post"] },
+                            { $ne: ["$Comment", ""] }
+                          ]
+                        },
+                        // Old format: Action: "CommentLike"
+                        { $eq: ["$Action", "CommentLike"] }
+                      ]
+                    }
+                  ]
+                }
+              }
+            },
+            {
+              $group: {
+                _id: "$Comment", // Group by CommentId
+                likeCount: { $sum: 1 },
+                likedBy: { $push: "$UserId" }
+              }
+            }
+          ],
+          as: "commentLikes"
+        }
+      },
+      // Merge comment likes into comments array
+      {
+        $addFields: {
+          comments: {
+            $map: {
+              input: "$comments",
+              as: "comment",
+              in: {
+                $let: {
+                  vars: {
+                    commentLikeData: {
+                      $arrayElemAt: [
+                        {
+                          $filter: {
+                            input: "$commentLikes",
+                            cond: { $eq: ["$$this._id", { $toString: "$$comment._id" }] }
+                          }
+                        },
+                        0
+                      ]
+                    }
+                  },
+                  in: {
+                    $mergeObjects: [
+                      "$$comment",
+                      {
+                        likeCount: { $ifNull: ["$$commentLikeData.likeCount", 0] },
+                        likedBy: { $ifNull: ["$$commentLikeData.likedBy", []] },
+                        likedByCurrentUser: {
+                          $in: [new mongoose.Types.ObjectId(userId), { $ifNull: ["$$commentLikeData.likedBy", []] }]
+                        }
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      // Remove temporary commentLikes field
+      {
+        $project: {
+          commentLikes: 0
+        }
+      }
     ]);
 
     // Get total count for pagination
@@ -3938,8 +4075,11 @@ const getUserPosts = async (req, res) => {
 // Update post privacy settings
 const updatePostPrivacy = async (req, res) => {
   try {
-    // Check if user is logged in
-    if (!req.session.user || !req.session.user._id) {
+    // Check if user is logged in (support both JWT and session)
+    const userFromSession = req.session?.user;
+    const userFromJWT = req.user;
+    
+    if (!userFromSession && !userFromJWT) {
       return res.status(401).json({
         code: 401,
         message: "Authentication required",
@@ -3947,7 +4087,8 @@ const updatePostPrivacy = async (req, res) => {
       });
     }
 
-    const userId = req.session.user._id;
+    // Get user ID from JWT (preferred) or session (fallback)
+    const userId = userFromJWT?.userId || userFromSession?._id;
     const { postId, privacySetting } = req.body;
 
     // Validate required parameters

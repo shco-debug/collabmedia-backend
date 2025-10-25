@@ -465,26 +465,14 @@ module.exports = (app) => {
 		const id = req.params.id || null;
 		const postHashCode = req.params.postHashCode || null;
 		
-		const data = {};
-		data.metaDescription = `Scrpt publishes digital treats to elevate special days & those between them!`;
-		data.metaImage = "https://www.scrpt.com/streamposts/"+postHashCode;
-		data.metaTitle = "Join Scrpt";
-		data.metaUrl = 'https://www.scrpt.com' + req.url;
+		// Redirect to the new Next.js frontend page for proper SEO and meta tags
+		const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+		const shareUrl = `${frontendUrl}/share/${id}/${postHashCode}`;
 		
-		if(id && postHashCode) {
-			const result = await SyncedPost.find({ _id: new ObjectId(id), IsDeleted: false });
-			result = Array.isArray(result) ? result : [];
-			result = result.length ? result[0] : {};
-			
-			const PostStatement = result.PostStatement || "";
-			const PostStatement_PlainText = PostStatement.replace(/<[^>]+>/g, '');
-
-			data.metaDescription = PostStatement_PlainText || `Scrpt publishes digital treats to elevate special days & those between them!`;
-			data.metaImage = "https://www.scrpt.com/streamposts/"+postHashCode;
-			data.metaTitle = "Join Scrpt";
-			data.metaUrl = 'https://www.scrpt.com' + req.url;
-		}
-		return res.render('socialStreamPost.jade', data);
+		console.log(`📤 Redirecting share link to frontend: ${shareUrl}`);
+		
+		// 301 permanent redirect to the frontend
+		return res.redirect(301, shareUrl);
 	});
 	
 	async function __getActiveStreamsByUserId( userId, userEmail, userBirthdate ) {
@@ -930,6 +918,11 @@ module.exports = (app) => {
 	const relationshipRoutes = express.Router();
 	app.use('/relationships', relationshipRoutes);
 	router.relationshipRoutes = relationshipRoutes;
+	
+	// Share routes (public - no auth required)
+	const shareRoutes = express.Router();
+	app.use('/api/share', shareRoutes);
+	router.shareRoutes = shareRoutes;
 	
 	// Main API routes (for general endpoints like /media/createSinglePost)
 	const mainRoutes = express.Router();

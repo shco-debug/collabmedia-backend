@@ -7,10 +7,16 @@ module.exports = function(req, res, next) {
     // Always initialize req.session to prevent undefined errors
     if (!req.session) {
         req.session = {};
+        console.log('⚙️ Initialized empty req.session');
     }
     
     // If we have JWT user data, create a session-like object for backward compatibility
     if (req.user) {
+        console.log('🔄 Mapping JWT user to session:', {
+            userId: req.user.userId,
+            email: req.user.email,
+            path: req.path
+        });
         req.session.user = {
             _id: req.user.userId,
             Email: req.user.email,

@@ -43,18 +43,88 @@ const axios = require("axios");
 var SyncedPost = require("./../models/syncedpostModel.js");
 var SyncedPostsMap = require("./../models/SyncedpostsMap.js");
 
-function getPriceUpperLimit(price) {
+/**
+ * Get the maximum allowed price (10x the original price)
+ * @param {number} price - Current price
+ * @returns {string} - Maximum price as string with 2 decimal places
+ */
+const getPriceUpperLimit = (price) => {
   return (parseFloat(price) * 10).toFixed(2);
-}
+};
 
-async function increamentStreamPrice(streamId, price, cent) {
-  var centToUSD = cent / 100;
-  var increamentedPrice = parseFloat(price + centToUSD).toFixed(2);
-  await Capsule.update(
-    { _id: new ObjectId(streamId) },
-    { $set: { Price: increamentedPrice } }
-  );
-}
+/**
+ * Increment stream/capsule price by a specified amount in cents
+ * @param {string} streamId - The stream/capsule ID
+ * @param {number} price - Current price in USD
+ * @param {number} cent - Amount to increment in cents
+ */
+const increamentStreamPrice = async (streamId, price, cent) => {
+  try {
+    const centToUSD = cent / 100;
+    const increamentedPrice = parseFloat(price + centToUSD).toFixed(2);
+    
+    // Use updateOne with new MongoDB ObjectId syntax
+    await Capsule.updateOne(
+      { _id: new ObjectId(streamId) },
+      { $set: { Price: increamentedPrice } }
+    );
+    
+    console.log(`💰 Price updated for stream ${streamId}: $${price} → $${increamentedPrice}`);
+  } catch (error) {
+    console.error(`❌ Error incrementing price for stream ${streamId}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Increment prices for all purchased capsules/streams in the order
+ * @param {Array} cartItems - Array of cart items from the order
+ */
+const __increamentPriceOfOrderedCapsules = async (cartItems) => {
+  try {
+    if (!Array.isArray(cartItems) || cartItems.length === 0) {
+      console.log('⚠️ No cart items to process for price increment');
+      return;
+    }
+
+    for (const cartItem of cartItems) {
+      const capsuleId = cartItem.CapsuleId || null;
+      
+      if (!capsuleId) {
+        console.log('⚠️ Skipping cart item - no CapsuleId');
+        continue;
+      }
+
+      // Fetch current capsule price
+      const capsuleObj = await Capsule.findOne(
+        { _id: new ObjectId(capsuleId) },
+        { Price: 1 }
+      );
+
+      if (!capsuleObj || !capsuleObj.Price) {
+        console.log(`⚠️ No price found for capsule ${capsuleId}`);
+        continue;
+      }
+
+      const currentPrice = parseFloat(capsuleObj.Price);
+      const maxPrice = parseFloat(getPriceUpperLimit(currentPrice));
+      const owners = Array.isArray(cartItem.Owners) ? cartItem.Owners : [];
+      const incrementAmount = 1 * owners.length; // 1 cent per owner
+
+      // Only increment if below max price
+      if (currentPrice < maxPrice) {
+        await increamentStreamPrice(capsuleId, currentPrice, incrementAmount);
+      } else {
+        console.log(`⚠️ Price cap reached for capsule ${capsuleId} - Max: $${maxPrice}`);
+      }
+    }
+
+    console.log('✅ Successfully processed price increments for all cart items');
+  } catch (error) {
+    console.error('❌ Error in __increamentPriceOfOrderedCapsules:', error);
+    // Don't throw - we don't want to break the order process if price increment fails
+  }
+};
 
 function __getEmailEngineDataSetsForKeyPost(
   currentPostObj,
@@ -821,6 +891,20 @@ async function __streamPagePostNow(
           console.log(`⚠️ Post ${loop365 + 1}: Skipping due to missing required fields`);
         }
       } else {
+        // 🚀 OPTIMIZATION: Skip Audio/Video posts - they don't need blend image processing
+        const mediaType = postObj.MediaType || '';
+        const isNonBlendableType = mediaType === 'Audio' || 
+                                   mediaType === 'Video' || 
+                                   mediaType === '1AudioPost' || 
+                                   mediaType === '1VideoPost';
+        
+        if (isNonBlendableType) {
+          console.log(`⏭️ Post ${loop365 + 1}: Skipping ${mediaType} - no blend processing needed`);
+          // Audio/Video posts don't need the expensive streamPost call
+          // They'll be delivered via the normal email flow without blend image selection
+          continue;
+        }
+        
         console.log(`📧 Post ${loop365 + 1}: NO SelectedBlendImages - checking streamPage API conditions`);
         
         // Debug: Check each condition
@@ -1627,7 +1711,7 @@ function capsule__createNewInstance_Celebrity(CapsuleData, owner, req) {
             var newCapsuleId = result._id;
 
             //update store capsule with CelebrityInstanceId
-            await Capsule.update(
+            await Capsule.updateOne(
               { _id: new ObjectId(__capsuleId) },
               { $set: { CelebrityInstanceId: new ObjectId(newCapsuleId) } }
             );
@@ -2633,56 +2717,52 @@ var capsuleLaunchEngine = function (__capsuleId, MakingFor, req, res) {
           __capsuleId
         );
       }
-      Capsule.update(
+      Capsule.updateOne(
         { _id: __capsuleId },
-        { $set: finalSetData },
-        { multi: false },
-        function (err, numAffected) {
-          if (err) {
-            console.error("Error during final capsule update:", err);
-            var response = {
-              status: 501,
-              message: "Failed to finalize capsule update.",
-            };
-            res.json(response);
-          } else {
-            console.log(
-              "Final capsule update successful. Capsule ID:",
-              __capsuleId
-            );
-            var chapterSetData = {
-              IsLaunched: true,
-              "LaunchSettings.MakingFor":
-                finalSetData["LaunchSettings.Audience"],
-            };
-            Chapter.update(
-              { CapsuleId: __capsuleId, Status: true, IsDeleted: false },
-              { $set: chapterSetData },
-              { multi: true },
-              function (errChapter, numAffectedChapters) {
-                if (!errChapter) {
-                  var response = {
-                    status: 200,
-                    message: "Capsule has been published successfully.",
-                  };
-                  res.json(response);
-                } else {
-                  console.error(
-                    "Error updating chapters after capsule publish:",
-                    errChapter
-                  );
-                  var response = {
-                    status: 501,
-                    message:
-                      "Capsule published, but failed to update chapters.",
-                  };
-                  res.json(response);
-                }
-              }
-            );
-          }
-        }
-      );
+        { $set: finalSetData }
+      )
+        .then((numAffected) => {
+          console.log(
+            "Final capsule update successful. Capsule ID:",
+            __capsuleId
+          );
+          var chapterSetData = {
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": finalSetData["LaunchSettings.Audience"]
+          };
+          
+          Chapter.updateMany(
+            { CapsuleId: __capsuleId, Status: true, IsDeleted: false },
+            { $set: chapterSetData }
+          )
+            .then((numAffectedChapters) => {
+              var response = {
+                status: 200,
+                message: "Capsule has been published successfully.",
+              };
+              res.json(response);
+            })
+            .catch((errChapter) => {
+              console.error(
+                "Error updating chapters after capsule publish:",
+                errChapter
+              );
+              var response = {
+                status: 501,
+                message: "Capsule published, but failed to update chapters.",
+              };
+              res.json(response);
+            });
+        })
+        .catch((err) => {
+          console.error("Error in capsuleLaunchEngine:", err);
+          var response = {
+            status: 501,
+            message: "Failed to publish capsule.",
+            error: err.message
+          };
+          res.json(response);
+        });
       break;
 
     case "SUBSCRIBERS":
@@ -2850,27 +2930,26 @@ var chapterLaunchEngine = function (__capsuleId, MakingFor, req, res) {
             }
 
             // //console.log("setData = ", setData);
-            Capsule.update(
+            Capsule.updateOne(
               { _id: __capsuleId },
-              { $set: setData },
-              { multi: false },
-              function (err, numAffected) {
-                if (!err) {
-                  var response = {
-                    status: 200,
-                    message: "Capsule has been published successfully.",
-                    result: results,
-                  };
-                  res.json(response);
-                } else {
-                  var response = {
-                    status: 501,
-                    message: "Something went wrong.",
-                  };
-                  // //console.log("133-------------", response);
-                }
-              }
-            );
+              { $set: setData }
+            )
+              .then((numAffected) => {
+                var response = {
+                  status: 200,
+                  message: "Capsule has been published successfully.",
+                  result: results,
+                };
+                res.json(response);
+              })
+              .catch((err) => {
+                var response = {
+                  status: 501,
+                  message: "Something went wrong.",
+                };
+                res.json(response);
+                // //console.log("133-------------", response);
+              });
           }
         }
       } else {
@@ -2891,120 +2970,88 @@ var chapterLaunchEngine = function (__capsuleId, MakingFor, req, res) {
   });
 };
 
-const publishV2 = (req, res) => {
-  const __capsuleId = req.headers.capsule_id ? req.headers.capsule_id : "0";
-  console.log("__capsuleId", __capsuleId);
-  const condition = {
-    _id: req.headers.capsule_id ? req.headers.capsule_id : "0",
-  };
-
-  const makingFor = req.body.makingFor ? req.body.makingFor : "ME";
-  const CapsuleFor = req.body.CapsuleFor ? req.body.CapsuleFor : "Stream";
-  const StreamType = req.body.StreamType ? req.body.StreamType : null;
-  const participation = req.body.participation
-    ? req.body.participation
-    : "private";
-  const price = req.body.price ? parseFloat(req.body.price) : 0;
-  const DiscountPrice = req.body.DiscountPrice
-    ? parseFloat(req.body.DiscountPrice)
-    : 0;
-
-  req.body.LaunchSettings = req.body.LaunchSettings
-    ? req.body.LaunchSettings
-    : {};
-  const OwnerBirthday = req.body.LaunchSettings.OwnerBirthday
-    ? req.body.LaunchSettings.OwnerBirthday
-    : null;
-
-  const StreamFlow = req.body.StreamFlow ? req.body.StreamFlow : "Birthday";
-  const OwnerAnswer = req.body.OwnerAnswer ? req.body.OwnerAnswer : false;
-  const IsOwnerPostsForMember = req.body.IsOwnerPostsForMember
-    ? req.body.IsOwnerPostsForMember
-    : false;
-  const IsPurchaseNeededForAllPosts = req.body.IsPurchaseNeededForAllPosts
-    ? req.body.IsPurchaseNeededForAllPosts
-    : false;
-
-  const Frequency = req.body.Frequency ? req.body.Frequency : "medium";
-  const MonthFor = req.body.MonthFor ? req.body.MonthFor : "M12";
-
-  if (req.body.title) {
-    const title = req.body.title;
-
-    const setObj = {
-      "LaunchSettings.Audience": makingFor,
-      "LaunchSettings.CapsuleFor": CapsuleFor,
-      "LaunchSettings.ShareMode": participation,
-      Title: title,
-      ModifiedOn: Date.now(),
-    };
-
-    // Add OthersData if provided
-    if (req.body.LaunchSettings && req.body.LaunchSettings.OthersData) {
-      setObj["LaunchSettings.OthersData"] = req.body.LaunchSettings.OthersData;
-    }
-
-    if (setObj["LaunchSettings.CapsuleFor"] == "Stream") {
-      setObj["LaunchSettings.StreamType"] = StreamType ? StreamType : "";
-      setObj["StreamFlow"] = StreamFlow;
-      setObj["OwnerAnswer"] = OwnerAnswer;
-      setObj["IsOwnerPostsForMember"] = IsOwnerPostsForMember;
-      setObj["IsPurchaseNeededForAllPosts"] = IsPurchaseNeededForAllPosts;
-
-      setObj["Frequency"] = Frequency;
-      setObj["MonthFor"] = MonthFor;
-    }
-
-    if (OwnerBirthday) {
-      setObj["LaunchSettings.OwnerBirthday"] = OwnerBirthday;
-    }
-
-    if (makingFor == "BUYERS" && price == 0) {
-      //setObj.Price = price;
-    } else {
-      setObj.Price = price;
-    }
-
-    setObj.DiscountPrice = DiscountPrice;
-
-    Capsule.updateOne(condition, { $set: setObj })
-      .then((result) => {
-        switch (makingFor) {
-          case "ME":
-            //making it for	ME/myself - Launch associated chapters ie. send invitations and update the IsLaunched Key to true.
-            //chapterLaunchEngine(__capsuleId , makingFor , req , res);
-            capsuleLaunchEngine(__capsuleId, makingFor, req, res);
-            break;
-
-          case "OTHERS":
-            //making it for	OTHERS - update the IsLaunched Key to false - Owner will Launch it later.
-            //chapterLaunchEngine(__capsuleId , makingFor , req , res);
-            capsuleLaunchEngine(__capsuleId, makingFor, req, res);
-            break;
-
-          case "BUYERS":
-            console.log("----------------BUYERS CASE -----------------");
-            //making it for	SUBSCRIBERS - update the IsLaunched Key to false - Owner/subscibers will Launch it later.
-            capsuleLaunchEngine(__capsuleId, makingFor, req, res);
-
-            break;
-
-          case "SUBSCRIBERS":
-            //making it for	SUBSCRIBERS - update the IsLaunched Key to false - Owner/subscibers will Launch it later.
-            capsuleLaunchEngine(__capsuleId, makingFor, req, res);
-
-            break;
-
-          default:
-          // //console.log("------WRONG CASE FOUND ERROR : MakingFor-------");
-        }
-      })
-      .catch((err) => {
-        console.log(
-          "------------------------------err------------------------- ",
-          err
-        );
+const publishV2 = async (req, res) => {
+  try {
+    const __capsuleId = req.headers.capsule_id ? req.headers.capsule_id : "0";
+    
+    if (!__capsuleId || __capsuleId === "0") {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required in headers."
       });
+    }
+    
+    console.log("📢 Publishing capsule:", __capsuleId);
+    
+    // Fetch existing capsule to get its settings
+    const capsule = await Capsule.findById(__capsuleId);
+    
+    if (!capsule) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found."
+      });
+    }
+    
+    // Get makingFor from existing capsule settings (or allow override from body)
+    const makingFor = req.body.makingFor || capsule.LaunchSettings?.Audience || "ME";
+    
+    console.log("📢 Publishing for audience:", makingFor);
+    
+    // If body contains settings, update them (optional - for backward compatibility)
+    if (req.body.title || req.body.price !== undefined || req.body.makingFor) {
+      const setObj = {};
+      
+      // Only update fields that are provided in the body
+      if (req.body.title) setObj.Title = req.body.title;
+      if (req.body.makingFor) setObj["LaunchSettings.Audience"] = req.body.makingFor;
+      if (req.body.CapsuleFor) setObj["LaunchSettings.CapsuleFor"] = req.body.CapsuleFor;
+      if (req.body.StreamType !== undefined) setObj["LaunchSettings.StreamType"] = req.body.StreamType || "";
+      if (req.body.participation) setObj["LaunchSettings.ShareMode"] = req.body.participation;
+      if (req.body.StreamFlow) setObj["StreamFlow"] = req.body.StreamFlow;
+      if (req.body.OwnerAnswer !== undefined) setObj["OwnerAnswer"] = req.body.OwnerAnswer;
+      if (req.body.IsOwnerPostsForMember !== undefined) setObj["IsOwnerPostsForMember"] = req.body.IsOwnerPostsForMember;
+      if (req.body.IsPurchaseNeededForAllPosts !== undefined) setObj["IsPurchaseNeededForAllPosts"] = req.body.IsPurchaseNeededForAllPosts;
+      if (req.body.Frequency) setObj["Frequency"] = req.body.Frequency;
+      if (req.body.MonthFor) setObj["MonthFor"] = req.body.MonthFor;
+      if (req.body.DiscountPrice !== undefined) setObj.DiscountPrice = parseFloat(req.body.DiscountPrice);
+      
+      // Handle price (don't override to 0 for BUYERS unless explicitly provided)
+      if (req.body.price !== undefined) {
+        const price = parseFloat(req.body.price);
+        if (!(makingFor === "BUYERS" && price === 0)) {
+          setObj.Price = price;
+        }
+      }
+      
+      // Handle OwnerBirthday
+      if (req.body.LaunchSettings?.OwnerBirthday) {
+        setObj["LaunchSettings.OwnerBirthday"] = req.body.LaunchSettings.OwnerBirthday;
+      }
+      
+      // Handle OthersData
+      if (req.body.LaunchSettings?.OthersData) {
+        setObj["LaunchSettings.OthersData"] = req.body.LaunchSettings.OthersData;
+      }
+      
+      if (Object.keys(setObj).length > 0) {
+        setObj.ModifiedOn = Date.now();
+        await Capsule.updateOne({ _id: __capsuleId }, { $set: setObj });
+        console.log("📝 Updated capsule settings before publishing");
+      }
+    }
+    
+    // Now trigger the actual publishing/launch process
+    // This is the MAIN purpose of this endpoint
+    capsuleLaunchEngine(__capsuleId, makingFor, req, res);
+    
+  } catch (err) {
+    console.error("❌ Error in publishV2:", err);
+    res.json({
+      status: 501,
+      message: "Something went wrong.",
+      error: err.message
+    });
   }
 };
 /*________________________________________________________________________
@@ -4180,6 +4227,10 @@ var savedOrder = function (
         };
         await Cart.deleteMany(conditions);
         console.log("Cart cleared successfully");
+
+        // Increment prices for purchased capsules/streams
+        console.log("Starting price increment for purchased capsules...");
+        await __increamentPriceOfOrderedCapsules(order.CartItems);
 
         var response = {
           status: 200,

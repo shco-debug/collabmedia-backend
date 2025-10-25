@@ -83,9 +83,14 @@ module.exports = function(router){
 		Capsule.duplicate(req,res);
 	});
 
-	//remove a Capsule
+	//remove a Capsule (soft delete)
 	router.post('/remove',function(req,res){
 		Capsule.remove(req,res);
+	});
+
+	//cascade delete a Capsule and all related data (hard delete)
+	router.post('/cascadeDelete',function(req,res){
+		Capsule.cascadeDeleteCapsule(req,res);
 	});
 
 	//reorder all Capsules
@@ -122,6 +127,11 @@ module.exports = function(router){
 	//get current Capsules data for launch settings
 	router.get('/current',function(req,res){
 		Capsule.find(req,res);
+	});
+
+	//update capsule by ID (for edit page)
+	router.put('/:id',function(req,res){
+		Capsule.updateCapsule(req,res);
 	});
 
 	//add new invitee to capsule
