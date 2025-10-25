@@ -440,7 +440,7 @@ async function getMyStreamIds (UserId) {
 	var conditions = {
 		"$or" : [
 			{
-				OwnerId : ObjectId(UserId),
+				OwnerId : new ObjectId(UserId),
 				Origin : "published",
 				IsPublished : true,
 				"LaunchSettings.Audience":"ME",
@@ -461,7 +461,7 @@ async function getMyStreamIds (UserId) {
 	var results = await Capsule.find(conditions , fields).populate('OwnerId').populate('PurchasedBy').sort(sortObj).lean();
 	results = results ? results : [];
 
-	var finalResults = results.map((obj)=>ObjectId(obj._id));
+	var finalResults = results.map((obj)=>new ObjectId(obj._id));
 	return finalResults;
 }
 
@@ -7018,7 +7018,7 @@ var myStreamPosts = async function (req, res) {
 	req.body.OwnerId = OwnerId;
 
 	var CapsuleData_cond = {};
-	CapsuleData_cond._id = ObjectId(CapsuleId);
+	CapsuleData_cond._id = new ObjectId(CapsuleId);
 	var CapsuleData = await Capsule.findOne(CapsuleData_cond, {OriginatedFrom: 1, IsOwnerPostsForMember : 1, IsPurchaseNeededForAllPosts : 1, OwnerAnswer: 1, StreamFlow: 1, LaunchDate: 1});
 	CapsuleData = typeof CapsuleData == 'object' ? CapsuleData : null;
 	if(!CapsuleData) {
@@ -7034,8 +7034,8 @@ var myStreamPosts = async function (req, res) {
 
 	if(StreamType == 'Group' && String(OwnerId) != String(loginUserId)) {
 		var cond = {
-			StreamId : ObjectId(CapsuleId),
-			MemberId : ObjectId(loginUserId)
+			StreamId : new ObjectId(CapsuleId),
+			MemberId : new ObjectId(loginUserId)
 		};
 		var AnswerFinishLogs_result = await AnswerFinishLogs.find(cond);
 		AnswerFinishLogs_result = Array.isArray(AnswerFinishLogs_result) ? AnswerFinishLogs_result : [];
@@ -7044,11 +7044,11 @@ var myStreamPosts = async function (req, res) {
 			if(IsOwnerPostsForMember) {
 				if(IsPurchaseNeededForAllPosts) {
 					//now check if the member has already purchased the stream from store or not.
-					var CapsuleData_MemberPurchase_cond = {
-						OriginatedFrom : ObjectId(CapsuleData.OriginatedFrom),
-						OwnerId : String(loginUserId),
-						IsDeleted : 0
-					};
+				var CapsuleData_MemberPurchase_cond = {
+					OriginatedFrom : new ObjectId(CapsuleData.OriginatedFrom),
+					OwnerId : String(loginUserId),
+					IsDeleted : 0
+				};
 					var CapsuleData_MemberPurchase = await Capsule.find(CapsuleData_MemberPurchase_cond, {_id : 1});
 					CapsuleData_MemberPurchase = Array.isArray(CapsuleData_MemberPurchase) ? CapsuleData_MemberPurchase : [];
 					if(CapsuleData_MemberPurchase.length) {
@@ -7077,8 +7077,8 @@ var myStreamPosts = async function (req, res) {
 
 		if(IsOwnerAnswerAllowed) {
 			var cond = {
-				StreamId : ObjectId(CapsuleId),
-				MemberId : ObjectId(loginUserId)
+				StreamId : new ObjectId(CapsuleId),
+				MemberId : new ObjectId(loginUserId)
 			};
 			var AnswerFinishLogs_result = await AnswerFinishLogs.find(cond);
 			AnswerFinishLogs_result = Array.isArray(AnswerFinishLogs_result) ? AnswerFinishLogs_result : [];
@@ -7089,8 +7089,8 @@ var myStreamPosts = async function (req, res) {
 		}
 
 		var conditions = {
-			CapsuleId : ObjectId(CapsuleId),
-			//SyncedBy : ObjectId(loginUserId),
+			CapsuleId : new ObjectId(CapsuleId),
+			//SyncedBy : new ObjectId(loginUserId),
 			IsDeleted : false,
 			"EmailEngineDataSets.DateOfDelivery" : {$lte : todayEnd}
 			//Status : true,
@@ -7101,12 +7101,15 @@ var myStreamPosts = async function (req, res) {
 		sortBy = {"EmailEngineDataSets.DateOfDelivery" : -1};
 
 		var conditionsTempForNonGroupType = {
-			CapsuleId : ObjectId(CapsuleId),
+			CapsuleId : new ObjectId(CapsuleId),
 			IsDeleted : false
 		};
 
-		//var finalConditions = { DateOfDelivery: {$lte : todayEnd}, Delivered : false };
-		var finalConditions = { "EmailEngineDataSets.DateOfDelivery": {$lte : todayEnd}, "EmailEngineDataSets.Delivered" : false };
+		// ✅ Show only DELIVERED posts with DateOfDelivery <= today
+		var finalConditions = { 
+			"EmailEngineDataSets.DateOfDelivery": {$lte : todayEnd}, 
+			"EmailEngineDataSets.Delivered": true 
+		};
 		var todayYear = todayEnd.getFullYear();
 		var todayTimestamp = todayEnd.getTime();
 		var StreamLaunchDate = CapsuleData.LaunchDate ? CapsuleData.LaunchDate : null;
@@ -7211,22 +7214,22 @@ var myStreamPosts = async function (req, res) {
 		}
 		
 
-		var totalRecordsArr = await SyncedPost.aggregate([
-			{ $match: conditions },
-			{ $unwind : "$EmailEngineDataSets" },
-			{ $match : finalConditions },
-			{
-				$group : {
-					_id: null,
-					count: {$sum : 1}
-				}
+	var totalRecordsArr = await SyncedPost.aggregate([
+		{ $match: conditions },
+		{ $unwind : "$EmailEngineDataSets" },
+		{ $match : finalConditions },
+		{
+			$group : {
+				_id: null,
+				count: {$sum : 1}
 			}
-		]);
-		var totalRecords = totalRecordsArr.length > 0 ? totalRecordsArr[0].count : 0;
-		req.body.totalRecords = totalRecords;
+		}
+	]);
+	var totalRecords = totalRecordsArr.length > 0 ? totalRecordsArr[0].count : 0;
+	req.body.totalRecords = totalRecords;
 
 
-		SyncedPost.aggregate([
+	const syncedPostsResults = await SyncedPost.aggregate([
 			{ $match: conditions },
 			{ $unwind : "$EmailEngineDataSets" },
 			{ $match : finalConditions },
@@ -7317,31 +7320,31 @@ var myStreamPosts = async function (req, res) {
 					"PageData" : 1
 				}
 			},
-			/*{ $match : finalConditions },
-			{ $sort : sortBy },
-			{ $skip : (req.body.pageNo * req.body.perPage) },
-			{ $limit : req.body.limit }*/
-		]).allowDiskUse(true).exec(async function (err, syncedPostsResults) {
-			syncedPostsResults = syncedPostsResults ? syncedPostsResults : [];
-			if(StreamType == 'Group' && !syncedPostsResults.length) {
-				if(!StreamLaunchDate) {
-					return res.json({"code":"200", message : "No stream found.", results: []});
-				}
-				var OwnerBirthdate = new Date(StreamLaunchDate);
-				//OwnerBirthdate.setFullYear(todayYear);
-				var OBTimestamp = OwnerBirthdate.getTime();
+		/*{ $match : finalConditions },
+		{ $sort : sortBy },
+		{ $skip : (req.body.pageNo * req.body.perPage) },
+		{ $limit : req.body.limit }*/
+	]).allowDiskUse(true).exec();
 
-				if(todayTimestamp >= OBTimestamp) {
-					return res.json({"code":"200", message : "No stream found.", results: []});
-				} else {
-					return myStreamPosts__GroupStream_OwnerCase_InfoPosts(req, res);
-				}
-			}
-			if ( !err ) {
-				var streamPosts = [];
-				try {
-					//allocate table and update meeting record
-					for ( let loop = 0; loop < syncedPostsResults.length; loop++ ) {
+	// Handle empty results for Group streams
+	if(StreamType == 'Group' && !syncedPostsResults.length) {
+		if(!StreamLaunchDate) {
+			return res.json({"code":"200", message : "No stream found.", results: []});
+		}
+		var OwnerBirthdate = new Date(StreamLaunchDate);
+		var OBTimestamp = OwnerBirthdate.getTime();
+
+		if(todayTimestamp >= OBTimestamp) {
+			return res.json({"code":"200", message : "No stream found.", results: []});
+		} else {
+			return myStreamPosts__GroupStream_OwnerCase_InfoPosts(req, res);
+		}
+	}
+
+	var streamPosts = [];
+	try {
+		//allocate table and update meeting record
+		for ( let loop = 0; loop < syncedPostsResults.length; loop++ ) {
 						var dataRecord = syncedPostsResults[loop];
 
 						dataRecord.SharedByUser = dataRecord.SharedByUser ? dataRecord.SharedByUser[0] : {};
@@ -7376,7 +7379,7 @@ var myStreamPosts = async function (req, res) {
 						}
 
 						if(!dataRecord.SocialPostId) {
-							GroupStreamPostIds.push(ObjectId(String(dataRecord.PostId)));
+							GroupStreamPostIds.push(new ObjectId(String(dataRecord.PostId)));
 						}
 
 						//GroupStream Post fetching flow
@@ -7503,9 +7506,15 @@ var myStreamPosts = async function (req, res) {
 							}
 						}
 
-						if(!dataRecord.SocialPageId || !dataRecord.SocialPostId) {
-							continue;
+						// ✅ CHANGED: Don't skip stream posts without SocialPageId/SocialPostId
+						// Set fallback values instead
+						if(!dataRecord.SocialPageId) {
+							dataRecord.SocialPageId = dataRecord.PageId;
 						}
+						if(!dataRecord.SocialPostId) {
+							dataRecord.SocialPostId = dataRecord.PostId;
+						}
+						
 						dataRecord.hexcode_blendedImage = null;
 
 						dataRecord.VisualUrls = dataRecord.VisualUrls ? dataRecord.VisualUrls : [];
@@ -7623,13 +7632,9 @@ var myStreamPosts = async function (req, res) {
 					req.body.totalRecords = req.body.totalRecords || 0;
 					return res.json({"code":"200", message : "success", results: streamPosts, totalRecords: req.body.totalRecords});
 				} catch (error) {
-					console.log("error --------- ", error);
-					return res.json({"code":"501", message : "Something went wrong.", caughtError: error, results : []});
-				}
-			} else {
-				return res.json({"code":"501", message : "Something went wrong.", results : []});
-			}
-		});
+			console.log("error --------- ", error);
+			return res.json({"code":"501", message : "Something went wrong.", caughtError: error, results : []});
+		}
 	}
 }
 
@@ -7875,7 +7880,7 @@ var myStreamPosts_friendAsOwner = async function (req, res) {
 					}
 
 					if(!dataRecord.SocialPostId) {
-						GroupStreamPostIds.push(ObjectId(String(dataRecord.PostId)));
+						GroupStreamPostIds.push(new ObjectId(String(dataRecord.PostId)));
 					}
 
 					//GroupStream Post fetching flow
@@ -8292,7 +8297,7 @@ var myStreamPosts__GS_MemCaseAfterFinish = async function (req, res) {
 					}
 
 					if(!dataRecord.SocialPostId) {
-						GroupStreamPostIds.push(ObjectId(String(dataRecord.PostId)));
+						GroupStreamPostIds.push(new ObjectId(String(dataRecord.PostId)));
 					}
 
 					//GroupStream Post fetching flow

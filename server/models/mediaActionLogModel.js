@@ -22,6 +22,7 @@ var mediaActionLogSchema = new mongoose.Schema({
 	CreatedOn:{type : Date, default: Date.now()},
 	UpdatedOn:{type : Date, default: Date.now()},
 	IsOnlyForOwner:{ type:Boolean , default:0 },		//for post case - inside board privacy ...
+	PrivacySetting : {type : String , enum : ["PublicWithName","PublicWithoutName","OnlyForOwner","InvitedFriends"] , default : "PublicWithName"},	// Comment privacy setting
 	Themes : {type:Array, default : []},				//added on 14 nov 2017 - for underlying themes for searchability
 	IsDeleted:{ type:Boolean , default:0 },
 	LikeType : {type : String}

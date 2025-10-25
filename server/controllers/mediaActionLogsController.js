@@ -87,11 +87,12 @@ var logMediaAction = function(req,res){
 			URL: req.body.media_url || req.body.MediaURL || req.body.URL,
 			MediaType: req.body.media_type || req.body.MediaType,
 			ContentType: req.body.content_type || req.body.ContentType,
-			Content: req.body.content || req.body.Content,
-			Comment: req.body.comment || req.body.Comment || "",
-			LikeType: req.body.like_type || req.body.LikeType,
-			Themes: req.body.themes || req.body.Themes || []
-		};
+		Content: req.body.content || req.body.Content,
+		Comment: req.body.comment || req.body.Comment || "",
+		LikeType: req.body.like_type || req.body.LikeType,
+		PrivacySetting: req.body.privacySetting || req.body.PrivacySetting || "PublicWithName",  // Comment privacy
+		Themes: req.body.themes || req.body.Themes || []
+	};
 		
 		//check if sameUser-sameBoard-sameMedia-sameAction already exist.
 		var conditions = {};
@@ -1990,13 +1991,15 @@ var addCommentLike = async function(req, res) {
             });
         }
 
-        // Check if already liked
+        // Check if already liked (check both old and new formats)
         const existingLike = await mediaActionLog.findOne({
             BoardId: new ObjectId(SocialPageId),
             MediaId: MediaId ? new ObjectId(MediaId) : null,
             UserId: new ObjectId(req.session.user._id),
-            Action: "CommentLike",
-            Comment: CommentId, // Store CommentId in Comment field
+            $or: [
+                { Action: "Vote", ActionLevel: "post", Comment: CommentId },
+                { Action: "CommentLike", Comment: CommentId }
+            ],
             IsDeleted: 0
         });
 
@@ -2013,7 +2016,8 @@ var addCommentLike = async function(req, res) {
             BoardId: new ObjectId(SocialPageId),
             StreamId: StreamId ? new ObjectId(StreamId) : null,
             MediaId: MediaId ? new ObjectId(MediaId) : null,
-            Action: "CommentLike",
+            Action: "Vote",
+            ActionLevel: "post",
             Comment: CommentId, // Store CommentId in Comment field
             CreatedOn: new Date(),
             IsDeleted: 0
@@ -2021,11 +2025,14 @@ var addCommentLike = async function(req, res) {
 
         await mediaActionLog(likeData).save();
 
-        // Get updated count
+        // Get updated count (include both old and new formats)
         const count = await mediaActionLog.countDocuments({
             BoardId: new ObjectId(SocialPageId),
             Comment: CommentId,
-            Action: "CommentLike",
+            $or: [
+                { Action: "Vote", ActionLevel: "post" },
+                { Action: "CommentLike" }
+            ],
             IsDeleted: 0
         });
 
@@ -2068,13 +2075,15 @@ var removeCommentLike = async function(req, res) {
             });
         }
 
-        // Soft delete the like
+        // Soft delete the like (support both old and new formats)
         const result = await mediaActionLog.updateOne(
             {
                 BoardId: new ObjectId(SocialPageId),
                 UserId: new ObjectId(req.session.user._id),
-                Action: "CommentLike",
-                Comment: CommentId,
+                $or: [
+                    { Action: "Vote", ActionLevel: "post", Comment: CommentId },
+                    { Action: "CommentLike", Comment: CommentId }
+                ],
                 IsDeleted: 0
             },
             {
@@ -2089,11 +2098,14 @@ var removeCommentLike = async function(req, res) {
             });
         }
 
-        // Get updated count
+        // Get updated count (include both old and new formats)
         const count = await mediaActionLog.countDocuments({
             BoardId: new ObjectId(SocialPageId),
             Comment: CommentId,
-            Action: "CommentLike",
+            $or: [
+                { Action: "Vote", ActionLevel: "post" },
+                { Action: "CommentLike" }
+            ],
             IsDeleted: 0
         });
 
@@ -2140,7 +2152,10 @@ var getCommentLikes = async function(req, res) {
 
         const conditions = {
             BoardId: new ObjectId(SocialPageId),
-            Action: "CommentLike",
+            $or: [
+                { Action: "Vote", ActionLevel: "post" },
+                { Action: "CommentLike" }
+            ],
             IsDeleted: 0
         };
 
@@ -2217,3 +2232,115 @@ var getCommentLikes = async function(req, res) {
     }
 };
 exports.getCommentLikes = getCommentLikes;
+
+/*________________________________________________________________________
+   * @Date:      		October 23, 2025
+   * @Method :   		getPrivateComments
+   * Created By: 		AI Assistant
+   * @Purpose:   		Get comments filtered by privacy settings for stream members
+   * @Param:     		SocialPageId, Members (invited members array)
+   * @Return:    	 	Filtered comments based on privacy and user permissions
+   * @Access Category:	Public
+_________________________________________________________________________
+*/
+var getPrivateComments = async function(req, res) {
+    try {
+        var SocialPageIdArr = req.body.SocialPageId ? req.body.SocialPageId.split(',') : [];
+        var context = req.body.context ? req.body.context : 'StreamPosts'; //StreamPosts / Activities / OurChats / MyPosts / Community
+
+        var CommentsIds = req.body.CommentsIds ? req.body.CommentsIds : [];
+
+        var loginUserId = req.session.user._id;
+        var Members = req.body.Members ? req.body.Members : [];
+        var memberIds = [];
+        for(var i = 0; i < Members.length; i++) {
+            memberIds.push(new ObjectId(Members[i]));
+        }
+
+        for(var i = 0; i < SocialPageIdArr.length; i++) {
+            SocialPageIdArr[i] = new ObjectId(SocialPageIdArr[i]);
+        }
+
+        if(!SocialPageIdArr.length) {
+            return res.json({
+                status : "success",
+                message : "No pages specified.",
+                results : []
+            });
+        }
+
+        // Get comments with privacy filtering
+        var comments = await mediaActionLog.aggregate([
+            {
+                $match : {
+                    BoardId : { $in : SocialPageIdArr },
+                    MediaId : { $exists : true },
+                    Action : "Comment",
+                    IsDeleted: false
+                }
+            },
+            {
+                $match : {
+                    $or : [
+                        { PrivacySetting : { $exists : false } },
+                        { PrivacySetting : 'PublicWithName' },
+                        { PrivacySetting : 'PublicWithoutName' },
+                        { PrivacySetting : { $in : ['OnlyForOwner', 'InvitedFriends'] }, UserId : new ObjectId(loginUserId) },
+                        { PrivacySetting : 'InvitedFriends', UserId : { $in : memberIds } }
+                    ]
+                }
+            },
+            {
+                $lookup: {
+                    from: "users",
+                    localField: "UserId",
+                    foreignField: "_id",
+                    as: "user"
+                }
+            },
+            {
+                $addFields: {
+                    user: { $arrayElemAt: ["$user", 0] }
+                }
+            },
+            {
+                $project: {
+                    _id: 1,
+                    UserId: 1,
+                    MediaId: 1,
+                    BoardId: 1,
+                    StreamId: 1,
+                    Comment: 1,
+                    PrivacySetting: 1,
+                    CreatedOn: 1,
+                    UpdatedOn: 1,
+                    IsDeleted: 1,
+                    "user._id": 1,
+                    "user.Name": 1,
+                    "user.Email": 1,
+                    "user.ProfilePic": 1
+                }
+            },
+            {
+                $sort: { CreatedOn: -1 }
+            }
+        ]);
+
+        comments = Array.isArray(comments) ? comments : [];
+
+        return res.json({
+            status : "success",
+            message : "Private comments retrieved successfully.",
+            results : comments
+        });
+
+    } catch (error) {
+        console.error('❌ Error in getPrivateComments:', error);
+        return res.json({
+            status: "error",
+            message: "Error fetching private comments: " + error.message,
+            results: []
+        });
+    }
+};
+exports.getPrivateComments = getPrivateComments;

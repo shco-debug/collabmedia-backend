@@ -30,29 +30,86 @@ let replaceInFile = null;
 const axios = require('axios');
 var PageStream = require('./../models/pageStreamModel.js');
 
-function getPriceUpperLimit(price) {
-	return (parseFloat(price)*10).toFixed(2);
-}
+/**
+ * Get the maximum allowed price (10x the original price)
+ * @param {number} price - Current price
+ * @returns {string} - Maximum price as string with 2 decimal places
+ */
+const getPriceUpperLimit = (price) => {
+	return (parseFloat(price) * 10).toFixed(2);
+};
 
-async function increamentStreamPrice (streamId, price, cent) {
-	var centToUSD = (cent/100);
-	var increamentedPrice = parseFloat(price + centToUSD).toFixed(2);
-	await Capsule.update({_id : ObjectId(streamId)}, {$set : {Price : increamentedPrice}});
+/**
+ * Increment stream/capsule price by a specified amount in cents
+ * @param {string} streamId - The stream/capsule ID
+ * @param {number} price - Current price in USD
+ * @param {number} cent - Amount to increment in cents
+ */
+const increamentStreamPrice = async (streamId, price, cent) => {
+	try {
+		const centToUSD = cent / 100;
+		const increamentedPrice = parseFloat(price + centToUSD).toFixed(2);
+		
+		// Use updateOne with new MongoDB ObjectId syntax
+		await Capsule.updateOne(
+			{ _id: new ObjectId(streamId) }, 
+			{ $set: { Price: increamentedPrice } }
+		);
+		
+		console.log(`💰 Price updated for stream ${streamId}: $${price} → $${increamentedPrice}`);
+	} catch (error) {
+		console.error(`❌ Error incrementing price for stream ${streamId}:`, error);
+		throw error;
+	}
+};
 
-}
+/**
+ * Increment prices for all purchased capsules/streams in the order
+ * @param {Array} cartItems - Array of cart items from the order
+ */
+const __increamentPriceOfOrderedCapsules = async (cartItems) => {
+	try {
+		if (!Array.isArray(cartItems) || cartItems.length === 0) {
+			console.log('⚠️ No cart items to process for price increment');
+			return;
+		}
 
-async function __increamentPriceOfOrderedCapsules (cartItems) {
-	for(var i = 0; i < cartItems.length; i++) {
-		var cartObj = cartItems[i];
-		var capsuleId = cartObj.CapsuleId || null;
-		var capsuleObj = await Capsule.findOne({_id: ObjectId(capsuleId)}, {Price: 1});
-		capsuleObj.Price = capsuleObj.Price || null;
-		cartObj.Owners = Array.isArray(cartObj.Owners) ? cartObj.Owners : [];
-		if(capsuleObj.Price) {
-			if(capsuleObj.Price < getPriceUpperLimit(capsuleObj.Price)) {
-				await increamentStreamPrice (capsuleId, capsuleObj.Price, (1*cartObj.Owners.length));
+		for (const cartItem of cartItems) {
+			const capsuleId = cartItem.CapsuleId || null;
+			
+			if (!capsuleId) {
+				console.log('⚠️ Skipping cart item - no CapsuleId');
+				continue;
+			}
+
+			// Fetch current capsule price
+			const capsuleObj = await Capsule.findOne(
+				{ _id: new ObjectId(capsuleId) }, 
+				{ Price: 1 }
+			);
+
+			if (!capsuleObj || !capsuleObj.Price) {
+				console.log(`⚠️ No price found for capsule ${capsuleId}`);
+				continue;
+			}
+
+			const currentPrice = parseFloat(capsuleObj.Price);
+			const maxPrice = parseFloat(getPriceUpperLimit(currentPrice));
+			const owners = Array.isArray(cartItem.Owners) ? cartItem.Owners : [];
+			const incrementAmount = 1 * owners.length; // 1 cent per owner
+
+			// Only increment if below max price
+			if (currentPrice < maxPrice) {
+				await increamentStreamPrice(capsuleId, currentPrice, incrementAmount);
+			} else {
+				console.log(`⚠️ Price cap reached for capsule ${capsuleId} - Max: $${maxPrice}`);
 			}
 		}
+
+		console.log('✅ Successfully processed price increments for all cart items');
+	} catch (error) {
+		console.error('❌ Error in __increamentPriceOfOrderedCapsules:', error);
+		// Don't throw - we don't want to break the order process if price increment fails
 	}
 }
 
@@ -4927,7 +4984,9 @@ var savedOrder = async function (charge, orderInit, payFrom, rdm_credit, result,
 
 			//res.json(response);
 			// //console.log("response*****************",response);
-			//await __increamentPriceOfOrderedCapsules(order.CartItems);
+			
+			// Increment prices for purchased capsules/streams
+			await __increamentPriceOfOrderedCapsules(order.CartItems);
 
 		} else {
 			//// //console.log("11111111111111111111111111111----------------",err);

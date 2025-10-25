@@ -196,11 +196,13 @@ var capsuleSchema = new mongoose.Schema({
 	},
 	MonthFor : {
 		type:String,
-		enum:['M1','M3','M6','M9','M12','M15','M18','M21','M24']
+		enum:['M1','M3','M6','M9','M12','M15','M18','M21','M24'],
+		default: 'M12'  // Default to 12 months
 	},
 	Frequency : {
 		type:String,
-		enum:['high','medium','low']
+		enum:['high','medium','low'],
+		default: 'medium'  // Default to medium frequency
 	},
 	FrequencyInDays : {		//currently this setting will be applied for Group Stream as per new requirement as we don;t have option for buyers to select these settings. we want creater to decide. 
 		type:String,

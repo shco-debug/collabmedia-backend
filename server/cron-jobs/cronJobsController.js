@@ -7,6 +7,7 @@ var shortid = require('shortid');	//updated on 16Oct2017 - For search algorithm 
 var Capsule = require('./../models/capsuleModel.js');
 var Chapter = require('./../models/chapterModel.js');
 var SyncedPost = require('./../models/syncedpostModel.js');
+var SyncedPostsMap = require('./../models/SyncedpostsMap.js');
 var EmailTemplate = require('./../models/emailTemplateModel.js');
 var nodemailer = require('nodemailer');
 var smtpTransport = require('nodemailer-smtp-transport');
@@ -2324,9 +2325,44 @@ async function sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserNam
 }
 
 //SynedPostEmailCron();
-var SynedPostEmailCron = async function () {
+var SynedPostEmailCron = async function (testMode = false) {
     console.log("---------------------------------SynedPostEmailCron START----------------------------------------");
+    if (testMode) {
+        console.log("🧪 TEST MODE: Date filter disabled - will process ALL undelivered posts");
+    }
+    
     try {
+        // 🔍 Debug: Check what's actually in the database
+        if (testMode) {
+            console.log("🔍 DEBUG: Checking database for SyncedPosts...");
+            
+            const totalCount = await SyncedPost.countDocuments({});
+            console.log("📊 Total SyncedPosts in database:", totalCount);
+            
+            const withStatus = await SyncedPost.countDocuments({ Status: true });
+            console.log("📊 SyncedPosts with Status=true:", withStatus);
+            
+            const notDeleted = await SyncedPost.countDocuments({ IsDeleted: false });
+            console.log("📊 SyncedPosts with IsDeleted=false:", notDeleted);
+            
+            const hasEmailDatasets = await SyncedPost.countDocuments({ EmailEngineDataSets: { $exists: true, $ne: [] } });
+            console.log("📊 SyncedPosts with EmailEngineDataSets:", hasEmailDatasets);
+            
+            // Get a sample post to see its structure
+            const samplePost = await SyncedPost.findOne({}).limit(1);
+            if (samplePost) {
+                console.log("📄 Sample SyncedPost structure:");
+                console.log("  - _id:", samplePost._id);
+                console.log("  - Status:", samplePost.Status);
+                console.log("  - IsDeleted:", samplePost.IsDeleted);
+                console.log("  - EmailEngineDataSets count:", samplePost.EmailEngineDataSets?.length || 0);
+                if (samplePost.EmailEngineDataSets && samplePost.EmailEngineDataSets.length > 0) {
+                    console.log("  - First EmailEngineDataSets.Delivered:", samplePost.EmailEngineDataSets[0].Delivered);
+                    console.log("  - First EmailEngineDataSets.DateOfDelivery:", samplePost.EmailEngineDataSets[0].DateOfDelivery);
+                }
+            }
+        }
+        
         const conditions = {
             "IsDeleted": false,
             "Status": true,
@@ -2339,9 +2375,13 @@ var SynedPostEmailCron = async function () {
         const todayEnd = new Date();
         todayEnd.setHours(23, 59, 59, 999);
 
-        console.log("Cron job looking for emails with DateOfDelivery between:", todayStart, "and", todayEnd);
+        if (!testMode) {
+            console.log("Cron job looking for emails with DateOfDelivery between:", todayStart, "and", todayEnd);
+        } else {
+            console.log("🧪 TEST MODE: Looking for ALL undelivered posts (ignoring DateOfDelivery)");
+        }
 
-            const syncedPostsResults = await SyncedPost.aggregate([
+            const aggregatePipeline = [
                 { $match: conditions },
             { $unwind: "$EmailEngineDataSets" },
             {
@@ -2382,9 +2422,20 @@ var SynedPostEmailCron = async function () {
                     foreignField: "_id",
                     as: "CapsuleData"
                 }
-            },
-            { $match: { DateOfDelivery: { $gte: todayStart, $lte: todayEnd }, Delivered: false } }
-        ]).allowDiskUse(true);
+            }
+        ];
+        
+        // Add date filter only if NOT in test mode
+        if (!testMode) {
+            // Normal mode: Only process undelivered posts scheduled for today
+            aggregatePipeline.push({ $match: { DateOfDelivery: { $gte: todayStart, $lte: todayEnd }, Delivered: false } });
+        } else {
+            // Test mode: Process ANY 1 undelivered post (ignore date)
+            aggregatePipeline.push({ $match: { Delivered: false } });
+            aggregatePipeline.push({ $limit: 1 }); // In test mode, only process 1 post
+        }
+        
+        const syncedPostsResults = await SyncedPost.aggregate(aggregatePipeline).allowDiskUse(true);
             
             console.log("Cron job query returned:", syncedPostsResults.length, "results");
 
@@ -2587,14 +2638,25 @@ exports.SynedPostEmailCron = SynedPostEmailCron;
 
 var SynedPostEmailCronApi = function (req, res) {
     console.log("🔔 SynedPostEmailCronApi called via API");
+    
+    // Check if test mode is enabled via query parameter
+    const testMode = req.query.testMode === 'true' || req.query.test === 'true';
+    
+    if (testMode) {
+        console.log("🧪 TEST MODE ENABLED: Will deliver 1 post regardless of date");
+    }
+    
     try {
-        // Call the main cron function
-        SynedPostEmailCron();
+        // Call the main cron function with test mode parameter
+        SynedPostEmailCron(testMode);
         
         // Return success response
         res.json({
             success: true,
-            message: "Email delivery cron job executed successfully",
+            message: testMode 
+                ? "Email delivery cron job executed in TEST MODE (1 post, no date filter)" 
+                : "Email delivery cron job executed successfully",
+            testMode: testMode,
             timestamp: new Date().toISOString()
         });
     } catch (error) {
@@ -2609,6 +2671,208 @@ var SynedPostEmailCronApi = function (req, res) {
 };
 
 exports.SynedPostEmailCronApi = SynedPostEmailCronApi;
+
+// 🧪 TEST ENDPOINT: Create a test SyncedPost for delivery testing
+var createTestSyncedPost = async function (req, res) {
+    console.log("🧪 Creating test SyncedPost...");
+    
+    try {
+        // Get user info
+        const userId = req.session?.user?._id || req.user?.userId;
+        const userEmail = req.session?.user?.Email || req.user?.email;
+        
+        if (!userId || !userEmail) {
+            return res.json({
+                success: false,
+                message: "User not authenticated",
+                code: 401
+            });
+        }
+        
+        console.log("👤 User:", userId, userEmail);
+        
+        // 🔍 Debug: Check what capsules this user has
+        const allUserCapsules = await Capsule.find({
+            OwnerId: String(userId),
+            IsDeleted: 0
+        }).limit(10);
+        
+        console.log("📊 User has", allUserCapsules.length, "capsules total");
+        if (allUserCapsules.length > 0) {
+            console.log("📦 Sample capsules:");
+            allUserCapsules.forEach((cap, idx) => {
+                console.log(`  ${idx + 1}. ${cap.Title} - Origin: ${cap.Origin}, HasOriginatedFrom: ${!!cap.OriginatedFrom}`);
+            });
+        }
+        
+        // Try to find any capsule (not just purchased) with posts
+        let purchasedCapsule = await Capsule.findOne({
+            OwnerId: String(userId),
+            Origin: "published",
+            IsDeleted: 0,
+            OriginatedFrom: { $exists: true }
+        });
+        
+        // If no purchased capsule, try any capsule with posts
+        if (!purchasedCapsule) {
+            console.log("⚠️ No purchased capsule found, trying ANY capsule with posts...");
+            purchasedCapsule = await Capsule.findOne({
+                OwnerId: String(userId),
+                IsDeleted: 0,
+                Origin: { $ne: "journal" } // Exclude journal
+            });
+        }
+        
+        if (!purchasedCapsule) {
+            return res.json({
+                success: false,
+                message: "No capsule found for user. You need at least one stream (created or purchased).",
+                code: 404,
+                debug: {
+                    totalCapsules: allUserCapsules.length,
+                    capsuleOrigins: allUserCapsules.map(c => c.Origin)
+                }
+            });
+        }
+        
+        console.log("📦 Found purchased capsule:", purchasedCapsule._id, purchasedCapsule.Title);
+        
+        // Find the page for this capsule
+        const chapter = await Chapter.findOne({ CapsuleId: purchasedCapsule._id, IsDeleted: false });
+        if (!chapter) {
+            return res.json({
+                success: false,
+                message: "No chapter found for capsule",
+                code: 404
+            });
+        }
+        
+        const page = await Page.findOne({ ChapterId: chapter._id, IsDeleted: false });
+        if (!page) {
+            return res.json({
+                success: false,
+                message: "No page found for chapter",
+                code: 404
+            });
+        }
+        
+        console.log("📄 Found page:", page._id);
+        
+        // Get first post from the page
+        if (!page.Medias || page.Medias.length === 0) {
+            return res.json({
+                success: false,
+                message: "No posts found in page. The stream has no content.",
+                code: 404
+            });
+        }
+        
+        const firstPost = page.Medias[0];
+        console.log("📝 Found first post:", firstPost._id);
+        
+        // Create delivery schedule for today
+        const todayEnd = new Date();
+        todayEnd.setHours(23, 59, 59, 999);
+        
+        const EmailEngineDataSets = [{
+            AfterDays: 0,
+            Delivered: false,
+            DateOfDelivery: todayEnd, // Today's date
+            VisualUrls: [
+                firstPost.MediaURL || firstPost.thumbnail || '',
+                firstPost.MediaURL || firstPost.thumbnail || ''
+            ],
+            TextAboveVisual: "",
+            TextBelowVisual: firstPost.PostStatement || firstPost.Content || "",
+            SoundFileUrl: null,
+            BlendMode: "hard-light",
+            SelectedKeywords: []
+        }];
+        
+        // Create the SyncedPost object
+        const syncedPostData = {
+            CapsuleId: purchasedCapsule._id,
+            PageId: page._id,
+            PostId: firstPost._id,
+            PostOwnerId: userId,
+            ReceiverEmails: [userEmail], // Deliver to the purchaser
+            PostImage: firstPost.MediaURL || firstPost.thumbnail || '',
+            PostStatement: firstPost.PostStatement || firstPost.Content || 'Test post',
+            IsSurpriseCase: true,
+            IsPageStreamCase: true,
+            EmailEngineDataSets: EmailEngineDataSets,
+            SurpriseSelectedWords: null,
+            SurpriseSelectedTags: [],
+            SyncedBy: userId,
+            SyncedByName: req.session?.user?.Name || 'Test User',
+            EmailTemplate: purchasedCapsule.EmailTemplate || "PracticalThinker",
+            Status: 1, // Active
+            IsDeleted: false,
+            CreatedOn: Date.now(),
+            EmailSubject: purchasedCapsule.EmailSubject || 'Your daily post from Scrpt',
+            IsOnetimeStream: purchasedCapsule.IsOnetimeStream || false,
+            IsOnlyPostImage: purchasedCapsule.IsOnlyPostImage || false,
+            IsPrivateQuestionPost: false
+        };
+        
+        console.log("💾 Saving SyncedPost with data:", {
+            CapsuleId: syncedPostData.CapsuleId,
+            PageId: syncedPostData.PageId,
+            PostId: syncedPostData.PostId,
+            ReceiverEmails: syncedPostData.ReceiverEmails,
+            DateOfDelivery: EmailEngineDataSets[0].DateOfDelivery,
+            Status: syncedPostData.Status
+        });
+        
+        // Save the SyncedPost
+        const savedSyncedPost = await SyncedPost(syncedPostData).save();
+        
+        console.log("✅ SyncedPost created:", savedSyncedPost._id);
+        
+        // Also create/update the SyncedPostsMap
+        const existingMap = await SyncedPostsMap.findOne({ CapsuleId: purchasedCapsule._id });
+        
+        if (existingMap) {
+            await SyncedPostsMap.updateOne(
+                { _id: existingMap._id },
+                { $addToSet: { SyncedPosts: savedSyncedPost._id } }
+            );
+            console.log("✅ Updated existing SyncedPostsMap");
+        } else {
+            const mapData = {
+                CapsuleId: purchasedCapsule._id,
+                SyncedPosts: [savedSyncedPost._id]
+            };
+            await SyncedPostsMap(mapData).save();
+            console.log("✅ Created new SyncedPostsMap");
+        }
+        
+        return res.json({
+            success: true,
+            message: "Test SyncedPost created successfully! Call the delivery API to send it.",
+            data: {
+                syncedPostId: savedSyncedPost._id,
+                capsuleId: purchasedCapsule._id,
+                capsuleTitle: purchasedCapsule.Title,
+                postId: firstPost._id,
+                recipientEmail: userEmail,
+                deliveryDate: EmailEngineDataSets[0].DateOfDelivery,
+                status: savedSyncedPost.Status
+            }
+        });
+        
+    } catch (error) {
+        console.error("❌ Error creating test SyncedPost:", error);
+        return res.json({
+            success: false,
+            message: "Failed to create test SyncedPost",
+            error: error.message,
+            code: 500
+        });
+    }
+};
+
+exports.createTestSyncedPost = createTestSyncedPost;
 
 //stream launch cron jobs
 // exports.GroupStreamBirthdayCron__API = GroupStreamBirthdayCron__API; // Function not defined

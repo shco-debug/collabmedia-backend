@@ -60,15 +60,28 @@ async function video__getNsaveThumbnail_S3(s3VideoUrl, MediaId) {
 
     console.log("Temp output path:", tempOutputPath);
 
-    // Generate thumbnail directly from S3 URL using FFmpeg (optimized for speed)
+    // Generate thumbnail directly from S3 URL using FFmpeg (preserving original dimensions)
     const ffmpeg = require('@ffmpeg-installer/ffmpeg');
-    const command = `"${ffmpeg.path}" -i "${s3VideoUrl}" -vframes 1 -vf "scale=640:360" -y "${tempOutputPath}"`;
-    console.log("FFmpeg command (S3 direct, optimized):", command);
+    const command = `"${ffmpeg.path}" -i "${s3VideoUrl}" -vframes 1 -y "${tempOutputPath}"`;
+    console.log("FFmpeg command (S3 direct, original dimensions):", command);
 
     const { stdout, stderr } = await execAsync(command);
     
     if (stdout) console.log("FFmpeg stdout:", stdout);
     if (stderr) console.log("FFmpeg stderr:", stderr);
+
+    // Extract duration from FFmpeg stderr output
+    let videoDuration = null;
+    if (stderr) {
+      const durationMatch = stderr.match(/Duration: (\d{2}):(\d{2}):(\d{2}\.\d{2})/);
+      if (durationMatch) {
+        const hours = parseInt(durationMatch[1]);
+        const minutes = parseInt(durationMatch[2]);
+        const seconds = parseFloat(durationMatch[3]);
+        videoDuration = hours * 3600 + minutes * 60 + seconds;
+        console.log("🎬 Extracted duration from FFmpeg:", videoDuration, "seconds");
+      }
+    }
 
     // Check if thumbnail was created
     if (!fs.existsSync(tempOutputPath)) {
@@ -92,7 +105,7 @@ async function video__getNsaveThumbnail_S3(s3VideoUrl, MediaId) {
       throw new Error(`S3 thumbnail upload failed: ${thumbnailResult.error}`);
     }
 
-    console.log("S3 thumbnail upload successful:", thumbnailResult);
+    console.log("🎬 S3 thumbnail upload successful:", thumbnailResult);
 
     // Update media record with thumbnail info (use existing thumbnail field)
     const aspectfitThumbnail = thumbnailResult.thumbnails.find(t => t.size === 'aspectfit');
@@ -100,21 +113,33 @@ async function video__getNsaveThumbnail_S3(s3VideoUrl, MediaId) {
       thumbnail: aspectfitThumbnail ? aspectfitThumbnail.thumbnailUrl : outputThumbnail
     };
 
-    console.log("Updating media record with thumbnail info:", JSON.stringify(thumbnailUpdate, null, 2));
+    // If we extracted duration, update it in the Location array
+    if (videoDuration !== null) {
+      thumbnailUpdate['Location.0.Duration'] = videoDuration;
+      console.log("🎬 Also updating duration in Location array:", videoDuration, "seconds");
+    }
+
+    console.log("🎬 Updating media record with thumbnail info:", JSON.stringify(thumbnailUpdate, null, 2));
+    console.log("🎬 MediaId being updated:", MediaId);
 
     const updateResult = await media.updateOne(
       { _id: MediaId },
       { $set: thumbnailUpdate }
     );
 
-    console.log("Media record update result:", updateResult);
-    console.log("Media record updated with thumbnail info");
+    console.log("🎬 Media record update result:", updateResult);
+    console.log("🎬 Media record updated with thumbnail info");
 
     // Verify the update by checking the database
     const updatedMedia = await media.findById(MediaId);
     if (updatedMedia && updatedMedia.thumbnail) {
       console.log("✅ VERIFICATION: Thumbnail field found in database");
       console.log("✅ VERIFICATION: Thumbnail URL:", updatedMedia.thumbnail);
+      if (updatedMedia.Location && updatedMedia.Location[0] && updatedMedia.Location[0].Duration) {
+        console.log("✅ VERIFICATION: Duration field found in Location array:", updatedMedia.Location[0].Duration, "seconds");
+      } else {
+        console.log("⚠️ VERIFICATION: Duration field NOT found in Location array");
+      }
     } else {
       console.log("❌ VERIFICATION: Thumbnail field NOT found in database");
     }
@@ -380,6 +405,7 @@ async function processVideoWithConversion_S3(s3VideoUrl, fileName, ext) {
         success: true,
         converted: false,
         originalFormat: ext,
+        duration: metadata.success ? metadata.duration : null,
         message: "Video format is already optimal"
       };
     }
@@ -445,6 +471,7 @@ async function processVideoWithConversion_S3(s3VideoUrl, fileName, ext) {
       convertedSize: conversionResult.outputSize,
       compressionRatio: conversionResult.compressionRatio,
       conversionTime: conversionResult.conversionTime,
+      duration: metadata.success ? metadata.duration : null,
       s3Info: {
         s3Key: convertedUploadResult.s3Key,
         url: convertedUploadResult.videoUrl,
@@ -496,6 +523,7 @@ async function processVideoWithConversion(localFilePath, fileName, ext) {
         success: true,
         converted: false,
         originalFormat: ext,
+        duration: metadata.success ? metadata.duration : null,
         message: "Video format is already optimal"
       };
     }
@@ -571,6 +599,7 @@ async function processVideoWithConversion(localFilePath, fileName, ext) {
       convertedSize: conversionResult.outputSize,
       compressionRatio: conversionResult.compressionRatio,
       conversionTime: conversionResult.conversionTime,
+      duration: metadata.success ? metadata.duration : null,
       s3Info: {
         s3Key: convertedUploadResult.s3Key,
         url: convertedUploadResult.videoUrl,
@@ -655,6 +684,18 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
       thumbName = "";
     }
 
+    // Check if thumbnail was already set by video processing
+    let finalThumbnail = thumbName;
+    if (conversionResult && conversionResult.thumbnailUrl) {
+      finalThumbnail = conversionResult.thumbnailUrl;
+      console.log("🎬 Using thumbnail from video processing:", finalThumbnail);
+    } else if (fileType === "Video" && uploadResult.thumbnailUrl) {
+      finalThumbnail = uploadResult.thumbnailUrl;
+      console.log("🎬 Using thumbnail from upload result:", finalThumbnail);
+    } else {
+      console.log("🎬 Using default thumbnail name:", finalThumbnail);
+    }
+
     // Process group tags - handle both array and string formats
     let groupTagsArray = [];
     if (fields.groupTags) {
@@ -725,7 +766,12 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
       OwnerFSGs: req.session.user.FSGsArr2,
       IsPrivate: isPrivate,
       Locator: locator,
-      thumbnail: thumbName,
+      thumbnail: (() => {
+        console.log("🎬 SAVE TO DB - Setting thumbnail:", finalThumbnail);
+        console.log("🎬 SAVE TO DB - conversionResult:", conversionResult);
+        console.log("🎬 SAVE TO DB - uploadResult:", uploadResult);
+        return finalThumbnail;
+      })(),
       // Add text content fields
       Content: content,
       Title: title,
@@ -737,13 +783,40 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
       UpdatedOn: new Date()
     };
 
+    // Extract duration from video if not available from conversion
+    let videoDuration = conversionResult?.duration || null;
+    
+    // Check if duration was provided from the frontend
+    if (!videoDuration && fields.duration) {
+      const frontendDuration = parseFloat(getFieldValue(fields.duration));
+      if (!isNaN(frontendDuration)) {
+        videoDuration = frontendDuration;
+        console.log("Using duration from frontend:", videoDuration, "seconds");
+      }
+    }
+    
+    // If duration is still null and this is a video, try to extract it directly
+    if (!videoDuration && fileType === "Video" && uploadResult.videoUrl) {
+      try {
+        console.log("Extracting duration from uploaded video...");
+        const metadata = await getVideoMetadata(uploadResult.videoUrl);
+        if (metadata.success && metadata.duration) {
+          videoDuration = metadata.duration;
+          console.log("Duration extracted:", videoDuration);
+        }
+      } catch (error) {
+        console.warn("Failed to extract duration:", error.message);
+      }
+    }
+    
     // Add S3 URL to Location array
     dataToUpload.Location.push({
       Size: uploadResult.fileSize,
       URL: uploadResult.videoUrl || uploadResult.audioUrl,
       Type: "original",
       Index: 0,
-      S3Key: uploadResult.s3Key
+      S3Key: uploadResult.s3Key,
+      Duration: videoDuration // Include duration from video processing
     });
 
     // Add converted video if available
@@ -755,7 +828,8 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
         Index: 1,
         S3Key: conversionResult.s3Info.s3Key,
         Format: conversionResult.convertedFormat,
-        CompressionRatio: conversionResult.compressionRatio
+        CompressionRatio: conversionResult.compressionRatio,
+        Duration: videoDuration || conversionResult.duration || null // Include duration for converted video
       });
     }
 
@@ -767,7 +841,7 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
     console.log("Database save successful, ID:", dataToUpload._id);
 
     // Generate thumbnail for videos
-      if (fileType.startsWith("video/")) {
+      if (fileType === "Video") {
         try {
           console.log("Starting thumbnail generation for video...");
           const thumbnailResult = await video__getNsaveThumbnail_S3(uploadResult.videoUrl, dataToUpload._id);
@@ -921,7 +995,7 @@ async function saveFile(req, res, fileType) {
     // Get file properties (formidable uses different property names)
     const originalFileName = uploadedFile.originalFilename || uploadedFile.name;
     const fileSize = uploadedFile.size;
-    const fileType = uploadedFile.mimetype || uploadedFile.type;
+    const fileMimeType = uploadedFile.mimetype || uploadedFile.type;
     const filePath = uploadedFile.filepath || uploadedFile.path;
 
     if (!originalFileName || originalFileName === 'invalid-name') {
@@ -937,7 +1011,7 @@ async function saveFile(req, res, fileType) {
     console.log("=== FILE INFO ===");
     console.log("File size:", fileSize);
     console.log("File name:", originalFileName);
-    console.log("File type:", fileType);
+    console.log("File MIME type:", fileMimeType);
     console.log("File path:", filePath);
     
     console.log("=== FORM FIELDS ===");
@@ -991,15 +1065,15 @@ async function saveFile(req, res, fileType) {
       const fileObj = {
         path: filePath, // Use the temporary file path from formidable
         originalname: generatedFileName,
-        mimetype: fileType,
+        mimetype: fileMimeType,
         size: fileSize
       };
 
       let uploadResult;
-      if (fileType.startsWith("video/")) {
-        uploadResult = await uploadVideoToS3Folder(fileObj, generatedFileName, fileType);
+      if (fileMimeType.startsWith("video/")) {
+        uploadResult = await uploadVideoToS3Folder(fileObj, generatedFileName, fileMimeType);
               } else {
-        uploadResult = await uploadAudioToS3Folder(fileObj, generatedFileName, fileType);
+        uploadResult = await uploadAudioToS3Folder(fileObj, generatedFileName, fileMimeType);
       }
 
       if (!uploadResult.success) {
@@ -1010,7 +1084,7 @@ async function saveFile(req, res, fileType) {
 
       // Process video/audio with modern conversion (using S3 URLs)
       let conversionResult = null;
-      if (fileType.startsWith("video/")) {
+      if (fileMimeType.startsWith("video/")) {
         // Download from S3, convert, and upload back to S3
         conversionResult = await processVideoWithConversion_S3(uploadResult.videoUrl, generatedFileName, ext);
       } else {

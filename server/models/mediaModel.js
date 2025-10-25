@@ -5,7 +5,8 @@ var shortid = require('shortid');	//updated on 16Oct2017 - For search algorithm 
 
 var mediaLocationSchema = new mongoose.Schema({
 	Size:{type:String},
-	URL:{type:String}	
+	URL:{type:String},
+	Duration:{type:Number} // Video/audio duration in seconds
 })
 
 var groupTagSchema = new mongoose.Schema({
@@ -102,8 +103,28 @@ var mediaSchema = new mongoose.Schema({
 	KeyPostType: {type: String, enum: ["Comment", "Post", "Recording", "CommentFromFriend"], default: "Comment"},
 	IsPreLaunchPost: {type: Boolean, default: false},
 	IsPrivateQuestionPost: {type: Boolean, default: false},
-	IsOnetimeStream: {type: Boolean, default: false}
-	//Themes : {type : Array , default : []},				//adding for new keywords hierarchy - Text Search
+	IsOnetimeStream: {type: Boolean, default: false},
+	
+	// Post-specific fields (from pageModel embedded schemas) - needed for filtering
+	TaggedUsers: {type: Array, default: []},
+	Label: {type: String},
+	IsAddedFromStream: {type: Boolean, default: false},
+	StreamId: {type: mongoose.Schema.Types.ObjectId},
+	IsPostForUser: {type: Boolean, default: false},
+	IsPostForTeam: {type: Boolean, default: false},
+	IsEditorPicked: {type: Boolean, default: false},
+	SurpriseSelectedWords: {type: String},
+	SecondaryKeywords: {type: String},
+	SecondaryKeywordsMap: {type: Object},
+	SecondaryKeywords2: {type: String},
+	SecondaryKeywordsMap2: {type: Object},
+	MediaSelectionCriteria: {type: Object, default: null},
+	MediaSelectionCriteria1: {type: Object, default: null},
+	MediaSelectionCriteria2: {type: Object, default: null},
+	PostStreamType: {type: String},
+	QuestionPostId: {type: mongoose.Schema.Types.ObjectId},
+	PostLinkUrl: {type: String},
+	Themes: {type: Array, default: []}
 	//Descriptors : {type : Array , default : []}			//adding for new keywords hierarchy - Text Search
 },{shardKey:{_id: 1}},{ collection: 'media' });
 

@@ -942,6 +942,9 @@ const createCapsuleInstance = async (
               ) {
                 if (newPage.Medias && newPage.Medias.length) {
                   // Fetch the media documents (same ones from original stream) for streaming
+                  const startTime = Date.now();
+                  
+                  // 🚀 OPTIMIZATION: Fetch media with lean() for faster processing
                   const mediaDocsForStreaming = await Media.find({ 
                     _id: { $in: newPage.Medias },
                     IsDeleted: { $ne: true }
@@ -950,44 +953,61 @@ const createCapsuleInstance = async (
                   if (mediaDocsForStreaming.length > 0) {
                     console.log(`📋 Fetching PageStream blend configurations for ${mediaDocsForStreaming.length} media`);
                     
-                    // Fetch PageStream data from ORIGINAL stream (pageDetail) for blend configurations
-                    // The original PageStream documents contain the blend settings we need
-                    for (let i = 0; i < mediaDocsForStreaming.length; i++) {
-                      const mediaDoc = mediaDocsForStreaming[i];
-                      
-                      // Skip Audio and Video - they don't have blend images
+                    // 🚀 OPTIMIZATION 1: Separate media by type to avoid unnecessary queries
+                    const blendableMedia = [];
+                    const nonBlendableMedia = [];
+                    
+                    mediaDocsForStreaming.forEach(mediaDoc => {
                       if (mediaDoc.MediaType === 'Audio' || mediaDoc.MediaType === 'Video' || 
                           mediaDoc.MediaType === '1AudioPost' || mediaDoc.MediaType === '1VideoPost') {
-                        console.log(`⏭️ Skipping ${mediaDoc.MediaType} (no blend images needed)`);
                         mediaDoc.SelectedBlendImages = [];
-                        continue;
+                        nonBlendableMedia.push(mediaDoc);
+                      } else {
+                        blendableMedia.push(mediaDoc);
                       }
+                    });
+                    
+                    console.log(`⏭️ Skipping ${nonBlendableMedia.length} non-blendable posts (Audio/Video)`);
+                    
+                    // 🚀 OPTIMIZATION 2: Bulk fetch ALL PageStream documents in ONE query
+                    if (blendableMedia.length > 0) {
+                      const blendableMediaIds = blendableMedia.map(m => m._id);
                       
-                      // Fetch PageStream from the ORIGINAL page (pageDetail._id) and ORIGINAL media (_id)
-                      const pageStreamDocs = await PageStream.find({
-                        PageId: pageDetail._id,  // Original page ID
-                        PostId: mediaDoc._id      // Original media ID (same as new, since we're reusing)
-                      }).lean();
+                      const allPageStreams = await PageStream.find({
+                        PageId: pageDetail._id,
+                        PostId: { $in: blendableMediaIds }
+                      })
+                      .select('PostId SelectedBlendImages BlendSettings') // Only fetch needed fields
+                      .lean();
                       
-                      console.log(`🔍 Checking PageStream for ${mediaDoc.MediaType} (${mediaDoc._id}): Found ${pageStreamDocs.length} entries`);
+                      console.log(`🔍 Bulk fetched ${allPageStreams.length} PageStream entries for ${blendableMedia.length} media (${Date.now() - startTime}ms)`);
                       
-                      if (pageStreamDocs.length > 0) {
-                        // Support both BlendSettings (new format) and SelectedBlendImages (old format)
-                        if (pageStreamDocs[0].BlendSettings && pageStreamDocs[0].BlendSettings.allBlendConfigurations) {
-                          console.log(`✅ Found BlendSettings with ${pageStreamDocs[0].BlendSettings.allBlendConfigurations.length} blend configs`);
-                          mediaDoc.BlendSettings = pageStreamDocs[0].BlendSettings;
-                          mediaDoc.SelectedBlendImages = pageStreamDocs[0].BlendSettings.allBlendConfigurations;
-                        } else if (pageStreamDocs[0].SelectedBlendImages) {
-                          console.log(`✅ Found SelectedBlendImages with ${pageStreamDocs[0].SelectedBlendImages.length} blend configs`);
-                          mediaDoc.SelectedBlendImages = pageStreamDocs[0].SelectedBlendImages;
+                      // 🚀 OPTIMIZATION 3: Create lookup map for O(1) access instead of repeated array searches
+                      const pageStreamMap = new Map();
+                      allPageStreams.forEach(ps => {
+                        pageStreamMap.set(ps.PostId.toString(), ps);
+                      });
+                      
+                      // 🚀 OPTIMIZATION 4: Attach blend data instantly using the map
+                      blendableMedia.forEach(mediaDoc => {
+                        const pageStreamDoc = pageStreamMap.get(mediaDoc._id.toString());
+                        
+                        if (pageStreamDoc) {
+                          // Support both BlendSettings (new format) and SelectedBlendImages (old format)
+                          if (pageStreamDoc.BlendSettings && pageStreamDoc.BlendSettings.allBlendConfigurations) {
+                            mediaDoc.BlendSettings = pageStreamDoc.BlendSettings;
+                            mediaDoc.SelectedBlendImages = pageStreamDoc.BlendSettings.allBlendConfigurations;
+                          } else if (pageStreamDoc.SelectedBlendImages) {
+                            mediaDoc.SelectedBlendImages = pageStreamDoc.SelectedBlendImages;
+                          } else {
+                            mediaDoc.SelectedBlendImages = [];
+                          }
                         } else {
-                          console.log(`⚠️ PageStream found but no blend data in BlendSettings or SelectedBlendImages`);
                           mediaDoc.SelectedBlendImages = [];
                         }
-                      } else {
-                        console.log(`⚠️ No PageStream entry found for ${mediaDoc.MediaType} ${mediaDoc._id}`);
-                        mediaDoc.SelectedBlendImages = [];
-                      }
+                      });
+                      
+                      console.log(`✅ Attached blend configs to all media (${Date.now() - startTime}ms total)`);
                     }
                     
                     CapsuleData._id = newCapsuleId;

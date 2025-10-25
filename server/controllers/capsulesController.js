@@ -10,6 +10,9 @@ var SubAdmin = require("./../models/subAdminModel.js");
 var Order = require("./../models/orderModel.js");
 var mongoose = require("mongoose");
 var Cart = require("./../models/cartModel.js");
+var PageStream = require("./../models/pageStreamModel.js");
+var SyncedPost = require("./../models/syncedpostModel.js");
+var SyncedpostsMap = require("./../models/SyncedpostsMap.js");
 
 var fs = require("fs");
 var formidable = require("formidable");
@@ -2264,6 +2267,13 @@ const create = async function (req, res) {
       CreaterId: req.session.user._id,
       OwnerId: req.session.user._id,
     };
+    
+    // Accept optional fields from request body
+    if (req.body.Title) data.Title = req.body.Title;
+    if (req.body.Price !== undefined) data.Price = req.body.Price;
+    if (req.body.DiscountPrice !== undefined) data.DiscountPrice = req.body.DiscountPrice;
+    if (req.body.IsAllowedForSales !== undefined) data.IsAllowedForSales = req.body.IsAllowedForSales;
+    
     console.log("data = ", data);
     
     const result = await Capsule(data).save();
@@ -2522,6 +2532,194 @@ var remove = function (req, res) {
     res.json(response);
   }
   });
+};
+
+/**
+ * Cascade delete capsule and all related data
+ * Deletes: Capsule, Chapters, Pages, SyncedPosts, SyncedpostsMap
+ * Preserves: Media, PageStream (shared resources)
+ * @Route: POST /capsules/cascadeDelete
+ * @Body: { capsule_id: string } OR { capsuleId: string }
+ * @Headers: capsule_id (optional)
+ * @Access: Admin, SubAdmin, or Owner
+ */
+const cascadeDeleteCapsule = async (req, res) => {
+  try {
+    const capsuleId = req.headers.capsule_id || req.body.capsuleId || req.body.capsule_id;
+    const userId = req.session?.user?._id;
+
+    if (!capsuleId) {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required"
+      });
+    }
+
+    console.log(`🗑️ Starting cascade delete for capsule: ${capsuleId}`);
+    const startTime = Date.now();
+
+    // Step 1: Verify capsule exists
+    const capsule = await Capsule.findOne({ 
+      _id: new mongoose.Types.ObjectId(capsuleId) 
+    });
+
+    if (!capsule) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found"
+      });
+    }
+
+    // Step 2: Check permissions (Admin, SubAdmin, or Owner can delete)
+    console.log('🔐 Checking permissions...');
+    console.log('   Session User:', req.session?.user?._id);
+    console.log('   Role:', req.session?.user?.Role);
+    console.log('   IsAdmin:', req.session?.user?.IsAdmin);
+    console.log('   IsSubAdmin:', req.session?.user?.IsSubAdmin);
+    console.log('   Capsule OwnerId:', capsule.OwnerId);
+    
+    // Check for admin/subadmin - support both Role field and IsAdmin/IsSubAdmin boolean fields
+    const isAdmin = req.session?.user?.IsAdmin === true || 
+                    req.session?.user?.Role === 'admin' || 
+                    req.session?.user?.Role === 'Admin';
+    const isSubAdmin = req.session?.user?.IsSubAdmin === true || 
+                       req.session?.user?.Role === 'subadmin' || 
+                       req.session?.user?.Role === 'SubAdmin';
+    const isOwner = userId && capsule.OwnerId && capsule.OwnerId.toString() === userId.toString();
+
+    console.log('   Permission Check: Admin=' + isAdmin + ', SubAdmin=' + isSubAdmin + ', Owner=' + isOwner);
+
+    if (!isAdmin && !isSubAdmin && !isOwner) {
+      return res.json({
+        status: 403,
+        message: "You don't have permission to delete this capsule"
+      });
+    }
+
+    console.log(`👤 Deletion authorized by: ${isAdmin ? 'Admin' : isSubAdmin ? 'SubAdmin' : 'Owner'}`);
+
+    const deletionStats = {
+      capsules: 0,
+      chapters: 0,
+      pages: 0,
+      media: 0,
+      pageStreams: 0,
+      syncedPosts: 0
+    };
+
+    // Step 2: Find all chapters
+    const chapters = await Chapter.find({ 
+      CapsuleId: new mongoose.Types.ObjectId(capsuleId) 
+    }).lean();
+    
+    const chapterIds = chapters.map(ch => ch._id);
+    console.log(`📋 Found ${chapterIds.length} chapters to delete`);
+
+    // Step 3: Find all pages (pages are linked to ChapterId, not CapsuleId)
+    const pages = await Page.find({ 
+      ChapterId: { $in: chapterIds.map(id => id.toString()) }
+    }).lean();
+    
+    const pageIds = pages.map(p => p._id);
+    console.log(`📄 Found ${pageIds.length} pages to delete`);
+
+    // Step 4: Collect all media IDs from pages
+    let allMediaIds = [];
+    pages.forEach(page => {
+      if (page.Medias && Array.isArray(page.Medias)) {
+        allMediaIds = allMediaIds.concat(page.Medias);
+      }
+    });
+    
+    // Remove duplicates
+    allMediaIds = [...new Set(allMediaIds.map(id => id.toString()))];
+    console.log(`🖼️ Found ${allMediaIds.length} unique media IDs to delete`);
+
+    // Step 5: Delete in order (from bottom up)
+    // Note: This only deletes the CREATOR'S capsule instance
+    // Buyers' capsule instances (with different CapsuleIds) are not affected
+    
+    // 5a. Delete SyncedPosts (only for THIS capsule instance)
+    const syncedPostsQuery = {
+      $or: [
+        { CapsuleId: new mongoose.Types.ObjectId(capsuleId) }
+      ]
+    };
+    
+    // Add PageId conditions if pages exist
+    if (pageIds.length > 0) {
+      syncedPostsQuery.$or.push({ PageId: { $in: pageIds.map(id => new mongoose.Types.ObjectId(id)) } });
+    }
+    
+    const syncedPostsResult = await SyncedPost.deleteMany(syncedPostsQuery);
+    deletionStats.syncedPosts = syncedPostsResult.deletedCount || 0;
+    console.log(`✅ Deleted ${deletionStats.syncedPosts} SyncedPosts for this capsule instance`);
+
+    // 5a2. Delete SyncedpostsMap (container for synced posts array)
+    const syncedPostsMapResult = await SyncedpostsMap.deleteMany({
+      CapsuleId: new mongoose.Types.ObjectId(capsuleId)
+    });
+    deletionStats.syncedPostsMap = syncedPostsMapResult.deletedCount || 0;
+    console.log(`✅ Deleted ${deletionStats.syncedPostsMap} SyncedpostsMap documents`);
+
+    // 5b. PageStream - DO NOT DELETE (Shared Resource)
+    // PageStream stores blend configurations that are READ by all buyers
+    // It's not duplicated per buyer - all buyers reference the same PageStream
+    // Deleting it would break blend images for ALL users who purchased this stream
+    deletionStats.pageStreams = 0;
+    console.log(`⏭️ Skipped PageStream deletion - blend configs remain (shared resource)`);
+
+    // 5c. Media - DO NOT DELETE (Shared Resource)
+    // Media is shared across all buyers of the stream
+    // Deleting media would break the stream for ALL users who purchased it
+    // Media should remain in the database even after capsule deletion
+    deletionStats.media = 0;
+    console.log(`⏭️ Skipped Media deletion - ${allMediaIds.length} media posts remain (shared resource)`);
+    console.log(`ℹ️ Media posts are referenced by ${pages.length} pages and may be used by multiple buyers`);
+
+    // 5d. Delete Pages
+    if (pageIds.length > 0) {
+      const pagesResult = await Page.deleteMany({
+        _id: { $in: pageIds.map(id => new mongoose.Types.ObjectId(id)) }
+      });
+      deletionStats.pages = pagesResult.deletedCount || 0;
+      console.log(`✅ Deleted ${deletionStats.pages} Pages`);
+    }
+
+    // 5e. Delete Chapters
+    if (chapterIds.length > 0) {
+      const chaptersResult = await Chapter.deleteMany({
+        _id: { $in: chapterIds.map(id => new mongoose.Types.ObjectId(id)) }
+      });
+      deletionStats.chapters = chaptersResult.deletedCount || 0;
+      console.log(`✅ Deleted ${deletionStats.chapters} Chapters`);
+    }
+
+    // 5f. Delete Capsule (hard delete)
+    const capsuleResult = await Capsule.deleteOne({
+      _id: new mongoose.Types.ObjectId(capsuleId)
+    });
+    deletionStats.capsules = capsuleResult.deletedCount || 0;
+    console.log(`✅ Deleted ${deletionStats.capsules} Capsule`);
+
+    const duration = Date.now() - startTime;
+    console.log(`🎉 Cascade delete completed in ${duration}ms`);
+
+    return res.json({
+      status: 200,
+      message: "Capsule and all related data deleted successfully",
+      deletionStats,
+      duration: `${duration}ms`
+    });
+
+  } catch (error) {
+    console.error('❌ Error in cascadeDeleteCapsule:', error);
+    return res.json({
+      status: 500,
+      message: "Error deleting capsule",
+      error: error.message
+    });
+  }
 };
 
 //Capsule library Apis
@@ -3709,14 +3907,216 @@ var reorder = async function (req, res) {
 _________________________________________________________________________
 */
 
+/*________________________________________________________________________
+   * @Date:      		2025-01-XX
+   * @Method :   		updateCapsule
+   * Created By: 		AI Assistant
+   * Modified On:		-
+   * @Purpose:   		Update capsule fields (for edit page)
+   * @Param:     		capsule_id in URL params, update data in body
+   * @Return:    	 	Updated capsule
+   * @Access Category:	"UR + CR (req.params.id)"
+_________________________________________________________________________
+*/
+var updateCapsule = async function (req, res) {
+  try {
+    // Check if user is authenticated
+    if (!req.session?.user?._id) {
+      return res.json({
+        status: 401,
+        message: "Authentication required. Please login first.",
+      });
+    }
+    
+    const capsuleId = req.params.id;
+    
+    if (!capsuleId) {
+      return res.json({
+        status: 400,
+        message: "Capsule ID is required.",
+      });
+    }
+
+    // First, fetch the capsule to check ownership/creator
+    const capsule = await Capsule.findOne({
+      _id: capsuleId,
+      Status: true,
+      IsDeleted: false
+    });
+
+    if (!capsule) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found or has been deleted.",
+      });
+    }
+
+    // Authorization check based on role
+    const userRole = req.session.user.Role || 'user';
+    const userId = req.session.user._id.toString();
+    const isOwner = capsule.OwnerId && capsule.OwnerId.toString() === userId;
+    const isCreator = capsule.CreaterId && capsule.CreaterId.toString() === userId;
+
+    let authorized = false;
+    let allowedFields = [];
+
+    if (userRole === 'admin' || userRole === 'subadmin') {
+      // Admin/SubAdmin: Can edit if they are either creator OR owner
+      authorized = isCreator || isOwner;
+      // Admins can edit all fields
+      allowedFields = ['title', 'description', 'isPublished', 'privacy', 'audience', 'tags'];
+    } else {
+      // Normal user: Can only edit if they are the owner
+      authorized = isOwner;
+      // Normal users can only edit title (cover and icon are separate endpoints)
+      allowedFields = ['title'];
+    }
+
+    if (!authorized) {
+      return res.json({
+        status: 403,
+        message: "You don't have permission to edit this stream. Only the owner can edit.",
+      });
+    }
+
+    // Build update object based on allowed fields
+    const updateData = {};
+
+    // Title - allowed for all users (only if provided and not empty)
+    if (req.body.title && typeof req.body.title === 'string' && req.body.title.trim()) {
+      if (allowedFields.includes('title')) {
+        updateData.Title = req.body.title.trim();
+      }
+    }
+
+    // Admin-only fields (only update if user is admin/subadmin)
+    if (userRole === 'admin' || userRole === 'subadmin') {
+      // Description - stored in MetaData.description
+      if (req.body.description !== undefined && typeof req.body.description === 'string') {
+        // Allow empty string to clear description, but trim non-empty values
+        updateData['MetaData.description'] = req.body.description.trim();
+      }
+      
+      // IsPublished - boolean field, check for boolean type
+      if (req.body.isPublished !== undefined && typeof req.body.isPublished === 'boolean') {
+        updateData.IsPublished = req.body.isPublished;
+      }
+      
+      // Privacy (ShareMode) - only if provided and not empty
+      if (req.body.privacy && typeof req.body.privacy === 'string') {
+        updateData['LaunchSettings.ShareMode'] = req.body.privacy;
+      }
+      
+      // Audience - only if provided and not empty
+      if (req.body.audience && typeof req.body.audience === 'string') {
+        updateData['LaunchSettings.Audience'] = req.body.audience;
+      }
+      
+      // Tags - only if provided as array
+      if (req.body.tags && Array.isArray(req.body.tags)) {
+        // Tags are stored as groupTags array of objects with {GroupTagID, GroupTagTitle}
+        // For now, just log - implement proper tag handling if needed
+        // TODO: Implement proper tag update logic if needed
+        // Would need to map string tags to groupTag objects with IDs
+      }
+    }
+
+    // Always update ModifiedOn
+    updateData.ModifiedOn = Date.now();
+
+    // Check if there's anything to update besides ModifiedOn
+    if (Object.keys(updateData).length === 1) {
+      return res.json({
+        status: 400,
+        message: "No valid fields provided for update.",
+      });
+    }
+
+    const result = await Capsule.updateOne(
+      { _id: capsuleId },
+      { $set: updateData }
+    );
+
+    if (result.matchedCount === 0) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found.",
+      });
+    }
+
+    // Fetch the updated capsule to return
+    const updatedCapsule = await Capsule.findById(capsuleId);
+
+    var response = {
+      code: "200",
+      status: 200,
+      message: "Stream updated successfully.",
+      result: updatedCapsule,
+      data: updatedCapsule
+    };
+    res.json(response);
+  } catch (err) {
+    console.error('❌ Error in updateCapsule:', err);
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+      error: err.message
+    };
+    res.json(response);
+  }
+};
+
 var updateCapsuleName = async function (req, res) {
   try {
-  //check isMyCapsule( req.headers.capsule_id ) - Middle-ware Authorization check
+    // Check if user is authenticated
+    if (!req.session?.user?._id) {
+      return res.json({
+        status: 401,
+        message: "Authentication required. Please login first.",
+      });
+    }
     
     if (!req.headers.capsule_id) {
       return res.json({
         status: 400,
         message: "Capsule ID is required in headers.",
+      });
+    }
+
+    // First, fetch the capsule to check ownership/creator
+    const capsule = await Capsule.findOne({
+      _id: req.headers.capsule_id,
+      Status: true,
+      IsDeleted: false
+    });
+
+    if (!capsule) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found or has been deleted.",
+      });
+    }
+
+    // Authorization check based on role
+    const userRole = req.session.user.Role || 'user';
+    const userId = req.session.user._id.toString();
+    const isOwner = capsule.OwnerId && capsule.OwnerId.toString() === userId;
+    const isCreator = capsule.CreaterId && capsule.CreaterId.toString() === userId;
+
+    let authorized = false;
+
+    if (userRole === 'admin' || userRole === 'subadmin') {
+      // Admin/SubAdmin: Can edit if they are either creator OR owner
+      authorized = isCreator || isOwner;
+    } else {
+      // Normal user: Can only edit if they are the owner
+      authorized = isOwner;
+    }
+
+    if (!authorized) {
+      return res.json({
+        status: 403,
+        message: "You don't have permission to edit this stream. Only the owner can edit.",
       });
     }
 
@@ -3846,10 +4246,73 @@ _________________________________________________________________________
 
 var saveSettings = async function (req, res) {
   try {
+    console.log('⚙️ saveSettings called - Auth debug:', {
+      hasUser: !!req.user,
+      hasSessionUser: !!(req.session && req.session.user),
+      userId: req.session?.user?._id,
+      role: req.session?.user?.Role,
+      capsuleId: req.headers.capsule_id
+    });
+
+    // Check if user is authenticated
+    if (!req.session?.user?._id) {
+      return res.json({
+        status: 401,
+        message: "Authentication required. Please login first.",
+      });
+    }
+
     if (!req.headers.capsule_id) {
       return res.json({
         status: 400,
         message: "Capsule ID is required in headers."
+      });
+    }
+
+    // First, fetch the capsule to check ownership/creator
+    const capsule = await Capsule.findOne({
+      _id: req.headers.capsule_id,
+      Status: true,
+      IsDeleted: false
+    });
+
+    if (!capsule) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found or has been deleted.",
+      });
+    }
+
+    // Authorization check based on role
+    const userRole = req.session.user.Role || 'user';
+    const userId = req.session.user._id.toString();
+    const isOwner = capsule.OwnerId && capsule.OwnerId.toString() === userId;
+    const isCreator = capsule.CreaterId && capsule.CreaterId.toString() === userId;
+
+    let authorized = false;
+
+    if (userRole === 'admin' || userRole === 'subadmin') {
+      // Admin/SubAdmin: Can edit if they are either creator OR owner
+      authorized = isCreator || isOwner;
+      console.log('🔐 Admin/SubAdmin authorization for saveSettings:', {
+        role: userRole,
+        isCreator,
+        isOwner,
+        authorized
+      });
+    } else {
+      // Normal user: Cannot use saveSettings (advanced settings only)
+      // They should use updateCapsule with limited fields
+      return res.json({
+        status: 403,
+        message: "Only administrators can modify advanced settings. Regular users can only edit title, cover art, and menu icon.",
+      });
+    }
+
+    if (!authorized) {
+      return res.json({
+        status: 403,
+        message: "You don't have permission to edit this stream.",
       });
     }
 
@@ -5546,6 +6009,14 @@ _________________________________________________________________________
 */
 var uploadCover = async function (req, res) {
   try {
+    // Check if user is authenticated
+    if (!req.session?.user?._id) {
+      return res.json({
+        code: "401",
+        message: "Authentication required. Please login first.",
+      });
+    }
+
     const awsS3Utils = require("../utilities/awsS3Utils");
     var form = new formidable.IncomingForm();
     form.keepExtensions = true;
@@ -5576,6 +6047,54 @@ var uploadCover = async function (req, res) {
             code: "400",
             message:
               "capsule_id is required. Please provide capsule_id in the form data or headers.",
+          });
+        }
+
+        // Authorization check - fetch capsule and verify ownership
+        const capsule = await Capsule.findOne({
+          _id: capsuleId,
+          Status: true,
+          IsDeleted: false
+        });
+
+        if (!capsule) {
+          return res.json({
+            code: "404",
+            message: "Capsule not found or has been deleted.",
+          });
+        }
+
+        // Authorization check based on role
+        const userRole = req.session.user.Role || 'user';
+        const userId = req.session.user._id.toString();
+        const isOwner = capsule.OwnerId && capsule.OwnerId.toString() === userId;
+        const isCreator = capsule.CreaterId && capsule.CreaterId.toString() === userId;
+
+        let authorized = false;
+
+        if (userRole === 'admin' || userRole === 'subadmin') {
+          // Admin/SubAdmin: Can edit if they are either creator OR owner
+          authorized = isCreator || isOwner;
+          console.log('🔐 Admin/SubAdmin authorization for cover upload:', {
+            role: userRole,
+            isCreator,
+            isOwner,
+            authorized
+          });
+        } else {
+          // Normal user: Can only edit if they are the owner
+          authorized = isOwner;
+          console.log('🔐 User authorization for cover upload:', {
+            role: userRole,
+            isOwner,
+            authorized
+          });
+        }
+
+        if (!authorized) {
+          return res.json({
+            code: "403",
+            message: "You don't have permission to edit this stream. Only the owner can edit.",
           });
         }
 
@@ -6017,6 +6536,21 @@ var removeInvitee = function (req, res) {
 
 var uploadMenuIcon = async function (req, res) {
   try {
+    console.log('🎨 uploadMenuIcon called - Auth debug:', {
+      hasUser: !!req.user,
+      hasSessionUser: !!(req.session && req.session.user),
+      userId: req.session?.user?._id,
+      role: req.session?.user?.Role
+    });
+
+    // Check if user is authenticated
+    if (!req.session?.user?._id) {
+      return res.json({
+        code: "401",
+        message: "Authentication required. Please login first.",
+      });
+    }
+
     const awsS3Utils = require("../utilities/awsS3Utils");
     var form = new formidable.IncomingForm();
     form.keepExtensions = true;
@@ -6038,6 +6572,54 @@ var uploadMenuIcon = async function (req, res) {
             code: "400",
             message:
               "capsule_id is required. Please provide capsule_id in the form data or headers.",
+          });
+        }
+
+        // Authorization check - fetch capsule and verify ownership
+        const capsule = await Capsule.findOne({
+          _id: capsuleId,
+          Status: true,
+          IsDeleted: false
+        });
+
+        if (!capsule) {
+          return res.json({
+            code: "404",
+            message: "Capsule not found or has been deleted.",
+          });
+        }
+
+        // Authorization check based on role
+        const userRole = req.session.user.Role || 'user';
+        const userId = req.session.user._id.toString();
+        const isOwner = capsule.OwnerId && capsule.OwnerId.toString() === userId;
+        const isCreator = capsule.CreaterId && capsule.CreaterId.toString() === userId;
+
+        let authorized = false;
+
+        if (userRole === 'admin' || userRole === 'subadmin') {
+          // Admin/SubAdmin: Can edit if they are either creator OR owner
+          authorized = isCreator || isOwner;
+          console.log('🔐 Admin/SubAdmin authorization for menu icon upload:', {
+            role: userRole,
+            isCreator,
+            isOwner,
+            authorized
+          });
+        } else {
+          // Normal user: Can only edit if they are the owner
+          authorized = isOwner;
+          console.log('🔐 User authorization for menu icon upload:', {
+            role: userRole,
+            isOwner,
+            authorized
+          });
+        }
+
+        if (!authorized) {
+          return res.json({
+            code: "403",
+            message: "You don't have permission to edit this stream. Only the owner can edit.",
           });
         }
 
@@ -7342,12 +7924,21 @@ var galleryCapsulesList = function (req, res) {
     Title: 1,
     Description: 1,
     CoverImage: 1,
+    CoverArt: 1,      // Added to support both field names
+    MenuIcon: 1,      // Added as fallback
     LaunchSettings: 1,
     ModifiedOn: 1,
     CreaterId: 1,
+    OwnerId: 1,       // Added for ownership checks
     Price: 1,
+    DiscountPrice: 1, // Added for discount display
     GroupTags: 1,
     MetaData: 1,
+    Chapters: 1,      // Added for post count
+    IsAllowedForSales: 1,
+    IsPublished: 1,
+    Status: 1,
+    IsDeleted: 1,
   };
 
   console.log('🔍 Executing database query for galleryCapsulesList');
@@ -7537,8 +8128,24 @@ var getCartCapsule = function (req, res) {
 
 var updateCartCapsule = async function (req, res) {
   try {
+    // Debug logging for authentication
+    console.log('🛒 updateCartCapsule called - Auth debug:', {
+      hasUser: !!req.user,
+      hasSession: !!req.session,
+      hasSessionUser: !!(req.session && req.session.user),
+      userId: req.user?.userId,
+      sessionUserId: req.session?.user?._id,
+      operation: req.body.operation,
+      capsuleId: req.body.capsuleId
+    });
+
     // Check if user is logged in
     if (!req.session.user || !req.session.user._id) {
+      console.error('❌ Authentication failed in updateCartCapsule:', {
+        hasUser: !!req.user,
+        hasSession: !!req.session,
+        hasSessionUser: !!(req.session && req.session.user)
+      });
       var response = {
         status: 401,
         message: "User not logged in. Please login first.",
@@ -9664,7 +10271,9 @@ exports.create = create;
 exports.duplicate = duplicate;
 //exports.remove = remove;
 exports.remove = remove_V2; //both case 1) remove action by Owner 2) remove Action by Member
+exports.cascadeDeleteCapsule = cascadeDeleteCapsule; // Cascade delete capsule and all related data
 exports.reorder = reorder;
+exports.updateCapsule = updateCapsule; // Update capsule (for edit page)
 exports.updateCapsuleName = updateCapsuleName;
 exports.uploadCover = uploadCover;
 exports.saveSettings = saveSettings;

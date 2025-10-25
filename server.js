@@ -390,6 +390,11 @@ require("./server/routes/frontend/api/relationshipRoutes.js")(
   router.relationshipRoutes
 );
 
+// Share routes (public - no auth middleware)
+require("./server/routes/frontend/api/shareRoutes.js")(
+  router.shareRoutes
+);
+
 // GPT API Routes
 const gptActivationRoutes = require("./server/routes/gpt/GPTactivationRoutes.js");
 app.use("/api/gpt", gptActivationRoutes);

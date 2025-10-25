@@ -33,6 +33,11 @@ module.exports = function (router) {
     CronJobsModule.SynedPostEmailCronApi(req, res);
   });
 
+  // 🧪 TEST ENDPOINT: Create a test SyncedPost for delivery testing
+  router.get("/createTestSyncedPost", function (req, res) {
+    CronJobsModule.createTestSyncedPost(req, res);
+  });
+
   router.post("/mediaActionLogs", function (req, res) {
     mediaActionLogs.addMediaAction(req, res);
   });
