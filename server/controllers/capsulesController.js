@@ -4420,6 +4420,62 @@ var saveSettings = async function (req, res) {
 };
 
 /*________________________________________________________________________
+   * @Date:      		17 June 2015
+   * @Method :   		saveBirthday
+   * Created By: 		smartData Enterprises Ltd
+   * Modified On:		-
+   * @Purpose:   		Save owner birthday date for birthday streams
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR + CR"
+_________________________________________________________________________
+*/
+var saveBirthday = async function(req, res) {
+  try {
+    var condition = {};
+    condition._id = req.headers.capsule_id ? req.headers.capsule_id : '0';
+    var OwnerBirthday = req.body.OwnerBirthday ? req.body.OwnerBirthday : null;
+
+    if (OwnerBirthday) {
+      var setObj = {
+        'LaunchSettings.OwnerBirthday': OwnerBirthday,
+        'ModifiedOn': Date.now()
+      };
+
+      const result = await Capsule.updateOne(condition, { $set: setObj });
+      
+      if (result.matchedCount === 0) {
+        return res.json({
+          status: 404,
+          message: "Capsule not found."
+        });
+      }
+
+      var response = {
+        status: 200,
+        message: "Birthday date saved successfully.",
+        result: result
+      };
+      res.json(response);
+    } else {
+      var response = {
+        status: 400,
+        message: "OwnerBirthday is required."
+      };
+      res.json(response);
+    }
+  } catch (error) {
+    console.error('saveBirthday error:', error);
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+      error: error.message
+    };
+    res.json(response);
+  }
+};
+
+/*________________________________________________________________________
    * @Date:      		26 Aug 2015
    * @Method :   		invite
    * Created By: 		smartData Enterprises Ltd
@@ -10290,6 +10346,7 @@ exports.updateCapsule = updateCapsule; // Update capsule (for edit page)
 exports.updateCapsuleName = updateCapsuleName;
 exports.uploadCover = uploadCover;
 exports.saveSettings = saveSettings;
+exports.saveBirthday = saveBirthday;
 exports.invite = invite;
 exports.inviteMember = inviteMember;
 exports.removeInvitee = removeInvitee;
@@ -10826,6 +10883,699 @@ var updateCartForFrequency = async function (req, res) {
   }
 };
 
-var getMyPurchases = function (req, res) {
-  // ... existing code ...
+/**
+ * Update month/duration for active capsule (after purchase)
+ * POST /capsules/updateCartForMonth_ActiveCapsule
+ * 
+ * This function:
+ * 1. Updates the Capsule.MonthFor field
+ * 2. Finds all undelivered posts for this capsule
+ * 3. Recalculates their DateOfDelivery to fit within new duration
+ * 4. Updates NotificationWillEndOn based on new duration
+ * 5. Updates all affected SyncedPost records
+ */
+var updateCartForMonth_ActiveCapsule = async function (req, res) {
+  try {
+    const CapsuleId = req.body.capsuleId ? req.body.capsuleId : null;
+    const MonthFor = req.body.MonthFor ? req.body.MonthFor : 'M12';
+
+    if (!CapsuleId) {
+      return res.json({
+        status: 400,
+        message: "capsuleId is required",
+        results: null,
+      });
+    }
+
+    // Step 1: Get current capsule data to know the frequency
+    const capsuleData = await Capsule.findOne({ _id: CapsuleId }).exec();
+    
+    if (!capsuleData) {
+      return res.json({
+        status: 404,
+        message: "Capsule not found",
+        results: null,
+      });
+    }
+
+    // Step 2: Update Capsule duration
+    const conditions = {
+      _id: CapsuleId
+    };
+
+    const doc = {
+      $set: { 'MonthFor': MonthFor }
+    };
+
+    await Capsule.updateOne(conditions, doc);
+    console.log(`✅ Updated MonthFor to ${MonthFor} for capsule ${CapsuleId}`);
+
+    // Step 3: Get frequency and calculate days between posts
+    const currentFrequency = capsuleData.Frequency || 'medium';
+    const frequencyToDays = {
+      'high': 1,    // Every day
+      'medium': 3,  // Every 3 days
+      'low': 7      // Every 7 days
+    };
+    const daysBetween = frequencyToDays[currentFrequency] || 3;
+
+    // Step 4: Calculate total duration in days
+    const monthMapping = {
+      'M1': 30,
+      'M3': 90,
+      'M6': 180,
+      'M9': 270,
+      'M12': 365
+    };
+    const totalDurationDays = monthMapping[MonthFor] || 365;
+
+    // Step 5: Fetch MASTER list from SyncedpostsMap (SOURCE OF TRUTH - has ALL posts!)
+    const syncedpostsMap = await SyncedpostsMap.findOne({
+      CapsuleId: CapsuleId,
+      IsDeleted: false
+    }).lean().exec();
+
+    if (!syncedpostsMap || !syncedpostsMap.SyncedPosts || !Array.isArray(syncedpostsMap.SyncedPosts)) {
+      console.log(`⚠️ No SyncedpostsMap found for capsule ${CapsuleId}`);
+      return res.json({
+        status: 404,
+        message: "No master post list found for this capsule. Please recreate the stream.",
+        results: null
+      });
+    }
+
+    const masterPostList = syncedpostsMap.SyncedPosts;  // ALL posts (e.g., 331)!
+    console.log(`📦 Found master list with ${masterPostList.length} posts in SyncedpostsMap`);
+
+    // Step 6: BEFORE deleting, track which posts were already delivered
+    const oldSyncedPosts = await SyncedPost.find({
+      CapsuleId: CapsuleId,
+      IsDeleted: false
+    }).lean().exec();
+
+    // Build a Set of delivered PostIds (track which posts were sent)
+    const deliveredPostIds = new Set();
+    
+    for (const oldPost of oldSyncedPosts) {
+      if (oldPost.EmailEngineDataSets && Array.isArray(oldPost.EmailEngineDataSets)) {
+        for (const emailSet of oldPost.EmailEngineDataSets) {
+          if (emailSet.Delivered === true) {
+            // Track by PostId only (the post itself, not the date)
+            deliveredPostIds.add(oldPost.PostId.toString());
+          }
+        }
+      }
+    }
+
+    console.log(`📋 Found ${deliveredPostIds.size} already delivered posts to exclude`);
+
+    // Step 7: Delete old Syncedposts collection records (hard delete for clean DB)
+    const now = new Date();
+    const streamEndDate = new Date(now);
+    streamEndDate.setDate(streamEndDate.getDate() + totalDurationDays);
+
+    const deleteResult = await SyncedPost.deleteMany({
+      CapsuleId: CapsuleId
+    });
+    const deletedCount = deleteResult.deletedCount || 0;
+    console.log(`🗑️ Hard deleted ${deletedCount} old Syncedposts records`);
+
+    // Step 8: Recreate Syncedposts from master list with new duration
+    let recreatedCount = 0;
+    let globalPostIndex = 0;
+    let skippedDeliveredCount = 0;
+
+    for (const masterPost of masterPostList) {
+      if (!masterPost.EmailEngineDataSets || !Array.isArray(masterPost.EmailEngineDataSets)) {
+        continue;
+      }
+
+      // Check if this post was already delivered (skip it entirely!)
+      const postIdStr = masterPost.PostId ? masterPost.PostId.toString() : '';
+      const wasDelivered = deliveredPostIds.has(postIdStr);
+      
+      if (wasDelivered) {
+        skippedDeliveredCount++;
+        continue;  // Skip this post - already sent to user!
+      }
+
+      // Create new EmailEngineDataSets array with recalculated dates (only for undelivered posts)
+      const newEmailEngineDataSets = masterPost.EmailEngineDataSets.map((emailSet) => {
+        const newDate = new Date(now);
+        newDate.setDate(newDate.getDate() + (globalPostIndex * daysBetween));
+        newDate.setHours(9, 0, 0, 0); // Set to 9 AM
+        globalPostIndex++;
+
+        return {
+          ...emailSet,
+          DateOfDelivery: newDate,
+          Delivered: false
+        };
+      });
+
+      // Only create if at least one post fits within new duration
+      const postsWithinDuration = newEmailEngineDataSets.filter(set => 
+        new Date(set.DateOfDelivery) <= streamEndDate
+      );
+
+      if (postsWithinDuration.length > 0) {
+        const newSyncedPost = new SyncedPost({
+          CapsuleId: masterPost.CapsuleId,
+          PageId: masterPost.PageId,
+          PostId: masterPost.PostId,
+          PostImage: masterPost.PostImage,
+          PostStatement: masterPost.PostStatement,
+          PostOwnerId: masterPost.PostOwnerId,
+          ReceiverEmails: masterPost.ReceiverEmails,
+          SurpriseSelectedTags: masterPost.SurpriseSelectedTags,
+          EmailEngineDataSets: postsWithinDuration,  // Only posts within duration
+          EmailTemplate: masterPost.EmailTemplate,
+          EmailSubject: masterPost.EmailSubject,
+          IsOnetimeStream: masterPost.IsOnetimeStream,
+          IsOnlyPostImage: masterPost.IsOnlyPostImage,
+          IsPrivateQuestionPost: masterPost.IsPrivateQuestionPost,
+          Status: masterPost.Status,
+          IsDeleted: false,
+          IsPageStreamCase: masterPost.IsPageStreamCase,
+          SyncedBy: masterPost.SyncedBy,
+          NotificationWillEndOn: streamEndDate,
+          CreatedOn: new Date()
+        });
+
+        await newSyncedPost.save();
+        recreatedCount++;
+      }
+    }
+
+    console.log(`🗑️ Hard deleted ${deletedCount} old Syncedposts records`);
+    console.log(`✅ Recreated ${recreatedCount} Syncedposts records from ${masterPostList.length} master posts`);
+    console.log(`⏭️ Skipped ${skippedDeliveredCount} already delivered posts (no duplicates)`);
+    console.log(`📅 New stream end date: ${streamEndDate.toISOString()}`);
+
+    return res.json({
+      status: 200,
+      message: "Stream duration updated successfully and delivery schedule recreated",
+      results: { 
+        MonthFor,
+        durationDays: totalDurationDays,
+        currentFrequency,
+        daysBetween,
+        streamEndDate: streamEndDate.toISOString(),
+        masterPostsInMap: masterPostList.length,
+        oldRecordsDeleted: deletedCount,
+        newRecordsCreated: recreatedCount,
+        deliveredPostsSkipped: skippedDeliveredCount
+      }
+    });
+
+  } catch (error) {
+    console.error("Error in updateCartForMonth_ActiveCapsule:", error);
+    return res.json({
+      status: 501,
+      message: "Error updating stream duration",
+      error: error.message,
+    });
+  }
 };
+
+/**
+ * Update frequency for active capsule (after purchase)
+ * POST /capsules/updateCartForFrequency_ActiveCapsule
+ * 
+ * This function:
+ * 1. Updates the Capsule.Frequency field
+ * 2. Finds all undelivered posts for this capsule
+ * 3. Recalculates their DateOfDelivery based on new frequency
+ * 4. Updates all affected SyncedPost records
+ */
+var updateCartForFrequency_ActiveCapsule = async function (req, res) {
+  try {
+    const CapsuleId = req.body.capsuleId ? req.body.capsuleId : null;
+    const Frequency = req.body.Frequency ? req.body.Frequency : 'high';
+
+    if (!CapsuleId) {
+      return res.json({
+        status: 400,
+        message: "capsuleId is required",
+        results: null,
+      });
+    }
+
+    // Step 1: Update Capsule frequency
+    const conditions = {
+      _id: CapsuleId
+    };
+
+    const doc = {
+      $set: { 'Frequency': Frequency }
+    };
+
+    await Capsule.updateOne(conditions, doc);
+    console.log(`✅ Updated Frequency to ${Frequency} for capsule ${CapsuleId}`);
+
+    // Step 2: Get frequency mapping (days between posts)
+    const frequencyToDays = {
+      'high': 1,    // Every day
+      'medium': 3,  // Every 3 days
+      'low': 7      // Every 7 days
+    };
+    const daysBetween = frequencyToDays[Frequency] || 3;
+
+    // Step 3: Fetch MASTER list from SyncedpostsMap (SOURCE OF TRUTH - has ALL posts!)
+    const syncedpostsMap = await SyncedpostsMap.findOne({
+      CapsuleId: CapsuleId,
+      IsDeleted: false
+    }).lean().exec();
+
+    if (!syncedpostsMap || !syncedpostsMap.SyncedPosts || !Array.isArray(syncedpostsMap.SyncedPosts)) {
+      console.log(`⚠️ No SyncedpostsMap found for capsule ${CapsuleId}`);
+      return res.json({
+        status: 404,
+        message: "No master post list found for this capsule. Please recreate the stream.",
+        results: null
+      });
+    }
+
+    const masterPostList = syncedpostsMap.SyncedPosts;  // ALL posts (e.g., 331)!
+    console.log(`📦 Found master list with ${masterPostList.length} posts in SyncedpostsMap`);
+
+    // Step 4: BEFORE deleting, track which posts were already delivered
+    const oldSyncedPosts = await SyncedPost.find({
+      CapsuleId: CapsuleId,
+      IsDeleted: false
+    }).lean().exec();
+
+    // Build a Set of delivered PostIds (track which posts were sent)
+    const deliveredPostIds = new Set();
+    
+    for (const oldPost of oldSyncedPosts) {
+      if (oldPost.EmailEngineDataSets && Array.isArray(oldPost.EmailEngineDataSets)) {
+        for (const emailSet of oldPost.EmailEngineDataSets) {
+          if (emailSet.Delivered === true) {
+            // Track by PostId only (the post itself, not the date)
+            deliveredPostIds.add(oldPost.PostId.toString());
+          }
+        }
+      }
+    }
+
+    console.log(`📋 Found ${deliveredPostIds.size} already delivered posts to exclude`);
+
+    // Step 5: Delete old Syncedposts collection records (hard delete for clean DB)
+    const now = new Date();
+
+    const deleteResult = await SyncedPost.deleteMany({
+      CapsuleId: CapsuleId
+    });
+    const deletedCount = deleteResult.deletedCount || 0;
+    console.log(`🗑️ Hard deleted ${deletedCount} old Syncedposts records`);
+
+    // Step 6: Recreate Syncedposts from master list with new frequency
+    let recreatedCount = 0;
+    let globalPostIndex = 0;
+    let skippedDeliveredCount = 0;
+
+    for (const masterPost of masterPostList) {
+      if (!masterPost.EmailEngineDataSets || !Array.isArray(masterPost.EmailEngineDataSets)) {
+        continue;
+      }
+
+      // Check if this post was already delivered (skip it entirely!)
+      const postIdStr = masterPost.PostId ? masterPost.PostId.toString() : '';
+      const wasDelivered = deliveredPostIds.has(postIdStr);
+      
+      if (wasDelivered) {
+        skippedDeliveredCount++;
+        continue;  // Skip this post - already sent to user!
+      }
+
+      // Create new EmailEngineDataSets array with recalculated dates (only for undelivered posts)
+      const newEmailEngineDataSets = masterPost.EmailEngineDataSets.map((emailSet) => {
+        const newDate = new Date(now);
+        newDate.setDate(newDate.getDate() + (globalPostIndex * daysBetween));
+        newDate.setHours(9, 0, 0, 0); // Set to 9 AM
+        globalPostIndex++;
+
+        return {
+          ...emailSet,
+          DateOfDelivery: newDate,
+          Delivered: false
+        };
+      });
+
+      // Create new Syncedposts record (recreate all undelivered posts)
+      if (newEmailEngineDataSets.length > 0) {
+        const newSyncedPost = new SyncedPost({
+          CapsuleId: masterPost.CapsuleId,
+          PageId: masterPost.PageId,
+          PostId: masterPost.PostId,
+          PostImage: masterPost.PostImage,
+          PostStatement: masterPost.PostStatement,
+          PostOwnerId: masterPost.PostOwnerId,
+          ReceiverEmails: masterPost.ReceiverEmails,
+          SurpriseSelectedTags: masterPost.SurpriseSelectedTags,
+          EmailEngineDataSets: newEmailEngineDataSets,
+          EmailTemplate: masterPost.EmailTemplate,
+          EmailSubject: masterPost.EmailSubject,
+          IsOnetimeStream: masterPost.IsOnetimeStream,
+          IsOnlyPostImage: masterPost.IsOnlyPostImage,
+          IsPrivateQuestionPost: masterPost.IsPrivateQuestionPost,
+          Status: masterPost.Status,
+          IsDeleted: false,
+          IsPageStreamCase: masterPost.IsPageStreamCase,
+          SyncedBy: masterPost.SyncedBy,
+          NotificationWillEndOn: masterPost.NotificationWillEndOn,
+          CreatedOn: new Date()
+        });
+
+        await newSyncedPost.save();
+        recreatedCount++;
+      }
+    }
+
+    console.log(`🗑️ Hard deleted ${deletedCount} old Syncedposts records`);
+    console.log(`✅ Recreated ${recreatedCount} Syncedposts records from ${masterPostList.length} master posts`);
+    console.log(`⏭️ Skipped ${skippedDeliveredCount} already delivered posts (no duplicates)`);
+
+    return res.json({
+      status: 200,
+      message: "Email frequency updated successfully and delivery schedule recreated",
+      results: { 
+        Frequency,
+        daysBetween,
+        masterPostsInMap: masterPostList.length,
+        oldRecordsDeleted: deletedCount,
+        newRecordsCreated: recreatedCount,
+        deliveredPostsSkipped: skippedDeliveredCount
+      }
+    });
+
+  } catch (error) {
+    console.error("Error in updateCartForFrequency_ActiveCapsule:", error);
+    return res.json({
+      status: 501,
+      message: "Error updating email frequency",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Get scheduled posts for a capsule (for debugging/verification)
+ * GET /capsules/getScheduledPosts
+ * Query params: capsuleId
+ */
+var getScheduledPosts = async function (req, res) {
+  try {
+    const CapsuleId = req.query.capsuleId || req.body.capsuleId;
+
+    if (!CapsuleId) {
+      return res.json({
+        status: 400,
+        message: "capsuleId is required",
+        results: null,
+      });
+    }
+
+    // Find all SyncedPost records for this capsule
+    const syncedPosts = await SyncedPost.find({
+      CapsuleId: CapsuleId,
+      IsDeleted: false
+    })
+    .sort({ CreatedOn: 1 })
+    .select('_id CapsuleId PageId PostId EmailEngineDataSets NotificationWillEndOn CreatedOn Status')
+    .lean()
+    .exec();
+
+    // Extract and format the delivery schedule
+    const schedule = [];
+    let totalPosts = 0;
+    let deliveredCount = 0;
+    let undeliveredCount = 0;
+
+    for (const syncedPost of syncedPosts) {
+      if (syncedPost.EmailEngineDataSets && Array.isArray(syncedPost.EmailEngineDataSets)) {
+        for (const emailSet of syncedPost.EmailEngineDataSets) {
+          totalPosts++;
+          const isDelivered = emailSet.Delivered === true;
+          
+          if (isDelivered) {
+            deliveredCount++;
+          } else {
+            undeliveredCount++;
+          }
+
+          schedule.push({
+            syncedPostId: syncedPost._id,
+            postId: syncedPost.PostId,
+            dateOfDelivery: emailSet.DateOfDelivery,
+            delivered: isDelivered,
+            visualUrls: emailSet.VisualUrls || [],
+            textAbove: emailSet.TextAboveVisual || '',
+            textBelow: emailSet.TextBelowVisual || ''
+          });
+        }
+      }
+    }
+
+    // Sort by delivery date
+    schedule.sort((a, b) => {
+      const dateA = a.dateOfDelivery ? new Date(a.dateOfDelivery) : new Date(0);
+      const dateB = b.dateOfDelivery ? new Date(b.dateOfDelivery) : new Date(0);
+      return dateA - dateB;
+    });
+
+    // Get capsule info
+    const capsule = await Capsule.findOne({ _id: CapsuleId })
+      .select('Title Frequency MonthFor IsStreamPaused')
+      .exec();
+
+    return res.json({
+      status: 200,
+      message: "Scheduled posts retrieved successfully",
+      results: {
+        capsule: {
+          id: CapsuleId,
+          title: capsule?.Title || 'Unknown',
+          frequency: capsule?.Frequency || 'medium',
+          duration: capsule?.MonthFor || 'M12',
+          isPaused: capsule?.IsStreamPaused || false
+        },
+        summary: {
+          totalPosts,
+          deliveredCount,
+          undeliveredCount,
+          syncedPostRecords: syncedPosts.length
+        },
+        schedule: schedule,
+        notificationWillEndOn: syncedPosts.length > 0 ? syncedPosts[0].NotificationWillEndOn : null
+      }
+    });
+
+  } catch (error) {
+    console.error("Error in getScheduledPosts:", error);
+    return res.json({
+      status: 501,
+      message: "Error retrieving scheduled posts",
+      error: error.message,
+    });
+  }
+};
+exports.getScheduledPosts = getScheduledPosts;
+
+/**
+ * Toggle stream pause/resume
+ * POST /capsules/toggleStream
+ */
+var toggleStream = async function (req, res) {
+  try {
+    const CapsuleId = req.body.capsuleId ? req.body.capsuleId : null;
+    const IsStreamPaused = req.body.IsStreamPaused !== undefined ? req.body.IsStreamPaused : null;
+
+    if (!CapsuleId) {
+      return res.json({
+        status: 400,
+        message: "capsuleId is required",
+        results: null,
+      });
+    }
+
+    const conditions = {
+      _id: CapsuleId
+    };
+
+    let toggleValue;
+    
+    if (IsStreamPaused !== null) {
+      // If explicit value provided, use it
+      toggleValue = IsStreamPaused;
+    } else {
+      // Otherwise, toggle current value
+      const result = await Capsule.findOne(conditions);
+      toggleValue = result && result.IsStreamPaused ? false : true;
+    }
+
+    const doc = {
+      $set: { 'IsStreamPaused': toggleValue }
+    };
+
+    await Capsule.updateOne(conditions, doc);
+
+    console.log(`✅ Stream ${toggleValue ? 'paused' : 'resumed'} for capsule ${CapsuleId}`);
+
+    return res.json({
+      status: 200,
+      message: `Stream ${toggleValue ? 'paused' : 'resumed'} successfully`,
+      results: { IsStreamPaused: toggleValue }
+    });
+
+  } catch (error) {
+    console.error("Error in toggleStream:", error);
+    return res.json({
+      status: 501,
+      message: "Error toggling stream status",
+      error: error.message,
+    });
+  }
+};
+
+/*________________________________________________________________________
+   * @Method :   		checkPostStreams
+   * Created By: 		smartData Enterprises Ltd
+   * @Purpose:   		Check if post has streams enabled
+   * @Param:     		2
+   * @Return:    	 	yes
+_________________________________________________________________________
+*/
+var checkPostStreams = async function (req, res) {
+  try {
+    const PageStream = require('./../models/pageStreamModel.js');
+    
+    var cond = {
+      PageId: req.body.PageId ? req.body.PageId : null,
+      PostId: req.body.PostId ? req.body.PostId : null
+    };
+    var f = {
+      SelectedBlendImages: 1
+    };
+    var SelectedBlendImagesArr = await PageStream.find(cond, f);
+    var SelectedBlendImages = [];
+
+    var response = {
+      status: "error",
+      message: "Stream is not enabled, Please set now.",
+      results: SelectedBlendImages
+    };
+
+    if (SelectedBlendImagesArr.length) {
+      SelectedBlendImages = SelectedBlendImagesArr[0].SelectedBlendImages ? SelectedBlendImagesArr[0].SelectedBlendImages : [];
+      if (SelectedBlendImages.length) {
+        response = {
+          status: "success",
+          message: "Stream is already enabled for this post.",
+          results: SelectedBlendImages
+        };
+      }
+    }
+
+    res.json(response);
+  } catch (error) {
+    console.error('checkPostStreams error:', error);
+    res.json({
+      status: "error",
+      message: "Something went wrong.",
+      error: error.message
+    });
+  }
+};
+
+/*________________________________________________________________________
+   * @Method :   		unsubscribe_changeSettings
+   * Created By: 		smartData Enterprises Ltd
+   * @Purpose:   		Update stream settings for active capsule
+   * @Param:     		2
+   * @Return:    	 	yes
+_________________________________________________________________________
+*/
+var unsubscribe_changeSettings = async function (req, res) {
+  try {
+    const SyncedPost = require('./../models/syncedpostModel.js');
+    const PageStream = require('./../models/pageStreamModel.js');
+    
+    var CapsuleId = req.body.capsuleId ? req.body.capsuleId : 0;
+
+    var conditions = {
+      _id: CapsuleId
+    };
+
+    var doc = {
+      $set: {
+        MonthFor: req.body.MonthFor ? req.body.MonthFor : 'M12',
+        Frequency: req.body.Frequency ? req.body.Frequency : 'medium',
+        EmailTemplate: req.body.EmailTemplate ? req.body.EmailTemplate : 'PracticalThinker',
+        IsStreamPaused: req.body.IsStreamPaused ? true : false
+      }
+    };
+
+    if (typeof req.body.EmailSubject != 'undefined') {
+      doc.$set.EmailSubject = req.body.EmailSubject ? req.body.EmailSubject : '';
+    }
+
+    if (typeof req.body.IsOnetimeStream != 'undefined') {
+      doc.$set.IsOnetimeStream = req.body.IsOnetimeStream ? req.body.IsOnetimeStream : false;
+    }
+
+    if (typeof req.body.IsOnlyPostImage != 'undefined') {
+      doc.$set.IsOnlyPostImage = req.body.IsOnlyPostImage ? req.body.IsOnlyPostImage : false;
+    }
+
+    var CapsuleData_beforeUpdate = await Capsule.findOne(conditions);
+    await Capsule.updateOne(conditions, doc);
+
+    var CapsuleData = await Capsule.findOne(conditions);
+
+    // Update synced posts status
+    var conditions_sp = {
+      CapsuleId: CapsuleData._id,
+      IsDeleted: 0
+    };
+    
+    var dataToUpdate = {
+      Status: !doc.$set.IsStreamPaused,
+      EmailTemplate: doc.$set.EmailTemplate ? doc.$set.EmailTemplate : 'PracticalThinker'
+    };
+
+    if (typeof req.body.EmailSubject != 'undefined') {
+      dataToUpdate.EmailSubject = req.body.EmailSubject ? req.body.EmailSubject : '';
+    }
+
+    if (typeof req.body.IsOnetimeStream != 'undefined') {
+      dataToUpdate.IsOnetimeStream = req.body.IsOnetimeStream ? req.body.IsOnetimeStream : false;
+    }
+
+    if (typeof req.body.IsOnlyPostImage != 'undefined') {
+      dataToUpdate.IsOnlyPostImage = req.body.IsOnlyPostImage ? req.body.IsOnlyPostImage : false;
+    }
+
+    await SyncedPost.updateMany(conditions_sp, { $set: dataToUpdate });
+
+    res.json({
+      status: 200,
+      message: "Stream settings updated successfully."
+    });
+  } catch (error) {
+    console.error('unsubscribe_changeSettings error:', error);
+    res.json({
+      status: 501,
+      message: "Something went wrong.",
+      error: error.message
+    });
+  }
+};
+
+// Export the new stream settings functions
+exports.updateCartForMonth_ActiveCapsule = updateCartForMonth_ActiveCapsule;
+exports.updateCartForFrequency_ActiveCapsule = updateCartForFrequency_ActiveCapsule;
+exports.toggleStream = toggleStream;
+exports.checkPostStreams = checkPostStreams;
+exports.unsubscribe_changeSettings = unsubscribe_changeSettings;

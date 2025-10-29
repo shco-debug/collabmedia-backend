@@ -333,6 +333,14 @@ module.exports = function(router){
 		Capsule.toggleStream(req,res);
 	});
 
+	// Get scheduled posts for verification/debugging
+	router.get('/getScheduledPosts',function(req,res){
+		Capsule.getScheduledPosts(req,res);
+	});
+	router.post('/getScheduledPosts',function(req,res){
+		Capsule.getScheduledPosts(req,res);
+	});
+
 	router.post('/buyNow',function(req,res){
 		LaunchSetting.buyNow(req,res);
 	});
