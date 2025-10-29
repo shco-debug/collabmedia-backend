@@ -139,6 +139,7 @@ module.exports = function(req, res, next){
 		var frontendApiPrefix = '/keywords';
 		var unprotectedRoutes = [
 			// '/parse' - removed to require authentication
+			'/updateAlltagsCollection_API'
 		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}
@@ -249,7 +250,11 @@ module.exports = function(req, res, next){
 			reqUrl.substring(0,12) == '/postManager' ||
 			reqUrl.substring(0,16) == '/unsplashgrapper'){
 		var frontendApiPrefix = reqUrl.split('/').slice(0, 2).join('/');
-		var unprotectedRoutes = [];
+		var unprotectedRoutes = [
+			'/updateMediaCountsPerGt_API',
+			'/updateAlltagsCollection_API',
+			'/updatePostCountsPerGt_API'
+		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}
 	else if(reqUrl.substring(0,17) == '/assets/Media/img'){

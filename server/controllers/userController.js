@@ -412,6 +412,161 @@ const login = async (req, res) => {
 };
 exports.login = login;
 
+/**
+ * OAuth Login/Register
+ * Handles Google OAuth authentication - creates user if doesn't exist, logs in if exists
+ */
+const oauthLogin = async (req, res) => {
+    try {
+        const { email, name, picture, provider, providerAccountId } = req.body;
+
+        // Validate required fields
+        if (!email || !name || !provider) {
+            return res.status(400).json({
+                code: "400",
+                msg: "Missing required OAuth fields",
+                message: "Email, name, and provider are required"
+            });
+        }
+
+        console.log('🔐 OAuth Login attempt:', { email, name, provider });
+
+        // Check if user exists
+        let userRecord = await user.findOne({ Email: email, IsDeleted: false }).exec();
+
+        if (!userRecord) {
+            // User doesn't exist - create new account
+            console.log('🆕 Creating new OAuth user:', email);
+
+            // Generate a random password for OAuth users (they won't use it)
+            const randomPassword = generator.generate({
+                length: 16,
+                numbers: true,
+                symbols: true,
+                uppercase: true
+            });
+            const hashedPassword = await bcrypt.hash(randomPassword, 10);
+
+            // Create new user
+            const newUser = new user();
+            newUser.Email = email;
+            newUser.Name = name;
+            newUser.NickName = name.split(' ')[0]; // Use first name as nickname
+            newUser.Password = hashedPassword;
+            newUser.ProfilePic = picture || '';
+            newUser.IsDeleted = false;
+            newUser.Status = 1;
+            newUser.CreatedOn = Date.now();
+            newUser.ModifiedOn = Date.now();
+            newUser.OAuthProvider = provider;
+            newUser.OAuthProviderId = providerAccountId;
+            newUser.IsEmailVerified = true; // OAuth emails are pre-verified
+            
+            // Generate referral code
+            const referralCode = crypto.randomBytes(4).toString('hex').toUpperCase();
+            newUser.referralCode = referralCode;
+
+            userRecord = await newUser.save();
+            console.log('✅ New OAuth user created:', userRecord._id);
+
+            // Update referral collection if needed
+            await __updateReferralCollacton(email, userRecord._id);
+        } else {
+            // User exists - update OAuth info if needed
+            console.log('👤 Existing user found:', userRecord._id);
+            
+            // Update OAuth provider info if not set
+            if (!userRecord.OAuthProvider) {
+                await user.updateOne(
+                    { _id: userRecord._id },
+                    { 
+                        $set: { 
+                            OAuthProvider: provider,
+                            OAuthProviderId: providerAccountId,
+                            IsEmailVerified: true
+                        } 
+                    }
+                ).exec();
+            }
+            
+            // Update last active time
+            await user.updateOne(
+                { _id: userRecord._id },
+                { $set: { LastActiveTime: Date.now() } }
+            ).exec();
+        }
+
+        // Generate JWT token
+        const tokenPayload = {
+            userId: userRecord._id.toString(),
+            email: userRecord.Email,
+            name: userRecord.Name,
+            role: userRecord.Role || 'user'
+        };
+
+        const jwtToken = jwt.sign(
+            tokenPayload,
+            process.env.SECRET_API_KEY || 'your-secret-key',
+            { expiresIn: '30d' }
+        );
+
+        // Create session in request
+        req.session = req.session || {};
+        req.session.user = {
+            _id: userRecord._id.toString(),
+            Email: userRecord.Email,
+            Name: userRecord.Name,
+            NickName: userRecord.NickName,
+            ProfilePic: userRecord.ProfilePic,
+            Gender: userRecord.Gender,
+            Role: userRecord.Role || 'user'
+        };
+
+        // Return comprehensive user data
+        return res.status(200).json({
+            code: "200",
+            msg: "Success",
+            message: "OAuth authentication successful",
+            token: jwtToken,
+            sessionId: req.sessionID,
+            usersession: {
+                _id: userRecord._id,
+                Email: userRecord.Email,
+                Name: userRecord.Name,
+                NickName: userRecord.NickName,
+                ProfilePic: userRecord.ProfilePic,
+                Gender: userRecord.Gender,
+                Birthdate: userRecord.Birthdate,
+                Role: userRecord.Role || 'user',
+                referralCode: userRecord.referralCode,
+                IsEmailVerified: userRecord.IsEmailVerified || false,
+                OAuthProvider: userRecord.OAuthProvider,
+                CreatedOn: userRecord.CreatedOn,
+                LastActiveTime: userRecord.LastActiveTime
+            },
+            userData: {
+                id: userRecord._id,
+                email: userRecord.Email,
+                name: userRecord.Name,
+                nickname: userRecord.NickName,
+                avatar: userRecord.ProfilePic || picture,
+                gender: userRecord.Gender,
+                role: userRecord.Role || 'user'
+            }
+        });
+
+    } catch (error) {
+        console.error('❌ OAuth login error:', error);
+        return res.status(500).json({
+            code: "500",
+            msg: "Internal server error",
+            message: error.message || "OAuth authentication failed",
+            error: process.env.NODE_ENV === 'development' ? error.toString() : undefined
+        });
+    }
+};
+exports.oauthLogin = oauthLogin;
+
 //file upload profile page parul ==> starts
 var fileUpload = function (req, res) {
 

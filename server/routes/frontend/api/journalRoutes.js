@@ -159,10 +159,35 @@ module.exports = function(router){
 	router.post('/removeStreamAction',function(req,res){
 		Journal.removeStreamAction(req,res);
 	});
-	// getStreamLikes moved to mediaActionRoutes.js (/mediaAction/getStreamLikes)
-	// addLike moved to mediaActionRoutes.js (/mediaAction/addCommentLike)
-	// removeLike moved to mediaActionRoutes.js (/mediaAction/removeCommentLike)
-	// getStreamCommentsLikes moved to mediaActionRoutes.js (/mediaAction/getCommentLikes)
+	
+	// Post-level likes (StreamLikes collection) - must match scrpt
+	router.post('/addStreamPostLike',function(req,res){
+		Journal.addStreamPostLike(req,res);
+	});
+	router.post('/removeStreamPostLike',function(req,res){
+		Journal.removeStreamPostLike(req,res);
+	});
+	router.post('/getStreamLikes',function(req,res){
+		Journal.getStreamLikes(req,res);
+	});
+	
+	// NOTE: /mediaAction/getStreamLikes is for STREAM-LEVEL likes (MediaActionLogs)
+	// Comment likes moved to mediaActionRoutes.js:
+	// - /mediaAction/addCommentLike
+	// - /mediaAction/removeCommentLike
+	// - /mediaAction/getCommentLikes
+	
+	// Comment likes using StreamCommentLikes collection (same as scrpt)
+	// Note: In scrpt these are in journalControllerV2.js, but in collabmedia-backend they're in streamController.js
+	router.post('/addLike',function(req,res){
+		Stream.addLike(req,res);  // Matches scrpt's Journal.addLike but uses StreamController
+	});
+	router.post('/removeLike',function(req,res){
+		Stream.removeLike(req,res);  // Matches scrpt's Journal.removeLike but uses StreamController
+	});
+	router.post('/getStreamCommentsLikes',function(req,res){
+		Stream.getStreamCommentsLikes(req,res);  // Matches scrpt's Journal.getStreamCommentsLikes but uses StreamController
+	});
 
 	router.post('/userStreamsPostsWithActivities',function(req,res){
 		Journal.userStreamsPostsWithActivities(req,res);

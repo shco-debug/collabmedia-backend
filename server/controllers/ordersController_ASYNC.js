@@ -346,6 +346,11 @@ function __getEmailEngineDataSetsFromSelectedBlendImages_NDays(
 
   var NewEmailEngineDataSets = [];
   var selectBlendImageCounter = -1;
+  
+  // 🔍 VERIFICATION: Track blend version usage for specific post
+  const VERIFY_POST_ID = "68fc1008446b78142c1c9e4f";
+  const versionUsageMap = new Map();
+  
   for (let jt = 0; jt < loopLimit; jt++) {
     var postObj = concatPostsArr[jt];
     IsOnlyPostImage = CapsuleData.IsOnlyPostImage
@@ -383,6 +388,13 @@ function __getEmailEngineDataSetsFromSelectedBlendImages_NDays(
         if (currentPostObj.SelectedBlendImages.length) {
           selectBlendImageCounter = selectBlendImageCounter + 1;
           const blendConfig = currentPostObj.SelectedBlendImages[selectBlendImageCounter];
+          
+          // 🔍 VERIFICATION: Log version usage for specific post
+          if (currentPostObj._id.toString() === VERIFY_POST_ID) {
+            const versionKey = `Version_${selectBlendImageCounter + 1}`;
+            versionUsageMap.set(versionKey, (versionUsageMap.get(versionKey) || 0) + 1);
+            console.log(`🎨 [VERIFY] Post ${VERIFY_POST_ID} - Using ${versionKey} (counter: ${selectBlendImageCounter}) - Appearance #${versionUsageMap.get(versionKey)}`);
+          }
           
           if (
             currentPostObj.SelectedBlendImages[selectBlendImageCounter]
@@ -427,6 +439,21 @@ function __getEmailEngineDataSetsFromSelectedBlendImages_NDays(
         }
       }
       NewEmailEngineDataSets.push(emailDataSet);
+    }
+  }
+  
+  // 🔍 VERIFICATION: Summary of version usage
+  if (versionUsageMap.size > 0) {
+    console.log(`\n📊 [VERIFY] Blend Version Usage Summary for Post ${VERIFY_POST_ID}:`);
+    versionUsageMap.forEach((count, version) => {
+      console.log(`   ${version}: Used ${count} times`);
+    });
+    console.log(`   Total unique versions used: ${versionUsageMap.size}`);
+    console.log(`   Expected versions: ${currentPostObj.SelectedBlendImages.length}`);
+    if (versionUsageMap.size === currentPostObj.SelectedBlendImages.length) {
+      console.log(`   ✅ SUCCESS: All ${versionUsageMap.size} versions are being used!\n`);
+    } else {
+      console.log(`   ⚠️ WARNING: Only ${versionUsageMap.size} out of ${currentPostObj.SelectedBlendImages.length} versions used!\n`);
     }
   }
 
@@ -489,6 +516,47 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
         CapsuleId: new ObjectId(StreamId),
         SyncedPosts: allSyncedPosts,
       };
+      
+      // 🔍 VERIFICATION: Check versions in SyncedpostsMap for specific post
+      const VERIFY_POST_ID = "68fc1008446b78142c1c9e4f";
+      const verifyPostEntries = allSyncedPosts.filter(post => 
+        post.PostId && post.PostId.toString() === VERIFY_POST_ID
+      );
+      
+      if (verifyPostEntries.length > 0) {
+        console.log(`\n📦 [VERIFY] Saving to SyncedpostsMap - Found ${verifyPostEntries.length} entries for Post ${VERIFY_POST_ID}`);
+        const uniqueVisuals = new Set();
+        const blendModes = new Set();
+        
+        verifyPostEntries.forEach((entry, idx) => {
+          const emailSet = entry.EmailEngineDataSets?.[0];
+          if (emailSet && emailSet.VisualUrls && emailSet.VisualUrls.length === 2) {
+            const combo = `${emailSet.VisualUrls[0]}|${emailSet.VisualUrls[1]}`;
+            uniqueVisuals.add(combo);
+            blendModes.add(emailSet.BlendMode || 'N/A');
+            
+            if (idx < 5) {
+              const img1 = emailSet.VisualUrls[0].split('/').pop().substring(0, 25);
+              const img2 = emailSet.VisualUrls[1].split('/').pop().substring(0, 25);
+              console.log(`   Entry ${idx + 1}: AfterDays=${emailSet.AfterDays}, Mode=${emailSet.BlendMode}, Images=[${img1}..., ${img2}...]`);
+            }
+          }
+        });
+        
+        console.log(`\n📦 [VERIFY] SyncedpostsMap Analysis for Post ${VERIFY_POST_ID}:`);
+        console.log(`   Total entries: ${verifyPostEntries.length}`);
+        console.log(`   Unique visual combinations: ${uniqueVisuals.size}`);
+        console.log(`   Blend modes used: ${[...blendModes].join(', ')}`);
+        
+        if (uniqueVisuals.size >= 4) {
+          console.log(`   ✅ SUCCESS! All 4 versions are stored in SyncedpostsMap!\n`);
+        } else if (uniqueVisuals.size > 1) {
+          console.log(`   ⚠️ PARTIAL: Only ${uniqueVisuals.size} out of 4 versions stored!\n`);
+        } else {
+          console.log(`   ❌ ERROR: Only 1 version stored - cycling failed!\n`);
+        }
+      }
+      
       await SyncedPostsMap(dataToSave).save();
 
       //3) fetch SyncedPostsMap

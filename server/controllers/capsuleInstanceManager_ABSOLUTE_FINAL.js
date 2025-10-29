@@ -945,6 +945,7 @@ const createCapsuleInstance = async (
                   const startTime = Date.now();
                   
                   // 🚀 OPTIMIZATION: Fetch media with lean() for faster processing
+                  // Fetch ALL fields needed for SyncedPost creation (like scrpt does when copying Media)
                   const mediaDocsForStreaming = await Media.find({ 
                     _id: { $in: newPage.Medias },
                     IsDeleted: { $ne: true }
@@ -961,6 +962,10 @@ const createCapsuleInstance = async (
                       if (mediaDoc.MediaType === 'Audio' || mediaDoc.MediaType === 'Video' || 
                           mediaDoc.MediaType === '1AudioPost' || mediaDoc.MediaType === '1VideoPost') {
                         mediaDoc.SelectedBlendImages = [];
+                        // For non-blendable media, use Content as PostStatement if PostStatement doesn't exist
+                        if (!mediaDoc.PostStatement && mediaDoc.Content) {
+                          mediaDoc.PostStatement = mediaDoc.Content;
+                        }
                         nonBlendableMedia.push(mediaDoc);
                       } else {
                         blendableMedia.push(mediaDoc);
@@ -977,7 +982,7 @@ const createCapsuleInstance = async (
                         PageId: pageDetail._id,
                         PostId: { $in: blendableMediaIds }
                       })
-                      .select('PostId SelectedBlendImages BlendSettings') // Only fetch needed fields
+                      .select('PostId SelectedBlendImages BlendSettings PostStatement') // Also fetch PostStatement
                       .lean();
                       
                       console.log(`🔍 Bulk fetched ${allPageStreams.length} PageStream entries for ${blendableMedia.length} media (${Date.now() - startTime}ms)`);
@@ -988,7 +993,7 @@ const createCapsuleInstance = async (
                         pageStreamMap.set(ps.PostId.toString(), ps);
                       });
                       
-                      // 🚀 OPTIMIZATION 4: Attach blend data instantly using the map
+                      // 🚀 OPTIMIZATION 4: Attach blend data and PostStatement instantly using the map
                       blendableMedia.forEach(mediaDoc => {
                         const pageStreamDoc = pageStreamMap.get(mediaDoc._id.toString());
                         
@@ -1002,12 +1007,32 @@ const createCapsuleInstance = async (
                           } else {
                             mediaDoc.SelectedBlendImages = [];
                           }
+                          
+                          // 📝 Attach PostStatement from PageStream if available
+                          if (pageStreamDoc.PostStatement) {
+                            mediaDoc.PostStatement = pageStreamDoc.PostStatement;
+                          } else if (!mediaDoc.PostStatement && mediaDoc.Content) {
+                            // Fallback: Use Content as PostStatement
+                            mediaDoc.PostStatement = mediaDoc.Content;
+                          }
                         } else {
                           mediaDoc.SelectedBlendImages = [];
+                          // If no PageStream found, use Content as PostStatement
+                          if (!mediaDoc.PostStatement && mediaDoc.Content) {
+                            mediaDoc.PostStatement = mediaDoc.Content;
+                          }
                         }
                       });
                       
                       console.log(`✅ Attached blend configs to all media (${Date.now() - startTime}ms total)`);
+                      
+                      // 🔍 DEBUG: Verify PostStatement was attached
+                      const mediaMissingPostStatement = mediaDocsForStreaming.filter(m => !m.PostStatement && !m.Content);
+                      if (mediaMissingPostStatement.length > 0) {
+                        console.log(`⚠️ WARNING: ${mediaMissingPostStatement.length} media missing PostStatement/Content:`, mediaMissingPostStatement.map(m => m._id));
+                      } else {
+                        console.log(`✅ All ${mediaDocsForStreaming.length} media have PostStatement or Content`);
+                      }
                     }
                     
                     CapsuleData._id = newCapsuleId;

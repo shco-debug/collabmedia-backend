@@ -39,16 +39,8 @@ const authenticateJWT = (req, res, next) => {
         req.userId = decoded.userId;
         req.userEmail = decoded.email;
         
-        console.log('✅ JWT verified successfully:', {
-            userId: decoded.userId,
-            email: decoded.email,
-            status: decoded.status,
-            emailConfirmed: decoded.emailConfirmationStatus
-        });
-        
         // Check if user account is still active
         if (!decoded.status) {
-            console.error('❌ User account is blocked');
             return res.status(403).json({ 
                 "code": "403", 
                 "msg": "Your account has been blocked by site admin. Please contact at info@scrpt.com." 
@@ -57,7 +49,6 @@ const authenticateJWT = (req, res, next) => {
         
         // Check email confirmation
         if (!decoded.emailConfirmationStatus) {
-            console.error('❌ Email not confirmed');
             return res.status(403).json({ 
                 "code": "403", 
                 "msg": "Please verify your e-mail address to continue" 

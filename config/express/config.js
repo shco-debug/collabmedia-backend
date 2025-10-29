@@ -465,14 +465,96 @@ module.exports = (app) => {
 		const id = req.params.id || null;
 		const postHashCode = req.params.postHashCode || null;
 		
-		// Redirect to the new Next.js frontend page for proper SEO and meta tags
+		console.log(`📤 Serving share page for post: ${id}, hash: ${postHashCode}`);
+		
+		// Helper function to escape HTML entities
+		const escapeHtml = (text) => {
+			if (!text) return '';
+			return text
+				.replace(/&/g, '&amp;')
+				.replace(/</g, '&lt;')
+				.replace(/>/g, '&gt;')
+				.replace(/"/g, '&quot;')
+				.replace(/'/g, '&#039;');
+		};
+		
+		// Default meta tag values
+		const siteUrl = process.env.SITE_URL || 'https://www.scrpt.com';
 		const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
-		const shareUrl = `${frontendUrl}/share/${id}/${postHashCode}`;
+		let metaTitle = 'Join Scrpt';
+		let metaDescription = 'Scrpt publishes digital treats to elevate special days & those between them!';
+		let metaImage = `${siteUrl}/streamposts/${postHashCode}`;
+		let metaUrl = `${siteUrl}/share/${id}/${postHashCode}`;
 		
-		console.log(`📤 Redirecting share link to frontend: ${shareUrl}`);
+		// Try to fetch post data for better meta tags
+		if (id && mongoose.Types.ObjectId.isValid(id)) {
+			try {
+				const post = await SyncedPost.findOne({ 
+					_id: mongoose.Types.ObjectId(id), 
+					IsDeleted: false 
+				}).lean();
+				
+				if (post && post.PostStatement) {
+					const plainText = post.PostStatement.replace(/<[^>]+>/g, '').trim();
+					if (plainText) {
+						// Limit description length for better social media display
+						metaDescription = plainText.substring(0, 200);
+						if (plainText.length > 200) {
+							metaDescription += '...';
+						}
+					}
+				}
+			} catch (error) {
+				console.error('Error fetching post for meta tags:', error);
+			}
+		}
 		
-		// 301 permanent redirect to the frontend
-		return res.redirect(301, shareUrl);
+		// Escape all meta tag values to prevent XSS
+		const safeTitle = escapeHtml(metaTitle);
+		const safeDescription = escapeHtml(metaDescription);
+		const safeImage = escapeHtml(metaImage);
+		const safeUrl = escapeHtml(metaUrl);
+		
+		// Serve HTML with Open Graph meta tags for Facebook crawler
+		// Include meta refresh to redirect users to frontend after page loads
+		const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>${safeTitle}</title>
+	
+	<!-- Open Graph Meta Tags for Facebook -->
+	<meta property="og:type" content="article" />
+	<meta property="og:title" content="${safeTitle}" />
+	<meta property="og:description" content="${safeDescription}" />
+	<meta property="og:image" content="${safeImage}" />
+	<meta property="og:url" content="${safeUrl}" />
+	<meta property="og:site_name" content="Scrpt" />
+	
+	<!-- Twitter Card Meta Tags -->
+	<meta name="twitter:card" content="summary_large_image" />
+	<meta name="twitter:title" content="${safeTitle}" />
+	<meta name="twitter:description" content="${safeDescription}" />
+	<meta name="twitter:image" content="${safeImage}" />
+	<meta name="twitter:site" content="@Scrpt" />
+	
+	<!-- Standard Meta Tags -->
+	<meta name="description" content="${safeDescription}" />
+	
+	<!-- Redirect users to frontend (but not bots) -->
+	<meta http-equiv="refresh" content="0; url=${frontendUrl}/share/${id}/${postHashCode}" />
+	<script>
+		// Redirect using JavaScript as well (for better UX)
+		window.location.href = '${frontendUrl}/share/${id}/${postHashCode}';
+	</script>
+</head>
+<body>
+	<p>Redirecting to <a href="${frontendUrl}/share/${id}/${postHashCode}">view this post</a>...</p>
+</body>
+</html>`;
+		
+		return res.send(html);
 	});
 	
 	async function __getActiveStreamsByUserId( userId, userEmail, userBirthdate ) {

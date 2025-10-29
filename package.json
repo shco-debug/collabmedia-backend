@@ -82,6 +82,7 @@
     "tls": "0.0.1",
     "url-metadata": "^5.2.2",
     "wysiwyg-editor-node-sdk": "^4.0.15",
+    "xlsx": "^0.18.5",
     "xlsx-to-json": "^0.3.0",
     "yamljs": "^0.3.0"
   },

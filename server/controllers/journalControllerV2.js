@@ -188,7 +188,7 @@ async function __getKeywordIdsByNames(selectedWordsArr) {
   return keywordIds;
 }
 
-async function saveAsFriend(loginUser, member) {
+async function saveAsFriend(loginUser, member, memberUserData = null) {
   console.log('🔄 saveAsFriend called for:', { ownerId: loginUser._id, memberEmail: member.Email });
   
   // Check if friendship already exists (Owner -> Member)
@@ -199,19 +199,25 @@ async function saveAsFriend(loginUser, member) {
     IsDeleted: 0,
   });
   
-  if (!friendsData.length) {
-    console.log('✅ Creating Owner -> Member friendship');
-    //save as friend (Owner -> Member)
-    var frndData = await User.findOne({
+  var frndData = null;
+    var IsRegistered = false;
+  
+  // If memberUserData is provided (newly created user), use it; otherwise look up
+  if (memberUserData && memberUserData._id) {
+    frndData = memberUserData;
+      IsRegistered = true;
+    console.log('✅ Using provided member user data');
+    } else {
+    // Look up user in database
+    frndData = await User.findOne({
       Email: { $regex: new RegExp(member.Email, "i") },
       IsDeleted: false,
     });
-    var IsRegistered = false;
-    if (frndData != undefined && frndData != null) {
-      IsRegistered = true;
-    } else {
-      IsRegistered = false;
-    }
+    IsRegistered = frndData != undefined && frndData != null;
+  }
+  
+  if (!friendsData.length) {
+    console.log('✅ Creating Owner -> Member friendship');
 
     // Use relationship data from member object, fallback to default
     var rel = member.RelationshipId && member.Relation 
@@ -220,14 +226,14 @@ async function saveAsFriend(loginUser, member) {
     rel = rel.split("~");
     var newFriendData = {};
     newFriendData.IsRegistered = IsRegistered;
-    if (IsRegistered) {
+    if (IsRegistered && frndData) {
       newFriendData.ID = frndData._id;
-      newFriendData.Pic = frndData.ProfilePic;
-      newFriendData.NickName = frndData.NickName;
+      newFriendData.Pic = frndData.ProfilePic || null;
+      newFriendData.NickName = frndData.NickName || frndData.Name || member.Name;
     }
 
     newFriendData.Email = member.Email;
-    newFriendData.Name = IsRegistered ? frndData.Name : member.Name;
+    newFriendData.Name = IsRegistered && frndData ? (frndData.Name || member.Name) : member.Name;
     newFriendData.Relation = rel[0].trim();
     newFriendData.RelationID = rel[1].trim();
 
@@ -245,7 +251,7 @@ async function saveAsFriend(loginUser, member) {
   }
 
   // Create reverse friendship (Member -> Owner) if member is registered
-  if (IsRegistered) {
+  if (IsRegistered && frndData) {
     console.log('🔄 Checking Member -> Owner friendship');
     var reverseFriendsData = await Friend.find({
       UserID: frndData._id,
@@ -261,8 +267,8 @@ async function saveAsFriend(loginUser, member) {
       ownerFriendData.ID = loginUser._id;
       ownerFriendData.Email = loginUser.Email;
       ownerFriendData.Name = loginUser.Name;
-      ownerFriendData.NickName = loginUser.NickName;
-      ownerFriendData.Pic = loginUser.ProfilePic;
+      ownerFriendData.NickName = loginUser.NickName || loginUser.Name;
+      ownerFriendData.Pic = loginUser.ProfilePic || null;
       ownerFriendData.Relation = "Friend"; // Default relation for reverse
       ownerFriendData.RelationID = "57fc1357c51f7e980747f2ce"; // Default relation ID
 
@@ -274,7 +280,7 @@ async function saveAsFriend(loginUser, member) {
       reverseFriendship.CreatedOn = Date.now();
       reverseFriendship.ModifiedOn = Date.now();
       await reverseFriendship.save();
-      console.log('✅ Member -> Owner friendship created');
+      console.log('✅ Member -> Owner friendship created (two-way established)');
     } else {
       console.log('⚠️ Member -> Owner friendship already exists');
     }
@@ -8512,12 +8518,44 @@ var streamPage__WithSelectedBlendCase = async function (req, res) {
     );
     //save single record per schedule changes
     var tmpObj = Object.assign({}, dataRecord);
+    
+    // 🔍 VERIFICATION: Track versions being saved for specific post
+    const VERIFY_POST_ID = "68fc1008446b78142c1c9e4f";
+    const savedVersions = [];
+    
     for (var jk = 0; jk < dataRecord.EmailEngineDataSets.length; jk++) {
       tmpObj.EmailEngineDataSets = [
         Object.assign({}, dataRecord.EmailEngineDataSets[jk]),
       ];
       data = await SyncedPost(tmpObj).save();
+      
+      // 🔍 VERIFICATION: Log saved VisualUrls for specific post
+      if (dataRecord.PostId && dataRecord.PostId.toString() === VERIFY_POST_ID) {
+        const visualUrls = tmpObj.EmailEngineDataSets[0].VisualUrls || [];
+        const blendMode = tmpObj.EmailEngineDataSets[0].BlendMode || 'N/A';
+        const afterDays = tmpObj.EmailEngineDataSets[0].AfterDays || 'N/A';
+        if (visualUrls.length === 2) {
+          const img1 = visualUrls[0].split('/').pop().substring(0, 25);
+          const img2 = visualUrls[1].split('/').pop().substring(0, 25);
+          savedVersions.push({ img1, img2, blendMode, afterDays });
+          console.log(`💾 [VERIFY] Saved SyncedPost #${jk + 1} for Post ${VERIFY_POST_ID}: AfterDays=${afterDays}, Mode=${blendMode}, Images=[${img1}..., ${img2}...]`);
+        }
+      }
     }
+    
+    // 🔍 VERIFICATION: Check if different versions were saved
+    if (savedVersions.length > 0) {
+      const uniqueCombos = new Set(savedVersions.map(v => `${v.img1}|${v.img2}`));
+      console.log(`\n💾 [VERIFY] SyncedPost Creation Summary for Post ${VERIFY_POST_ID}:`);
+      console.log(`   Total records created: ${savedVersions.length}`);
+      console.log(`   Unique visual combinations: ${uniqueCombos.size}`);
+      if (uniqueCombos.size > 1) {
+        console.log(`   ✅ SUCCESS: Multiple versions saved (${uniqueCombos.size} unique combinations)!\n`);
+      } else {
+        console.log(`   ⚠️ WARNING: All records use the same visual combination!\n`);
+      }
+    }
+    
     //save single record per schedule changes
     var err = typeof data === "object" ? false : true;
     if (err) {
@@ -14582,7 +14620,7 @@ var addCommentOnSocialPost = async function (req, res) {
   if (streamId && Members.length === 0) {
     try {
       var streamMembers = await StreamMembers.findOne({
-        StreamId: ObjectId(streamId),
+        StreamId: new ObjectId(streamId),
         IsDeleted: false
       }).select('Members');
       
@@ -14597,7 +14635,7 @@ var addCommentOnSocialPost = async function (req, res) {
   }
   
   for (var i = 0; i < Members.length; i++) {
-    memberIds.push(ObjectId(Members[i]));
+    memberIds.push(new ObjectId(Members[i]));
   }
 
   var dataToSave = {
@@ -14614,9 +14652,13 @@ var addCommentOnSocialPost = async function (req, res) {
   };
 
   if (!id) {
-    StreamComments(dataToSave).save(async function (err, results) {
+    try {
+      // Save comment using async/await
+      const savedComment = await StreamComments(dataToSave).save();
+      
+      // Fetch updated comments list
       var conditions = {
-        SocialPageId: ObjectId(dataToSave.SocialPageId),
+        SocialPageId: new ObjectId(dataToSave.SocialPageId),
         ParentId: { $exists: false },
         //SocialPostId: ObjectId(dataToSave.SocialPostId),
         IsDeleted: 0,
@@ -14636,74 +14678,75 @@ var addCommentOnSocialPost = async function (req, res) {
         .populate("UserId", "_id Name Email ProfilePic");
       comments = Array.isArray(comments) ? comments : [];
 
-      if (!err) {
-        if (postOwnerId && postOwnerId != loginUserId) {
-          notifyMembers([postOwnerId], loginUserName, "commented on", streamId);
-        }
-
-        return res.json({
-          status: "success",
-          message: "comment saved successfully.",
-          results: comments,
-        });
+      // Send notification
+      if (postOwnerId && postOwnerId != loginUserId) {
+        notifyMembers([postOwnerId], loginUserName, "commented on", streamId);
       }
 
       return res.json({
-        status: "failed",
-        message: "Failed.",
+        status: "success",
+        message: "comment saved successfully.",
         results: comments,
       });
-    });
+    } catch (err) {
+      console.error('Error saving comment:', err);
+      return res.json({
+        status: "failed",
+        message: "Failed to save comment.",
+        error: err.message,
+        results: [],
+      });
+    }
   } else {
-    var conditions = {
-      _id: new ObjectId(id),
-      UserId: req.session.user._id,
-    };
+    try {
+      var conditions = {
+        _id: new ObjectId(id),
+        UserId: req.session.user._id,
+      };
 
-    var dataToUpdate = {
-      Comment: req.body.Comment ? req.body.Comment : null,
-    };
+      var dataToUpdate = {
+        Comment: req.body.Comment ? req.body.Comment : null,
+      };
 
-    StreamComments.update(
-      conditions,
-      { $set: dataToUpdate },
-      async function (err, results) {
-        var conditions = {
-          SocialPageId: ObjectId(dataToSave.SocialPageId),
-          ParentId: { $exists: false },
-          //SocialPostId: ObjectId(dataToSave.SocialPostId),
-          IsDeleted: 0,
-          $or: [
-            { PrivacySetting: { $exists: false } },
-            { PrivacySetting: "PublicWithName" },
-            //{ PrivacySetting : 'OnlyForOwner', UserId : loginUserId },
-            {
-              PrivacySetting: { $in: ["OnlyForOwner", "InvitedFriends"] },
-              UserId: loginUserId,
-            },
-            { PrivacySetting: "InvitedFriends", UserId: { $in: memberIds } },
-          ],
-        };
-        var comments = await StreamComments.find(conditions)
-          .sort({ CreatedOn: -1 })
-          .populate("UserId", "_id Name Email ProfilePic");
-        comments = Array.isArray(comments) ? comments : [];
+      // Update comment using async/await
+      await StreamComments.updateOne(conditions, { $set: dataToUpdate });
+      
+      // Fetch updated comments list
+      var fetchConditions = {
+        SocialPageId: new ObjectId(dataToSave.SocialPageId),
+        ParentId: { $exists: false },
+        //SocialPostId: ObjectId(dataToSave.SocialPostId),
+        IsDeleted: 0,
+        $or: [
+          { PrivacySetting: { $exists: false } },
+          { PrivacySetting: "PublicWithName" },
+          //{ PrivacySetting : 'OnlyForOwner', UserId : loginUserId },
+          {
+            PrivacySetting: { $in: ["OnlyForOwner", "InvitedFriends"] },
+            UserId: loginUserId,
+          },
+          { PrivacySetting: "InvitedFriends", UserId: { $in: memberIds } },
+        ],
+      };
+      var comments = await StreamComments.find(fetchConditions)
+        .sort({ CreatedOn: -1 })
+        .populate("UserId", "_id Name Email ProfilePic");
+      comments = Array.isArray(comments) ? comments : [];
 
-        if (!err) {
-          return res.json({
-            status: "success",
-            message: "comment saved successfully.",
-            results: comments,
-          });
-        }
-
-        return res.json({
-          status: "failed",
-          message: "Failed.",
-          results: comments,
-        });
-      }
-    );
+      return res.json({
+        status: "success",
+        message: "comment updated successfully.",
+        results: comments,
+      });
+    } catch (err) {
+      console.error('Error updating comment:', err);
+      return res.json({
+        status: "failed",
+        message: "Failed to update comment.",
+        error: err.message,
+        results: [],
+      });
+    }
   }
 };
 
@@ -14714,7 +14757,7 @@ var deleteCommentOnSocialPost = async function (req, res) {
   var Members = req.body.Members ? req.body.Members : [];
   var memberIds = [];
   for (var i = 0; i < Members.length; i++) {
-    memberIds.push(ObjectId(Members[i]));
+    memberIds.push(new ObjectId(Members[i]));
   }
 
   var dataToSave = {
@@ -14724,55 +14767,55 @@ var deleteCommentOnSocialPost = async function (req, res) {
     Comment: req.body.Comment ? req.body.Comment : null,
   };
 
-  var conditions = {
-    _id: new ObjectId(id),
-    UserId: req.session.user._id,
-  };
+  try {
+    var conditions = {
+      _id: new ObjectId(id),
+      UserId: req.session.user._id,
+    };
 
-  var dataToUpdate = {
-    IsDeleted: 1,
-  };
+    var dataToUpdate = {
+      IsDeleted: 1,
+    };
 
-  StreamComments.update(
-    conditions,
-    { $set: dataToUpdate },
-    async function (err, results) {
-      var conditions = {
-        SocialPageId: ObjectId(dataToSave.SocialPageId),
-        ParentId: { $exists: false },
-        //SocialPostId: ObjectId(dataToSave.SocialPostId),
-        IsDeleted: 0,
-        $or: [
-          { PrivacySetting: { $exists: false } },
-          { PrivacySetting: "PublicWithName" },
-          //{ PrivacySetting : 'OnlyForOwner', UserId : loginUserId },
-          {
-            PrivacySetting: { $in: ["OnlyForOwner", "InvitedFriends"] },
-            UserId: loginUserId,
-          },
-          { PrivacySetting: "InvitedFriends", UserId: { $in: memberIds } },
-        ],
-      };
-      var comments = await StreamComments.find(conditions)
-        .sort({ CreatedOn: -1 })
-        .populate("UserId", "_id Name Email ProfilePic");
-      comments = Array.isArray(comments) ? comments : [];
+    // Delete comment using async/await
+    await StreamComments.updateOne(conditions, { $set: dataToUpdate });
+    
+    // Fetch updated comments list
+    var fetchConditions = {
+      SocialPageId: new ObjectId(dataToSave.SocialPageId),
+      ParentId: { $exists: false },
+      //SocialPostId: ObjectId(dataToSave.SocialPostId),
+      IsDeleted: 0,
+      $or: [
+        { PrivacySetting: { $exists: false } },
+        { PrivacySetting: "PublicWithName" },
+        //{ PrivacySetting : 'OnlyForOwner', UserId : loginUserId },
+        {
+          PrivacySetting: { $in: ["OnlyForOwner", "InvitedFriends"] },
+          UserId: loginUserId,
+        },
+        { PrivacySetting: "InvitedFriends", UserId: { $in: memberIds } },
+      ],
+    };
+    var comments = await StreamComments.find(fetchConditions)
+      .sort({ CreatedOn: -1 })
+      .populate("UserId", "_id Name Email ProfilePic");
+    comments = Array.isArray(comments) ? comments : [];
 
-      if (!err) {
-        return res.json({
-          status: "success",
-          message: "comment deleted successfully.",
-          results: comments,
-        });
-      }
-
-      return res.json({
-        status: "failed",
-        message: "Failed.",
-        results: comments,
-      });
-    }
-  );
+    return res.json({
+      status: "success",
+      message: "comment deleted successfully.",
+      results: comments,
+    });
+  } catch (err) {
+    console.error('Error deleting comment:', err);
+    return res.json({
+      status: "failed",
+      message: "Failed to delete comment.",
+      error: err.message,
+      results: [],
+    });
+  }
 };
 
 var getStreamComments = async function (req, res) {
@@ -14806,11 +14849,11 @@ var getStreamComments = async function (req, res) {
   }
   
   for (var i = 0; i < Members.length; i++) {
-    memberIds.push(ObjectId(Members[i]));
+    memberIds.push(new ObjectId(Members[i]));
   }
 
   var conditions = {
-    SocialPageId: ObjectId(inputObj.SocialPageId),
+    SocialPageId: new ObjectId(inputObj.SocialPageId),
     ParentId: { $exists: false },
     IsDeleted: 0,
     $or: [
@@ -14835,6 +14878,375 @@ var getStreamComments = async function (req, res) {
     message: "comment saved successfully.",
     results: comments,
   });
+};
+
+// ==================== POST LIKES (StreamLikes Collection) ====================
+
+var addStreamPostLike = async function(req, res) {
+	var streamId = req.body.StreamId ? req.body.StreamId : null;
+	var ownerId = req.body.OwnerId ? req.body.OwnerId : null;
+	var postOwnerId = req.body.PostOwnerId ? req.body.PostOwnerId : null;
+
+	var loginUserId = req.session.user._id;
+	var loginUserName = req.session.user.Name;
+
+	var dataToSave = {
+		UserId : req.session.user._id,
+		SocialPageId : req.body.SocialPageId ? req.body.SocialPageId : null,
+		SocialPostId : req.body.SocialPostId ? req.body.SocialPostId : null,
+		hexcode_blendedImage : req.body.hexcode_blendedImage ? req.body.hexcode_blendedImage : null
+	};
+
+	try {
+		// Check if user already liked this post
+		// Build query conditions for checking existing like
+		var existingLikeConditions = {
+			UserId : new ObjectId(req.session.user._id),
+			SocialPostId : dataToSave.SocialPostId ? new ObjectId(dataToSave.SocialPostId) : null,
+			IsDeleted: 0
+		};
+
+		// Handle hexcode_blendedImage matching - either exact match or null/undefined
+		if (dataToSave.hexcode_blendedImage) {
+			existingLikeConditions.hexcode_blendedImage = dataToSave.hexcode_blendedImage;
+		} else {
+			// Match documents where hexcode_blendedImage is null, undefined, or empty string
+			existingLikeConditions.$or = [
+				{ hexcode_blendedImage: null },
+				{ hexcode_blendedImage: { $exists: false } },
+				{ hexcode_blendedImage: "" }
+			];
+		}
+
+		const existingLike = await StreamLikes.findOne(existingLikeConditions);
+
+		if (existingLike) {
+			// User has already liked this post
+			var conditions = {
+				SocialPageId : new ObjectId(dataToSave.SocialPageId),
+				//SocialPostId: new ObjectId(dataToSave.SocialPostId),
+				IsDeleted: 0
+			};
+			var results = await StreamLikes.find(conditions).populate('UserId', '_id Name Email ProfilePic');
+			results = Array.isArray(results) ? results : [];
+
+			return res.json({
+				status : "error",
+				message : "You have already liked this post.",
+				results : results
+			});
+		}
+
+		// Save like using async/await
+		const savedLike = await StreamLikes(dataToSave).save();
+		
+		// Fetch updated likes list
+		var conditions = {
+			SocialPageId : new ObjectId(dataToSave.SocialPageId),
+			//SocialPostId: new ObjectId(dataToSave.SocialPostId),
+			IsDeleted: 0
+		};
+		var results = await StreamLikes.find(conditions).populate('UserId', '_id Name Email ProfilePic');
+		results = Array.isArray(results) ? results : [];
+
+		// Send notification
+		if(postOwnerId && (postOwnerId != loginUserId)) {
+			notifyMembers([postOwnerId], loginUserName, 'liked', streamId);
+		}
+
+		return res.json({
+			status : "success",
+			message : "Like added successfully.",
+			likeId : savedLike._id, // Return the like _id for easy removal
+			results : results
+		});
+	} catch (err) {
+		console.error('Error adding like:', err);
+		return res.json({
+			status : "failed",
+			message : "Failed to add like.",
+			error: err.message,
+			results : []
+		});
+	}
+};
+
+var removeStreamPostLike = async function(req, res) {
+	// Check if user is authenticated
+	if (!req.session || !req.session.user || !req.session.user._id) {
+		return res.json({
+			status : "error",
+			message : "User not authenticated.",
+			results : []
+		});
+	}
+
+	var loginUserId = req.session.user._id;
+	var socialPageId = req.body.SocialPageId ? req.body.SocialPageId : null;
+	var likeId = req.body._id || req.body.LikeId || null;
+
+	var dataToUpdate = {
+		IsDeleted : 1
+	};
+
+	try {
+		var updateConditions = {};
+
+		// If _id is provided, use it (more efficient and simpler)
+		if (likeId) {
+			// Check if ObjectId is valid
+			if (!ObjectId.isValid(likeId)) {
+				return res.json({
+					status : "error",
+					message : "Invalid like ID format.",
+					results : []
+				});
+			}
+
+			// First, check if the like exists at all (even if deleted)
+			var existingLikeAny = await StreamLikes.findOne({
+				_id: new ObjectId(likeId)
+			});
+
+			if (!existingLikeAny) {
+				return res.json({
+					status : "error",
+					message : "Like not found with the provided ID.",
+					results : []
+				});
+			}
+
+			// Check if already deleted
+			if (existingLikeAny.IsDeleted === 1 || existingLikeAny.IsDeleted === true) {
+				// Return success since it's already removed, but fetch the current likes list
+				if (existingLikeAny.SocialPageId) {
+					var fetchConditions = {
+						SocialPageId : new ObjectId(existingLikeAny.SocialPageId),
+						IsDeleted: 0
+					};
+					var results = await StreamLikes.find(fetchConditions).populate('UserId', '_id Name Email ProfilePic');
+					results = Array.isArray(results) ? results : [];
+					
+					return res.json({
+						status : "success",
+						message : "Like was already removed.",
+						results : results
+					});
+				}
+			}
+
+			// Get the active like
+			var existingLike = existingLikeAny;
+
+			// Check if the like belongs to the current user
+			// Handle both string and ObjectId formats for UserId comparison
+			var likeUserId = existingLike.UserId ? existingLike.UserId.toString() : null;
+			var currentUserId = loginUserId ? loginUserId.toString() : null;
+			
+			if (likeUserId !== currentUserId) {
+				return res.json({
+					status : "error",
+					message : "You don't have permission to remove this like.",
+					results : []
+				});
+			}
+
+			// Get SocialPageId from existing like if not provided
+			if (!socialPageId && existingLike.SocialPageId) {
+				socialPageId = existingLike.SocialPageId;
+			}
+
+			updateConditions = {
+				_id: new ObjectId(likeId),
+				IsDeleted: 0
+			};
+		} else {
+			// Fallback to original multi-parameter approach for backward compatibility
+			var conditions = {
+				UserId : loginUserId,
+				SocialPageId : socialPageId ? new ObjectId(socialPageId) : null,
+				SocialPostId : req.body.SocialPostId ? new ObjectId(req.body.SocialPostId) : null,
+				hexcode_blendedImage : req.body.hexcode_blendedImage ? req.body.hexcode_blendedImage : null,
+				IsDeleted: 0
+			};
+
+			// Handle hexcode_blendedImage matching for null/undefined cases
+			if (!req.body.hexcode_blendedImage) {
+				conditions.$or = [
+					{ hexcode_blendedImage: null },
+					{ hexcode_blendedImage: { $exists: false } },
+					{ hexcode_blendedImage: "" }
+				];
+				delete conditions.hexcode_blendedImage;
+			}
+
+			updateConditions = conditions;
+		}
+
+		// Remove like using async/await
+		await StreamLikes.updateMany(updateConditions, { $set : dataToUpdate });
+		
+		// Fetch updated likes list - SocialPageId is required for this
+		if (!socialPageId) {
+			return res.json({
+				status : "error",
+				message : "SocialPageId is required to fetch updated likes list.",
+				results : []
+			});
+		}
+
+		var fetchConditions = {
+			SocialPageId : new ObjectId(socialPageId),
+			IsDeleted: 0
+		};
+		var results = await StreamLikes.find(fetchConditions).populate('UserId', '_id Name Email ProfilePic');
+		results = Array.isArray(results) ? results : [];
+
+		return res.json({
+			status : "success",
+			message : "Like removed successfully.",
+			results : results
+		});
+	} catch (err) {
+		console.error('Error removing like:', err);
+		return res.json({
+			status : "failed",
+			message : "Failed to remove like.",
+			error: err.message,
+			results : []
+		});
+	}
+};
+
+var getStreamLikes = async function(req, res) {
+	var SocialPageId = req.body.SocialPageId || req.body.StreamId || null; // Note: SocialPageId is actually StreamId
+	var SocialPostId = req.body.SocialPostId || req.body.PostId || null;
+	var PageId = req.body.PageId || null;
+	var hexcode_blendedImage = req.body.hexcode_blendedImage || req.body.hexcode || null;
+
+	try {
+		// If PageId is provided, find all PostIds for that page
+		var postIdsForPage = [];
+		if (PageId) {
+			var PageStream = require("./../models/pageStreamModel.js");
+			var pageStreamPosts = await PageStream.find({
+				PageId: new ObjectId(PageId),
+				IsDeleted: false
+			}).select('PostId');
+			
+			postIdsForPage = pageStreamPosts.map(p => p.PostId).filter(id => id);
+			
+			if (postIdsForPage.length === 0) {
+				return res.json({
+					status : "success",
+					message : "Likes for page (no posts found in this page).",
+					results : [],
+					count : 0,
+					filteredBy : {
+						PageId : PageId,
+						StreamId : SocialPageId || "not filtered",
+						PostId : SocialPostId || "not filtered",
+						hexcode_blendedImage : hexcode_blendedImage || "not filtered"
+					}
+				});
+			}
+		}
+
+		// Build conditions based on what's provided
+		var conditions = {
+			IsDeleted: 0
+		};
+
+		// Priority: hexcode > PostId > PageId > StreamId
+		// If hexcode is provided, get likes for that specific version
+		if (hexcode_blendedImage) {
+			conditions.hexcode_blendedImage = hexcode_blendedImage;
+			
+			// Filter by post if provided
+			if (SocialPostId) {
+				conditions.SocialPostId = new ObjectId(SocialPostId);
+			}
+			// Or filter by posts in page if PageId provided
+			else if (PageId && postIdsForPage.length > 0) {
+				conditions.SocialPostId = { $in: postIdsForPage };
+			}
+			
+			// Optionally filter by stream if provided
+			if (SocialPageId) {
+				conditions.SocialPageId = new ObjectId(SocialPageId);
+			}
+		}
+		// If PostId is provided (but no hexcode), get likes for that specific post (all versions)
+		else if (SocialPostId) {
+			conditions.SocialPostId = new ObjectId(SocialPostId);
+			
+			// Optionally filter by stream if provided
+			if (SocialPageId) {
+				conditions.SocialPageId = new ObjectId(SocialPageId);
+			}
+		}
+		// If PageId is provided, get likes for all posts in that page
+		else if (PageId && postIdsForPage.length > 0) {
+			conditions.SocialPostId = { $in: postIdsForPage };
+			
+			// Optionally filter by stream if provided
+			if (SocialPageId) {
+				conditions.SocialPageId = new ObjectId(SocialPageId);
+			}
+		}
+		// If only StreamId/SocialPageId is provided, get all likes for the stream (all posts)
+		else if (SocialPageId) {
+			conditions.SocialPageId = new ObjectId(SocialPageId);
+		}
+		// No valid filter provided
+		else {
+			return res.json({
+				status : "error",
+				message : "Please provide at least one: StreamId/SocialPageId, PageId, PostId/SocialPostId, or hexcode_blendedImage.",
+				results : []
+			});
+		}
+
+		var results = await StreamLikes.find(conditions).populate('UserId', '_id Name Email ProfilePic').sort({ CreatedOn: -1 });
+		results = Array.isArray(results) ? results : [];
+
+		// Determine message based on filters
+		var message = "";
+		if (hexcode_blendedImage && SocialPostId) {
+			message = `Likes for specific post version (hexcode: ${hexcode_blendedImage}).`;
+		} else if (hexcode_blendedImage && PageId) {
+			message = `Likes for specific hexcode version in page.`;
+		} else if (hexcode_blendedImage) {
+			message = `Likes for specific hexcode version (${hexcode_blendedImage}).`;
+		} else if (SocialPostId) {
+			message = "Likes for specific post (all versions).";
+		} else if (PageId) {
+			message = `Likes for all posts in page (${postIdsForPage.length} posts).`;
+		} else {
+			message = "Likes for stream (all posts and versions).";
+		}
+
+		return res.json({
+			status : "success",
+			message : message,
+			results : results,
+			count : results.length,
+			filteredBy : {
+				StreamId : SocialPageId || "not filtered",
+				PageId : PageId || "not filtered",
+				PostId : SocialPostId || "not filtered",
+				hexcode_blendedImage : hexcode_blendedImage || "not filtered"
+			}
+		});
+	} catch (err) {
+		console.error('Error getting likes:', err);
+		return res.json({
+			status : "failed",
+			message : "Failed to get likes.",
+			error: err.message,
+			results : []
+		});
+	}
 };
 
 var addStreamAction = async function (req, res) {
@@ -15313,6 +15725,7 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
             ? SocialPostsWithCommentsArr
             : [];
           //console.log("SocialPostsWithCommentsArr = ", SocialPostsWithCommentsArr.length);
+          
 
           for (var i = 0; i < SocialPostsWithCommentsArr.length; i++) {
             var ActivityText = `${
@@ -15322,21 +15735,15 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
 
             if (
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage
               ]
             ) {
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage
               ].MyComments.push(SocialPostsWithCommentsArr[i]);
             } else {
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage
               ] = {
                 ActivityText: ActivityText,
                 ActivityTime: ActivityTime,
@@ -15346,25 +15753,19 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
 
             if (
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage +
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage +
                   "_CommentActivityArr"
               ]
             ) {
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage +
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage +
                   "_CommentActivityArr"
               ].push(
                 `${SocialPostsWithCommentsArr[i].UserId.Name.split(" ")[0]}`
               );
             } else {
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage +
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage +
                   "_CommentActivityArr"
               ] = [
                 `${SocialPostsWithCommentsArr[i].UserId.Name.split(" ")[0]}`,
@@ -15395,15 +15796,11 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
 
             if (
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage
               ]
             ) {
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage
               ] = {
                 ActivityText: ActivityText,
                 ActivityTime: ActivityTime,
@@ -15421,9 +15818,7 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
               };
             } else {
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage
               ] = {
                 ActivityText: ActivityText,
                 ActivityTime: ActivityTime,
@@ -15433,23 +15828,17 @@ var userStreamsPostsWithActivities_GroupCase = async function (req, res) {
 
             if (
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage +
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage +
                   "_LikeActivityArr"
               ]
             ) {
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage +
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage +
                   "_LikeActivityArr"
               ].push(`${SocialPostsWithLikesArr[i].UserId.Name.split(" ")[0]}`);
             } else {
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage +
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage +
                   "_LikeActivityArr"
               ] = [`${SocialPostsWithLikesArr[i].UserId.Name.split(" ")[0]}`];
             }
@@ -16206,21 +16595,15 @@ var userStreamsPostsWithActivities_GroupCase_V2 = async function (req, res) {
 
             if (
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage
               ]
             ) {
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage
               ].MyComments.push(SocialPostsWithCommentsArr[i]);
             } else {
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage
               ] = {
                 ActivityText: ActivityText,
                 ActivityTime: ActivityTime,
@@ -16230,25 +16613,19 @@ var userStreamsPostsWithActivities_GroupCase_V2 = async function (req, res) {
 
             if (
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage +
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage +
                   "_CommentActivityArr"
               ]
             ) {
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage +
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage +
                   "_CommentActivityArr"
               ].push(
                 `${SocialPostsWithCommentsArr[i].UserId.Name.split(" ")[0]}`
               );
             } else {
               activityMapObj[
-                SocialPostsWithCommentsArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithCommentsArr[i].hexcode_blendedImage +
+                SocialPostsWithCommentsArr[i].SocialPostId + '_' + SocialPostsWithCommentsArr[i].hexcode_blendedImage +
                   "_CommentActivityArr"
               ] = [
                 `${SocialPostsWithCommentsArr[i].UserId.Name.split(" ")[0]}`,
@@ -16280,15 +16657,11 @@ var userStreamsPostsWithActivities_GroupCase_V2 = async function (req, res) {
 
             if (
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage
               ]
             ) {
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage
               ] = {
                 ActivityText: ActivityText,
                 ActivityTime: ActivityTime,
@@ -16306,9 +16679,7 @@ var userStreamsPostsWithActivities_GroupCase_V2 = async function (req, res) {
               };
             } else {
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage
               ] = {
                 ActivityText: ActivityText,
                 ActivityTime: ActivityTime,
@@ -16318,23 +16689,17 @@ var userStreamsPostsWithActivities_GroupCase_V2 = async function (req, res) {
 
             if (
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage +
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage +
                   "_LikeActivityArr"
               ]
             ) {
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage +
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage +
                   "_LikeActivityArr"
               ].push(`${SocialPostsWithLikesArr[i].UserId.Name.split(" ")[0]}`);
             } else {
               activityMapObj[
-                SocialPostsWithLikesArr[i].SocialPostId +
-                  "_" +
-                  SocialPostsWithLikesArr[i].hexcode_blendedImage +
+                SocialPostsWithLikesArr[i].SocialPostId + '_' + SocialPostsWithLikesArr[i].hexcode_blendedImage +
                   "_LikeActivityArr"
               ] = [`${SocialPostsWithLikesArr[i].UserId.Name.split(" ")[0]}`];
             }
@@ -16688,12 +17053,8 @@ var userStreamsPostsWithActivities = async function (req, res) {
 		*/
   } else {
     var loginUserId = req.session.user._id;
-    var Members = req.body.Members ? req.body.Members : [];
-    var memberIds = [];
-    for (var i = 0; i < Members.length; i++) {
-      memberIds.push(ObjectId(Members[i]));
-    }
-
+    
+    // 🎯 Get user info
     var UserArr = await User.find({
       Email: UserEmail,
       IsDeleted: 0,
@@ -16703,46 +17064,82 @@ var userStreamsPostsWithActivities = async function (req, res) {
     if (!UserArr.length) {
       return res.json({
         code: "404",
-        message: "No stream found.",
+        message: "User not found.",
         results: [],
       });
     }
     var UserId = UserArr[0]._id;
-    console.log("UserId ==== ", UserId);
-    if (!StreamIds) {
-      return res.json({
-        code: "404",
-        message: "No stream found.",
-        results: [],
+    
+    // AUTO-FETCH StreamIds if not provided
+    if (!StreamIds || !StreamIds.length) {
+      const CapsuleIdsArr = await Capsule.find({
+        OwnerId: String(UserId),
+        IsDeleted: 0,
+        Status: true,
+        Origin: "published"  // Only purchased/published streams
+      }, { _id: 1 }).lean();
+      
+      StreamIds = CapsuleIdsArr.map(c => c._id);
+      
+      if (!StreamIds.length) {
+        return res.json({
+          code: "404",
+          message: "No streams found for user.",
+          results: [],
+        });
+      }
+    } else {
+      // Convert string IDs to ObjectIds
+      for (var i = 0; i < StreamIds.length; i++) {
+        StreamIds[i] = new ObjectId(StreamIds[i]);
+      }
+    }
+    
+    // AUTO-FETCH Members if not provided
+    var Members = req.body.Members ? req.body.Members : [];
+    var memberIds = [];
+    
+    if (!Members.length) {
+      const streamMembersArr = await StreamMembers.find({
+        StreamId: { $in: StreamIds },
+        IsDeleted: false,
+        Status: true
+      }).lean();
+      
+      // Collect all unique members from all streams
+      const uniqueMembers = new Set();
+      streamMembersArr.forEach(sm => {
+        if (sm.Members && Array.isArray(sm.Members)) {
+          sm.Members.forEach(memberId => uniqueMembers.add(memberId.toString()));
+        }
       });
+      
+      memberIds = Array.from(uniqueMembers).map(id => new ObjectId(id));
+    } else {
+      for (var i = 0; i < Members.length; i++) {
+        memberIds.push(new ObjectId(Members[i]));
+      }
     }
-    for (var i = 0; i < StreamIds.length; i++) {
-      StreamIds[i] = ObjectId(StreamIds[i]);
-    }
-    /*
-		var CapsuleIdsArr = await Capsule.find({_id : {$in : StreamIds}, IsDeleted : 0, OwnerId : String(UserId)}, {_id : 1}).lean();
-		var CapsuleIds = [];
-		CapsuleIdsArr = Array.isArray(CapsuleIdsArr) ? CapsuleIdsArr : [];
-		for (var i = 0; i < CapsuleIdsArr.length; i++) {
-			CapsuleIds.push(CapsuleIdsArr[i]);
-		}
-		*/
+    
     var conditions = {
       CapsuleId: { $in: StreamIds },
       SyncedBy: new ObjectId(UserId),
       IsDeleted: false,
       Status: true,
-      "EmailEngineDataSets.Delivered": false,
+      // "EmailEngineDataSets.Delivered": false, // Temporarily removed filter
     };
 
     var todayEnd = new Date();
     todayEnd.setHours(23, 59, 59, 999);
-
-    conditions["EmailEngineDataSets.DateOfDelivery"] = { $lte: todayEnd };
+    
+    // Date filter removed - show all posts regardless of delivery date
+    // conditions["EmailEngineDataSets.DateOfDelivery"] = { $lte: todayEnd };
+    
     //allocate table to each one-to-one meeting for normal table case
-    SyncedPost.aggregate([
-      { $match: conditions },
-      { $unwind: "$EmailEngineDataSets" },
+    try {
+      const syncedPostsResults = await SyncedPost.aggregate([
+        { $match: conditions },
+        { $unwind: "$EmailEngineDataSets" },
       {
         $project: {
           _id: "$_id",
@@ -16767,7 +17164,8 @@ var userStreamsPostsWithActivities = async function (req, res) {
           hexcode_blendedImage: "$EmailEngineDataSets.hexcode_blendedImage",
         },
       },
-      { $match: { DateOfDelivery: { $lte: todayEnd }, Delivered: false } },
+      // Date filter removed - show all posts
+      // { $match: { DateOfDelivery: { $lte: todayEnd } } },
       {
         $lookup: {
           from: "users",
@@ -16793,7 +17191,7 @@ var userStreamsPostsWithActivities = async function (req, res) {
         },
       },
       {
-        $unwind: "$PageData",
+        $unwind: { path: "$PageData", preserveNullAndEmptyArrays: true },
       },
       {
         $project: {
@@ -16823,18 +17221,9 @@ var userStreamsPostsWithActivities = async function (req, res) {
           "CapsuleData.MetaData": 1,
           SocialPageId: "$PageData.OriginatedFrom",
           hexcode_blendedImage: 1,
-          PostObj: {
-            $filter: {
-              input: "$PageData.Medias",
-              as: "field",
-              cond: {
-                $eq: ["$$field._id", "$PostId"],
-              },
-            },
-          },
+          // PostInMediaArray check removed - we'll use PostId directly as SocialPostId
         },
       },
-      { $unwind: "$PostObj" },
       {
         $project: {
           _id: 1,
@@ -16857,7 +17246,7 @@ var userStreamsPostsWithActivities = async function (req, res) {
           IsOnetimeStream: 1,
           IsOnlyPostImage: 1,
           SocialPageId: 1,
-          SocialPostId: "$PostObj.OriginatedFrom",
+          SocialPostId: "$PostId", // Since Medias is an array of IDs, use PostId directly
           "SharedByUser._id": 1,
           "SharedByUser.Name": 1,
           "SharedByUser.Email": 1,
@@ -16970,22 +17359,113 @@ var userStreamsPostsWithActivities = async function (req, res) {
       //{ $match : { LastCommentObj : {$exists: true} } },
       { $sort: { "LastCommentObj._id": -1 } },
       //{ $sort : {CapsuleId : 1, DateOfDelivery : -1} }
-    ])
-      .allowDiskUse(true)
-      .exec(async function (err, syncedPostsResults) {
-        //console.log("@@@@@@@@@@@@@@@@@@@@@@@@@@@2------------------------syncedPostsResults.length = ", syncedPostsResults.length);
-        if (!err) {
-          var streamPosts = [];
-          try {
-            var allPosts = [];
-            //var SocialPostsWithCommentsArr = [];
-            for (let loop = 0; loop < syncedPostsResults.length; loop++) {
-              let dataRecord1 = syncedPostsResults[loop];
-              if (!dataRecord1.SocialPageId || !dataRecord1.SocialPostId) {
-                console.log("----- WHY THIS HAPPEND -----");
-                continue;
-              }
-              allPosts.push(ObjectId(dataRecord1.SocialPostId));
+      ])
+        .allowDiskUse(true);
+      
+      // Debug: Check counts at different stages
+      const afterMatch = await SyncedPost.countDocuments(conditions);
+      console.log("📊 After initial $match:", afterMatch, "documents");
+      console.log("📊 Aggregation returned:", syncedPostsResults.length, "posts");
+      
+      if (syncedPostsResults.length === 0) {
+        console.log("⚠️ No SyncedPosts found matching conditions");
+        
+        // Debug: Check if any SyncedPosts exist at all for this user
+        const totalUserPosts = await SyncedPost.countDocuments({
+          SyncedBy: new ObjectId(UserId),
+          IsDeleted: false,
+          Status: true
+        });
+        
+        const deliveredPosts = await SyncedPost.countDocuments({
+          SyncedBy: new ObjectId(UserId),
+          IsDeleted: false,
+          Status: true,
+          "EmailEngineDataSets.Delivered": true
+        });
+        
+        // Debug: Check DateOfDelivery values
+        const samplePost = await SyncedPost.findOne({
+          SyncedBy: new ObjectId(UserId),
+          IsDeleted: false,
+          Status: true,
+          "EmailEngineDataSets.Delivered": false
+        }).lean();
+        
+        const postsInTheseStreams = await SyncedPost.countDocuments({
+          CapsuleId: { $in: StreamIds },
+          SyncedBy: new ObjectId(UserId),
+          IsDeleted: false,
+          Status: true
+        });
+        
+        console.log("🔍 Debug Info:");
+        console.log(`   - User has ${totalUserPosts} total SyncedPosts`);
+        console.log(`   - ${deliveredPosts} are already delivered`);
+        console.log(`   - ${totalUserPosts - deliveredPosts} are undelivered`);
+        console.log(`   - Searching in ${StreamIds.length} streams`);
+        console.log(`   - ${postsInTheseStreams} posts in these specific streams`);
+        console.log(`   - DateOfDelivery filter: REMOVED (showing all posts)`);
+        
+        if (samplePost && samplePost.EmailEngineDataSets && samplePost.EmailEngineDataSets.length > 0) {
+          console.log(`   - Sample post DateOfDelivery: ${samplePost.EmailEngineDataSets[0].DateOfDelivery}`);
+          console.log(`   - Sample post Delivered: ${samplePost.EmailEngineDataSets[0].Delivered}`);
+          console.log(`   - Sample post CapsuleId: ${samplePost.CapsuleId}`);
+        }
+        
+        return res.json({
+          code: "200",
+          message: "No posts found for the specified criteria.",
+          results: [],
+          debug: {
+            userId: UserId.toString(),
+            totalUserPosts: totalUserPosts,
+            deliveredPosts: deliveredPosts,
+            undeliveredPosts: totalUserPosts - deliveredPosts,
+            streamCount: StreamIds.length,
+            streamIds: StreamIds.map(id => id.toString())
+          }
+        });
+      }
+      
+      var streamPosts = [];
+      var allPosts = [];
+      var postsWithoutSocialId = 0;
+      
+      console.log(`📝 Processing ${syncedPostsResults.length} posts from aggregation...`);
+      let validPostsCount = 0;
+      
+      for (let loop = 0; loop < syncedPostsResults.length; loop++) {
+        let dataRecord1 = syncedPostsResults[loop];
+        
+        // Debug first post
+        if (loop === 0) {
+          console.log("🔍 First post sample:", {
+            PostId: dataRecord1.PostId,
+            PageId: dataRecord1.PageId,
+            SocialPageId: dataRecord1.SocialPageId,
+            SocialPostId: dataRecord1.SocialPostId,
+            CapsuleId: dataRecord1.CapsuleId
+          });
+        }
+        
+        if (!dataRecord1.SocialPageId || !dataRecord1.SocialPostId) {
+          // Debug: Log why it's missing
+          console.log("⚠️ Post missing SocialPageId or SocialPostId - skipping");
+          console.log(`   - PostId: ${dataRecord1.PostId}`);
+          console.log(`   - PageId: ${dataRecord1.PageId}`);
+          console.log(`   - SocialPageId: ${dataRecord1.SocialPageId}`);
+          console.log(`   - SocialPostId: ${dataRecord1.SocialPostId}`);
+          console.log(`   - PostObj exists: ${dataRecord1.PostObj ? 'yes' : 'no'}`);
+          if (dataRecord1.PostObj) {
+            console.log(`   - PostObj.OriginatedFrom: ${dataRecord1.PostObj.OriginatedFrom}`);
+          }
+          postsWithoutSocialId++;
+          continue;
+        }
+        
+        allPosts.push(new ObjectId(dataRecord1.SocialPostId));
+        validPostsCount++;
               /*
 						dataRecord1.SocialPostsWithCommentsArr = dataRecord1.SocialPostsWithCommentsArr ? dataRecord1.SocialPostsWithCommentsArr : [];
 						//console.log("dataRecord1.SocialPostsWithCommentsArr ----- ", dataRecord1.SocialPostsWithCommentsArr);
@@ -16998,6 +17478,10 @@ var userStreamsPostsWithActivities = async function (req, res) {
 						}
 						*/
             }
+      
+      console.log(`✅ ${validPostsCount} posts passed SocialPageId/SocialPostId check`);
+      console.log(`📋 Collecting activity data for ${allPosts.length} posts...`);
+      
             //console.log("SocialPostsWithCommentsArr = ", SocialPostsWithCommentsArr);
 
             var activityMapObj = {};
@@ -17005,7 +17489,7 @@ var userStreamsPostsWithActivities = async function (req, res) {
             //1) comments
             var conditions = {
               ParentId: { $exists: false },
-              SocialPostId: { $in: allPosts },
+              SocialPostId: { $in: allPosts.map(id => id.toString()) }, // Convert ObjectIds to strings for query
               UserId: UserId,
               IsDeleted: false,
               $or: [
@@ -17019,6 +17503,7 @@ var userStreamsPostsWithActivities = async function (req, res) {
               ],
             };
 
+            console.log(`🔍 Querying comments with ${allPosts.length} PostIds...`);
             var SocialPostsWithCommentsArr = await StreamComments.find(
               conditions
             )
@@ -17030,6 +17515,7 @@ var userStreamsPostsWithActivities = async function (req, res) {
             )
               ? SocialPostsWithCommentsArr
               : [];
+            console.log(`💬 Found ${SocialPostsWithCommentsArr.length} comments`);
 
             for (var i = 0; i < SocialPostsWithCommentsArr.length; i++) {
               //SocialPostsWithCommentsArr[i].UserId = SocialPostsWithCommentsArr[i].UserId.length > 0 ? SocialPostsWithCommentsArr[i].UserId[0] : {};
@@ -17093,18 +17579,19 @@ var userStreamsPostsWithActivities = async function (req, res) {
             //console.log("activityMapObj - ", activityMapObj);
             //2) PostLike
             var conditions = {
-              SocialPostId: { $in: allPosts },
+              SocialPostId: { $in: allPosts.map(id => id.toString()) }, // Convert ObjectIds to strings
               UserId: UserId,
               IsDeleted: false,
             };
 
+            console.log(`❤️ Querying likes with ${allPosts.length} PostIds...`);
             var SocialPostsWithLikesArr = await StreamLikes.find(conditions)
               .populate("UserId", "_id Name Email ProfilePic")
               .lean();
             SocialPostsWithLikesArr = Array.isArray(SocialPostsWithLikesArr)
               ? SocialPostsWithLikesArr
               : [];
-            //console.log("SocialPostsWithLikesArr = ", SocialPostsWithLikesArr.length);
+            console.log(`👍 Found ${SocialPostsWithLikesArr.length} likes`);
 
             for (var i = 0; i < SocialPostsWithLikesArr.length; i++) {
               var ActivityText = `${
@@ -17176,9 +17663,15 @@ var userStreamsPostsWithActivities = async function (req, res) {
               }
             }
 
+            console.log(`📊 Activity mapping complete. Processing ${syncedPostsResults.length} posts...`);
             //console.log("activityMapObj = ", activityMapObj);
             //allocate table and update meeting record
+            let postsProcessed = 0;
             for (let loop = 0; loop < syncedPostsResults.length; loop++) {
+              postsProcessed++;
+              if (loop === 0) {
+                console.log(`🔍 Processing first post (loop ${loop})...`);
+              }
               //console.log("loop = ", loop);
               var dataRecord = syncedPostsResults[loop];
               //console.log("dataRecord = ", dataRecord);
@@ -17196,7 +17689,8 @@ var userStreamsPostsWithActivities = async function (req, res) {
                 continue;
               }
 
-        dataRecord.hexcode_blendedImage = null;
+        // Keep hexcode_blendedImage from aggregation - don't reset it
+        // It will be regenerated below if missing
 
         dataRecord.VisualUrls = dataRecord.VisualUrls
                 ? dataRecord.VisualUrls
@@ -17254,15 +17748,19 @@ var userStreamsPostsWithActivities = async function (req, res) {
               var PostImage1 = "";
               var PostImage2 = "";
 
-              if (dataRecord.VisualUrls.length == 1) {
+              if (dataRecord.VisualUrls && dataRecord.VisualUrls.length == 1) {
                 PostImage1 = dataRecord.VisualUrls[0];
                 PostImage2 = dataRecord.VisualUrls[0];
               }
 
-              if (dataRecord.VisualUrls.length == 2) {
+              if (dataRecord.VisualUrls && dataRecord.VisualUrls.length >= 2) {
                 PostImage1 = dataRecord.VisualUrls[0];
                 PostImage2 = dataRecord.VisualUrls[1];
               }
+              
+              // Use hexcode from aggregation if it exists, otherwise regenerate
+              var blendedImage = dataRecord.hexcode_blendedImage || null;
+              
 
               var PostStatement = dataRecord.PostStatement
                 ? dataRecord.PostStatement
@@ -17277,11 +17775,12 @@ var userStreamsPostsWithActivities = async function (req, res) {
                 condition.name = "Surprise__Post_2Image";
               }
 
+              // Only regenerate hexcode if not already set from aggregation
+              if (!blendedImage) {
               //check if blended image exists
               var blendImage1 = PostImage1;
               var blendImage2 = PostImage2;
               var blendOption = dataRecord.BlendMode;
-              var blendedImage = null;
 
               if (blendImage1 && blendImage2 && blendOption) {
                 var data = blendImage1 + blendImage2 + blendOption;
@@ -17314,63 +17813,25 @@ var userStreamsPostsWithActivities = async function (req, res) {
                     ? "Surprise__Post_2Image_OUTLOOK"
                     : "Surprise__Post_OUTLOOK";
               }
-        dataRecord.hexcode_blendedImage = blendedImage;
+              }
+        dataRecord.hexcode_blendedImage = blendedImage || null;
 
-              if (
-                activityMapObj[
-            dataRecord.SocialPostId +
-                    "_" +
-              dataRecord.hexcode_blendedImage
-                ]
-              ) {
+              // Match scrpt: use direct concatenation (null becomes "null" string)
+              var activityKey = dataRecord.SocialPostId + '_' + dataRecord.hexcode_blendedImage;
+              var likeActivityArrKey = dataRecord.SocialPostId + '_' + dataRecord.hexcode_blendedImage + '_LikeActivityArr';
+              var commentActivityArrKey = dataRecord.SocialPostId + '_' + dataRecord.hexcode_blendedImage + '_CommentActivityArr';
+
+              if (activityMapObj[activityKey]) {
                 //console.log("INSIDE --------------");
-                //dataRecord.ActivityText = activityMapObj[dataRecord.SocialPostId+'_'+dataRecord.hexcode_blendedImage].ActivityText;
-          dataRecord.ActivityTime =
-                  activityMapObj[
-              dataRecord.SocialPostId +
-                      "_" +
-                dataRecord.hexcode_blendedImage
-                  ].ActivityTime;
-          dataRecord.MyComments = activityMapObj[
-            dataRecord.SocialPostId +
-                    "_" +
-              dataRecord.hexcode_blendedImage
-                ].MyComments
-                  ? activityMapObj[
-                dataRecord.SocialPostId +
-                        "_" +
-                  dataRecord.hexcode_blendedImage
-                    ].MyComments
-                  : [];
+                //dataRecord.ActivityText = activityMapObj[activityKey].ActivityText;
+          dataRecord.ActivityTime = activityMapObj[activityKey].ActivityTime;
+          dataRecord.MyComments = activityMapObj[activityKey].MyComments || [];
 
           dataRecord.ActivityObj = {
-                  LikeActivityArr: activityMapObj[
-              dataRecord.SocialPostId +
-                      "_" +
-                dataRecord.hexcode_blendedImage +
-                      "_LikeActivityArr"
-                  ]
-                    ? activityMapObj[
-                  dataRecord.SocialPostId +
-                          "_" +
-                    dataRecord.hexcode_blendedImage +
-                          "_LikeActivityArr"
-                      ]
-                    : [],
-                  CommentActivityArr: activityMapObj[
-              dataRecord.SocialPostId +
-                      "_" +
-                dataRecord.hexcode_blendedImage +
-                      "_CommentActivityArr"
-                  ]
-                    ? activityMapObj[
-                  dataRecord.SocialPostId +
-                          "_" +
-                    dataRecord.hexcode_blendedImage +
-                          "_CommentActivityArr"
-                      ]
-                    : [],
+                  LikeActivityArr: activityMapObj[likeActivityArrKey] || [],
+                  CommentActivityArr: activityMapObj[commentActivityArrKey] || [],
                 };
+
 
           dataRecord.ActivityObj.CommentActivityArr = dataRecord
                   .ActivityObj.CommentActivityArr
@@ -17467,8 +17928,16 @@ var userStreamsPostsWithActivities = async function (req, res) {
 
               streamPosts.push(dataRecord);
             }
-            //console.log("streamPosts.length ===== ", streamPosts.length);
+            
+            console.log(`✅ Processed ${postsProcessed} posts, ${streamPosts.length} added to streamPosts`);
+            
             var finalArr = [];
+            var noBlendedImage = 0;
+            var noActivity = 0;
+            var postsWithoutSocialId = 0;
+            
+            console.log(`🔍 Final filtering: ${streamPosts.length} posts to process`);
+            
             for (var i = 0; i < streamPosts.length; i++) {
               streamPosts[i].ActivityText = streamPosts[i].ActivityText
                 ? streamPosts[i].ActivityText
@@ -17477,7 +17946,12 @@ var userStreamsPostsWithActivities = async function (req, res) {
                 .hexcode_blendedImage
                 ? streamPosts[i].hexcode_blendedImage
                 : null;
+              
               if (!streamPosts[i].hexcode_blendedImage) {
+                noBlendedImage++;
+                if (i === 0) {
+                  console.log(`⚠️ First post missing hexcode_blendedImage`);
+                }
                 continue;
               }
 
@@ -17490,31 +17964,27 @@ var userStreamsPostsWithActivities = async function (req, res) {
                 ) < 0
               ) {
                 finalArr.push(streamPosts[i]);
+              } else if (!streamPosts[i].ActivityText) {
+                noActivity++;
               }
             }
-            return res.json({
-              code: "200",
-              message: "success",
-              results: finalArr,
-            });
-          } catch (caughtError) {
-            console.log("caughtError = ", caughtError);
-            return res.json({
-              code: "501",
-              message: "Something went wrong.",
-              caughtError: caughtError,
-              results: [],
-            });
-          }
-        } else {
-          return res.json({
-            code: "501",
-            message: "Something went wrong.",
-            results: [],
-            err: err,
-          });
-        }
+            
+            console.log(`📊 Final stats: ${finalArr.length} in results, ${noBlendedImage} missing image, ${noActivity} no activity`);
+            
+      return res.json({
+        code: "200",
+        message: "success",
+        results: finalArr,
       });
+    } catch (error) {
+      console.log("Error in userStreamsPostsWithActivities:", error);
+      return res.json({
+        code: "501",
+        message: "Something went wrong.",
+        error: error.message,
+        results: [],
+      });
+    }
   }
 };
 
@@ -17566,13 +18036,17 @@ var addCommentOnComment = async function (req, res) {
   }
   
   for (var i = 0; i < Members.length; i++) {
-    memberIds.push(ObjectId(Members[i]));
+    memberIds.push(new ObjectId(Members[i]));
   }
 
   if (!id) {
-    StreamComments(dataToSave).save(async function (err, results) {
+    try {
+      // Save reply using async/await
+      const savedReply = await StreamComments(dataToSave).save();
+      
+      // Fetch updated comments list
       var conditions = {
-        SocialPageId: ObjectId(dataToSave.SocialPageId),
+        SocialPageId: new ObjectId(dataToSave.SocialPageId),
         ParentId: { $exists: true },
         //SocialPostId: ObjectId(dataToSave.SocialPostId),
         IsDeleted: 0,
@@ -17588,65 +18062,65 @@ var addCommentOnComment = async function (req, res) {
         .populate("UserId", "_id Name Email ProfilePic");
       comments = Array.isArray(comments) ? comments : [];
 
-      if (!err) {
-        return res.json({
-          status: "success",
-          message: "comment saved successfully.",
-          results: comments,
-        });
-      }
-
       return res.json({
-        status: "failed",
-        message: "Failed.",
+        status: "success",
+        message: "Reply added successfully.",
         results: comments,
       });
-    });
+    } catch (err) {
+      console.error('Error saving reply:', err);
+      return res.json({
+        status: "failed",
+        message: "Failed to save reply.",
+        error: err.message,
+        results: [],
+      });
+    }
   } else {
-    var conditions = {
-      _id: new ObjectId(id),
-      UserId: req.session.user._id,
-    };
+    try {
+      var conditions = {
+        _id: new ObjectId(id),
+        UserId: req.session.user._id,
+      };
 
-    var dataToUpdate = {
-      Comment: req.body.Comment ? req.body.Comment : null,
-    };
+      var dataToUpdate = {
+        Comment: req.body.Comment ? req.body.Comment : null,
+      };
 
-    StreamComments.update(
-      conditions,
-      { $set: dataToUpdate },
-      async function (err, results) {
-        var conditions = {
-          SocialPageId: ObjectId(dataToSave.SocialPageId),
-          ParentId: { exists: true },
-          IsDeleted: 0,
-          $or: [
-            { PrivacySetting: { $exists: false } },
-            { PrivacySetting: "PublicWithName" },
-            { PrivacySetting: "OnlyForOwner", UserId: loginUserId },
-            { PrivacySetting: "InvitedFriends", UserId: { $in: memberIds } },
-          ],
-        };
-        var comments = await StreamComments.find(conditions)
-          .sort({ CreatedOn: -1 })
-          .populate("UserId", "_id Name Email ProfilePic");
-        comments = Array.isArray(comments) ? comments : [];
+      // Update reply using async/await
+      await StreamComments.updateOne(conditions, { $set: dataToUpdate });
+      
+      // Fetch updated comments list
+      var fetchConditions = {
+        SocialPageId: new ObjectId(dataToSave.SocialPageId),
+        ParentId: { $exists: true },
+        IsDeleted: 0,
+        $or: [
+          { PrivacySetting: { $exists: false } },
+          { PrivacySetting: "PublicWithName" },
+          { PrivacySetting: "OnlyForOwner", UserId: loginUserId },
+          { PrivacySetting: "InvitedFriends", UserId: { $in: memberIds } },
+        ],
+      };
+      var comments = await StreamComments.find(fetchConditions)
+        .sort({ CreatedOn: -1 })
+        .populate("UserId", "_id Name Email ProfilePic");
+      comments = Array.isArray(comments) ? comments : [];
 
-        if (!err) {
-          return res.json({
-            status: "success",
-            message: "comment saved successfully.",
-            results: comments,
-          });
-        }
-
-        return res.json({
-          status: "failed",
-          message: "Failed.",
-          results: comments,
-        });
-      }
-    );
+      return res.json({
+        status: "success",
+        message: "Reply updated successfully.",
+        results: comments,
+      });
+    } catch (err) {
+      console.error('Error updating reply:', err);
+      return res.json({
+        status: "failed",
+        message: "Failed to update reply.",
+        error: err.message,
+        results: [],
+      });
+    }
   }
 };
 
@@ -18687,11 +19161,37 @@ var getUserStats = async function (req, res) {
   });
 };
 
-async function sendMembersInvitationEmail(users, OwnerDetails, StreamId) {
+async function sendMembersInvitationEmail(users, OwnerDetails, StreamId, OwnerId, req = null) {
   users = Array.isArray(users) ? users : [];
   if (!users.length) {
     return;
   }
+
+  // Get base URL from request headers or environment
+  // Frontend runs on port 3000, backend on port 3002
+  var getBaseUrl = function() {
+    // In local dev, always use frontend port 3000
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+      return 'http://localhost:3000';
+    }
+    
+    if (req && req.headers && req.headers.host) {
+      var protocol = req.protocol || (req.headers['x-forwarded-proto'] || 'http');
+      var host = req.headers.host;
+      
+      // If backend port is detected, change to frontend port
+      if (host.includes('localhost:3002') || host.includes('127.0.0.1:3002')) {
+        return protocol + '://localhost:3000';
+      }
+      
+      // For production, use the host as-is (frontend and backend on same domain)
+      return (protocol === 'https' ? 'https' : 'http') + '://' + host;
+    }
+    
+    // Production fallback
+    return process.env.APP_BASE_URL || process.env.HOST_URL || process.env.FRONTEND_URL || 'https://www.scrpt.com';
+  };
+  var baseUrl = getBaseUrl();
 
   var conditionStrm = {};
   conditionStrm._id = new ObjectId(StreamId);
@@ -18766,27 +19266,55 @@ async function sendMembersInvitationEmail(users, OwnerDetails, StreamId) {
     var memberObj = await User.findOne(mCond);
     memberObj = typeof memberObj == "object" ? memberObj : {};
 
+    // Check if user is already a member of this stream
+    var isMember = false;
+    if (memberObj && memberObj._id) {
+      var streamMembersCheck = await StreamMembers.findOne({
+        StreamId: StreamId,
+        OwnerId: OwnerId,
+        IsDeleted: false,
+        Members: { $in: [new ObjectId(memberObj._id)] }
+      });
+      isMember = streamMembersCheck != null;
+    }
+    
     var _cId = memberObj.AllFoldersId ? memberObj.AllFoldersId : "";
     var _pId = memberObj.AllPagesId ? memberObj.AllPagesId : "";
-    var userStreamPageUrl =
-      "https://www.scrpt.com/streams/" +
-      _cId +
-      "/" +
-      _pId +
-      "?stream=" +
-      StreamId;
-    //var userStreamPageUrl = "https://www.scrpt.com/login";
+    var userStreamPageUrl;
+    
+    // Encode owner's email and name for URL parameters
+    var ownerEmail = encodeURIComponent(OwnerDetails.Email || "");
+    var ownerName = encodeURIComponent(OwnerDetails.Name || "");
+    
+    // Always redirect to activities page with inviter's info
+    var activitiesUrl = baseUrl + "/activities?friendEmail=" + ownerEmail + "&friendName=" + ownerName;
+    
+    // If user is already a member, send them directly to activities page
+    // If not a member, send them to login page with redirect to activities
+    if (isMember) {
+      userStreamPageUrl = activitiesUrl;
+    } else {
+      // User needs to login first, then redirect to activities
+      userStreamPageUrl = baseUrl + "/auth/login?redirect=" + encodeURIComponent(activitiesUrl);
+    }
 
     var newHtml = results[0].description.replace(/{Password}/g, body.Password);
     newHtml = newHtml.replace(/{RecipientName}/g, body.Name.split(" ")[0]);
     newHtml = newHtml.replace(/{RecipientEmail}/g, body.Email);
 
+    // Handle LaunchDate - use current date if not available or invalid
     var LaunchDateObj = new Date();
-    if (StreamFlow == "Birthday") {
-      //LaunchDateObj = new Date(OwnerDetails.Birthdate);
-      LaunchDateObj = new Date(LaunchDate);
-    } else {
-      LaunchDateObj = new Date(LaunchDate);
+    if (LaunchDate) {
+      var parsedDate = new Date(LaunchDate);
+      // Only use parsed date if it's valid
+      if (!isNaN(parsedDate.getTime())) {
+        LaunchDateObj = parsedDate;
+      }
+    }
+    
+    // Fallback to current date if LaunchDate is invalid
+    if (isNaN(LaunchDateObj.getTime())) {
+      LaunchDateObj = new Date();
     }
 
     var Months = [
@@ -18797,20 +19325,21 @@ async function sendMembersInvitationEmail(users, OwnerDetails, StreamId) {
       "May",
       "June",
       "July",
+      "August",
       "Sep",
       "Oct",
       "Nov",
       "Dec",
     ];
+    
+    // Format date safely
+    var day = LaunchDateObj.getDate();
+    var monthIndex = LaunchDateObj.getMonth(); // getMonth() returns 0-11, so no need to subtract 1
+    var year = LaunchDateObj.getFullYear();
+    var formattedDate = day + " " + Months[monthIndex] + " " + year;
+    
     newHtml = newHtml.replace(/{OwnerName}/g, OwnerDetails.Name.split(" ")[0]);
-    newHtml = newHtml.replace(
-      /{LaunchDate}/g,
-      LaunchDateObj.getDate() +
-        " " +
-        Months[LaunchDateObj.getMonth() - 1] +
-        " " +
-        LaunchDateObj.getFullYear()
-    );
+    newHtml = newHtml.replace(/{LaunchDate}/g, formattedDate);
 
     newHtml = newHtml.replace(/{StreamPageUrl}/g, userStreamPageUrl);
     newHtml = newHtml.replace(/{CapsuleName}/g, CapsuleName);
@@ -18818,14 +19347,7 @@ async function sendMembersInvitationEmail(users, OwnerDetails, StreamId) {
       /{OwnerName}/g,
       OwnerDetails.Name.split(" ")[0]
     );
-    MemberSharingStatements = MemberSharingStatements.replace(
-      /{LaunchDate}/g,
-      LaunchDateObj.getDate() +
-        " " +
-        Months[LaunchDateObj.getMonth() - 1] +
-        " " +
-        LaunchDateObj.getFullYear()
-    );
+    MemberSharingStatements = MemberSharingStatements.replace(/{LaunchDate}/g, formattedDate);
     newHtml = newHtml.replace(
       /{MemberSharingStatements}/g,
       MemberSharingStatements
@@ -18885,9 +19407,35 @@ async function sendMembersInvitationEmail(users, OwnerDetails, StreamId) {
   }
 }
 
-async function createMembersUserAccount(newUsers, OwnerDetails, StreamId) {
+async function createMembersUserAccount(newUsers, OwnerDetails, StreamId, req = null) {
   console.log('🚀 createMembersUserAccount STARTED');
   console.log('📊 Input:', { newUsersCount: newUsers.length, OwnerDetails: OwnerDetails?.Name, StreamId });
+  
+  // Get base URL from request headers or environment
+  // Frontend runs on port 3000, backend on port 3002
+  var getBaseUrl = function() {
+    // In local dev, always use frontend port 3000
+    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
+      return 'http://localhost:3000';
+    }
+    
+    if (req && req.headers && req.headers.host) {
+      var protocol = req.protocol || (req.headers['x-forwarded-proto'] || 'http');
+      var host = req.headers.host;
+      
+      // If backend port is detected, change to frontend port
+      if (host.includes('localhost:3002') || host.includes('127.0.0.1:3002')) {
+        return protocol + '://localhost:3000';
+      }
+      
+      // For production, use the host as-is (frontend and backend on same domain)
+      return (protocol === 'https' ? 'https' : 'http') + '://' + host;
+    }
+    
+    // Production fallback
+    return process.env.APP_BASE_URL || process.env.HOST_URL || process.env.FRONTEND_URL || 'https://www.scrpt.com';
+  };
+  var baseUrl = getBaseUrl();
   
   var newUserAccountEmailIdMap = {};
   newUsers = Array.isArray(newUsers) ? newUsers : [];
@@ -18996,12 +19544,47 @@ async function createMembersUserAccount(newUsers, OwnerDetails, StreamId) {
     
     if (result.length == 0) {
       console.log('🆕 Creating new user:', body.Email);
+      
+      // Generate unique random username
+      var generateUniqueUsername = async function() {
+        var adjectives = ['Cool', 'Swift', 'Bright', 'Lucky', 'Bold', 'Smart', 'Wild', 'Calm', 'Sharp', 'Kind', 'Brave', 'Wise', 'Quick', 'Free', 'Happy'];
+        var nouns = ['Tiger', 'Eagle', 'Lion', 'Wolf', 'Fox', 'Bear', 'Hawk', 'Falcon', 'Dragon', 'Phoenix', 'Panther', 'Jaguar', 'Falcon', 'Raven', 'Shark'];
+        var maxAttempts = 10;
+        var attempt = 0;
+        
+        while (attempt < maxAttempts) {
+          var adj = adjectives[Math.floor(Math.random() * adjectives.length)];
+          var noun = nouns[Math.floor(Math.random() * nouns.length)];
+          var number = Math.floor(Math.random() * 9999);
+          var username = adj + noun + number;
+          
+          // Check if username is available
+          var existingUser = await User.findOne({
+            UserName: { $regex: new RegExp("^" + username + "$", "i") },
+            IsDeleted: false
+          });
+          
+          if (!existingUser) {
+            return username;
+          }
+          
+          attempt++;
+        }
+        
+        // Fallback: use email prefix + random number
+        var emailPrefix = body.Email.split('@')[0];
+        return emailPrefix + Math.floor(Math.random() * 999999);
+      };
+      
+      var uniqueUsername = await generateUniqueUsername();
+      console.log('🎲 Generated username:', uniqueUsername);
+      
       var newUser = new User();
       newUser.Email = body.Email;
       newUser.Password = newUser.generateHash(body.Password);
       newUser.Name = body.Name;
       newUser.NickName = body.Name ? body.Name : "";
-      newUser.UserName = body.Email; // Use email as unique username
+      newUser.UserName = uniqueUsername; // Use auto-generated unique username
       newUser.EmailConfirmationStatus = true;
 
       console.log('💾 Saving new user to database...');
@@ -19024,8 +19607,18 @@ async function createMembersUserAccount(newUsers, OwnerDetails, StreamId) {
       }
       
       // Create friendships AFTER user is created and saved
+      // Pass the newly created user object to ensure reverse friendship is created
       console.log('🤝 Creating friendships after user creation...');
-      saveAsFriend(OwnerDetails, body);
+      var newUserData = {
+        Email: body.Email,
+        Name: body.Name,
+        _id: numAffected._id,
+        ProfilePic: numAffected.ProfilePic || null,
+        NickName: numAffected.NickName || body.Name,
+        Relation: body.Relation || null,
+        RelationshipId: body.RelationshipId || null
+      };
+      await saveAsFriend(OwnerDetails, body, newUserData);
 
       __createDefaultJournal_BackgroundCall(numAffected._id, numAffected.Email);
 
@@ -19034,10 +19627,25 @@ async function createMembersUserAccount(newUsers, OwnerDetails, StreamId) {
     } else {
       // User already exists, create friendship immediately
       console.log('🤝 Creating friendships for existing user...');
-      saveAsFriend(OwnerDetails, body);
+      var existingUserData = {
+        Email: result[0].Email,
+        Name: result[0].Name,
+        _id: result[0]._id,
+        ProfilePic: result[0].ProfilePic || null,
+        NickName: result[0].NickName || result[0].Name,
+        Relation: body.Relation || null,
+        RelationshipId: body.RelationshipId || null
+      };
+      await saveAsFriend(OwnerDetails, body, existingUserData);
     }
 
-      var userStreamPageUrl = "https://www.scrpt.com/login";
+      // Encode owner's email and name for URL parameters
+      var ownerEmail = encodeURIComponent(OwnerDetails.Email || "");
+      var ownerName = encodeURIComponent(OwnerDetails.Name || "");
+      
+      // Redirect to activities page with inviter's info after login
+      var activitiesUrl = baseUrl + "/activities?friendEmail=" + ownerEmail + "&friendName=" + ownerName;
+      var userStreamPageUrl = baseUrl + "/auth/login?redirect=" + encodeURIComponent(activitiesUrl);
       var newHtml = results[0].description.replace(
         /{Password}/g,
         body.Password
@@ -19348,6 +19956,7 @@ var stream__addMembers = async function (req, res) {
   var creatorEmails = [];
   var alreadyMemberEmails = [];
   var validMembers = [];
+  var skippedEmails = []; // Track actually skipped emails during validation
   
   // Get owner and creator emails for comparison
   var ownerUser = await User.findOne(
@@ -19365,7 +19974,7 @@ var stream__addMembers = async function (req, res) {
     console.log('👑 Stream owner:', { Email: ownerUser.Email, Name: ownerUser.Name });
   }
   
-  if (creatorUser && creatorUser._id.toString() !== streamDetails.OwnerId.toString()) {
+  if (creatorUser && creatorUser._id && creatorUser._id.toString() !== streamDetails.OwnerId.toString()) {
     creatorEmails.push(creatorUser.Email.toLowerCase());
     console.log('🎨 Stream creator:', { Email: creatorUser.Email, Name: creatorUser.Name });
   }
@@ -19397,18 +20006,33 @@ var stream__addMembers = async function (req, res) {
       // Check if email is the owner
       if (ownerEmails.includes(members[i].Email)) {
         console.log('⚠️ Skipping owner email:', members[i].Email);
+        skippedEmails.push({
+          email: members[i].Email,
+          reason: "owner",
+          message: "Cannot invite the stream owner"
+        });
         continue;
       }
       
       // Check if email is the creator
       if (creatorEmails.includes(members[i].Email)) {
         console.log('⚠️ Skipping creator email:', members[i].Email);
+        skippedEmails.push({
+          email: members[i].Email,
+          reason: "creator",
+          message: "Cannot invite the stream creator"
+        });
         continue;
       }
       
       // Check if email is already a member
       if (alreadyMemberEmails.includes(members[i].Email)) {
         console.log('⚠️ Skipping already member email:', members[i].Email);
+        skippedEmails.push({
+          email: members[i].Email,
+          reason: "already_member",
+          message: "User is already a member of this stream"
+        });
         continue;
       }
       
@@ -19519,15 +20143,33 @@ var stream__addMembers = async function (req, res) {
   console.log('🆕 New users to be created:', newUserAccountNeedsToBeCreated.length);
   console.log('📋 New users data:', newUserAccountNeedsToBeCreated);
   
+  // Initialize arrays before using them
+  var alreadyInvitedUsers = [];
+  var newInviteUsers = [];
+  
   var newUserAccountEmailIdMap = {};
   if (newUserAccountNeedsToBeCreated.length) {
     console.log('🚀 Calling createMembersUserAccount...');
-    newUserAccountEmailIdMap = await createMembersUserAccount(
-      newUserAccountNeedsToBeCreated,
-      OwnerDetails,
-      StreamId
-    ) || {};
+      newUserAccountEmailIdMap = await createMembersUserAccount(
+        newUserAccountNeedsToBeCreated,
+        OwnerDetails,
+        StreamId,
+        req
+      ) || {};
     console.log('✅ createMembersUserAccount returned:', newUserAccountEmailIdMap);
+    
+    // Add newly created users to newInviteUsers and update UserEmailIdMap
+    for (var i = 0; i < newUserAccountNeedsToBeCreated.length; i++) {
+      var newUserEmail = newUserAccountNeedsToBeCreated[i].Email;
+      var newUserId = newUserAccountEmailIdMap[newUserEmail];
+      if (newUserId) {
+        // Add to UserEmailIdMap so they can be found later
+        UserEmailIdMap[newUserEmail] = newUserId;
+        // Add to newInviteUsers since they were just created and invited
+        newInviteUsers.push(newUserEmail);
+        console.log('✅ Added new user to newInviteUsers:', newUserEmail);
+      }
+    }
   } else {
     console.log('ℹ️ No new users need to be created');
   }
@@ -19541,9 +20183,6 @@ var stream__addMembers = async function (req, res) {
   var strm_result = await StreamMembers.find(conditions);
   strm_result = Array.isArray(strm_result) ? strm_result : [];
   strm_result = strm_result.length > 0 ? strm_result[0] : null;
-
-  var alreadyInvitedUsers = [];
-  var newInviteUsers = [];
 
   if (alreadyExistsUsers.length) {
     var sendInvitesToUsers = [];
@@ -19568,9 +20207,12 @@ var stream__addMembers = async function (req, res) {
     }
     
     if (sendInvitesToUsers.length > 0) {
-      await sendMembersInvitationEmail(sendInvitesToUsers, OwnerDetails, StreamId);
+      await sendMembersInvitationEmail(sendInvitesToUsers, OwnerDetails, StreamId, OwnerId, req);
     }
   }
+  
+  // Note: New users already received invitation emails in createMembersUserAccount
+  // No need to send emails again here
 
   //now add member ids in StreamMembers.
   console.log('🔄 Processing members for StreamMembers update...');
@@ -19654,38 +20296,10 @@ var stream__addMembers = async function (req, res) {
   );
   console.log('✅ Capsule updated successfully');
   
-  // Calculate skipped emails with reasons
-  var skippedEmails = [];
+  // Calculate skipped emails - already tracked during validation
   var originalMembersCount = req.body.members ? req.body.members.length : 0;
   var processedMembersCount = members.length;
-  var skippedCount = originalMembersCount - processedMembersCount;
-  
-  // Add owner emails to skipped
-  for (var i = 0; i < ownerEmails.length; i++) {
-    skippedEmails.push({
-      email: ownerEmails[i],
-      reason: "owner",
-      message: "Cannot invite the stream owner"
-    });
-  }
-  
-  // Add creator emails to skipped
-  for (var i = 0; i < creatorEmails.length; i++) {
-    skippedEmails.push({
-      email: creatorEmails[i],
-      reason: "creator", 
-      message: "Cannot invite the stream creator"
-    });
-  }
-  
-  // Add already member emails to skipped
-  for (var i = 0; i < alreadyMemberEmails.length; i++) {
-    skippedEmails.push({
-      email: alreadyMemberEmails[i],
-      reason: "already_member",
-      message: "User is already a member of this stream"
-    });
-  }
+  var skippedCount = skippedEmails.length; // Use the tracked skipped emails count
   
   // Prepare response message with detailed feedback
   var responseMessage = "";
@@ -24561,4 +25175,9 @@ exports.updatePostLaunchVideoSeen = updatePostLaunchVideoSeen;
 exports.getUnsubscribeIdByEmail = getUnsubscribeIdByEmail;
 exports.updateStreamPostWithTransparentImage =
   updateStreamPostWithTransparentImage;
+
+// Post-level likes (StreamLikes collection) - must match scrpt
+exports.addStreamPostLike = addStreamPostLike;
+exports.removeStreamPostLike = removeStreamPostLike;
+exports.getStreamLikes = getStreamLikes;
 

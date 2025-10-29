@@ -8,6 +8,11 @@ module.exports = function(router){
 		user.login(req,res);
 	});
 	
+	// OAuth login/register endpoint (Google, etc.)
+	router.post('/oauth/login',function(req,res){
+		user.oauthLogin(req,res);
+	});
+	
 	router.get('/chklogin', function(req, res){
 		//console.log("m in chklogin...");
 		user.chklogin(req,res);

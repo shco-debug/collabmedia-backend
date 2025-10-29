@@ -42,7 +42,7 @@ var updateMediaCountsPerGt = function () {
 			}
 		},
 		{$unwind : "$GroupTags"},
-		{$group : {_id:{GroupTagId:"$GroupTags.GroupTagID"},MediaCount:{$sum:1}}},
+		{$group : {_id:{GroupTagId:"$GroupTags"},MediaCount:{$sum:1}}},
 		{$sort : {MediaCount : -1}},
 		//{$out : "mediaCountPerGt"}
 	]).allowDiskUse(true).exec(function(err , documents) {
@@ -152,7 +152,7 @@ var updateMediaCountsPerGt_API = function (req , res) {
 			}
 		},
 		{$unwind : "$GroupTags"},
-		{$group : {_id:{GroupTagId:"$GroupTags.GroupTagID"},MediaCount:{$sum:1}}},
+		{$group : {_id:{GroupTagId:"$GroupTags"},MediaCount:{$sum:1}}},
 		{$sort : {MediaCount : -1}},
 		//{$out : "mediaCountPerGt"}
 	]).allowDiskUse(true).exec(function(err , documents) {
@@ -416,8 +416,9 @@ var updateRandomSortIdPerMedia = function () {
 }
 exports.updateRandomSortIdPerMedia = updateRandomSortIdPerMedia;
 
-var updateAlltagsCollection = function (req , res) {
-	GroupTag.aggregate([
+var updateAlltagsCollection = async function () {
+	try {
+		await GroupTag.aggregate([
 		//{ $match : {MediaCount : {$gt : 0}, status : {$in : [1 , 3]}} }, //updated logic after python api - 2021
 		{ $match : {status : {$in : [1 , 3]}} },
 		{ $unwind: { path: "$Tags", preserveNullAndEmptyArrays: true} },
@@ -451,21 +452,18 @@ var updateAlltagsCollection = function (req , res) {
 		{ $match : {tagStatus : 1} },
 		//{ $sort : {GroupTagTitle : 1} },
 		{ $out : "alltags" }
-	]).allowDiskUse(true).exec(function(err , result){
-		if(!err){
-			//res.json({status:200 , message : "Success"});
-			//console.log({status:200 , message : "Success"});
-		}
-		else{
-			//res.json({status:0 , message : "Error"});
-			//console.log({status:0 , message : "Error"});
-		}
-	});
+	]).allowDiskUse(true).exec();
+		//console.log({status:200 , message : "Success"});
+	} catch(err) {
+		console.log("updateAlltagsCollection error: ", err);
+		//console.log({status:0 , message : "Error"});
+	}
 }
 exports.updateAlltagsCollection = updateAlltagsCollection;
 
-var updateAlltagsCollection_API = function (req , res) {
-	GroupTag.aggregate([
+var updateAlltagsCollection_API = async function (req , res) {
+	try {
+		await GroupTag.aggregate([
 		//{ $match : {MediaCount : {$gt : 0}, status : {$in : [1 , 3]}} },	//updated logic after python api - 2021
 		{ $match : {status : {$in : [1 , 3]}} },
 		{ $unwind: { path: "$Tags", preserveNullAndEmptyArrays: true} },
@@ -500,15 +498,13 @@ var updateAlltagsCollection_API = function (req , res) {
 		{ $match : {tagStatus : 1} },
 		//{ $sort : {GroupTagTitle : 1} },
 		{ $out : "alltags" }
-	]).allowDiskUse(true).exec(function(err , result){
-		if(!err){
-			res.json({status:200 , message : "Success"});
-		}
-		else{
-			console.log("err - ", err);
-			res.json({status:0 , message : "Error"});
-		}
-	});
+	]).allowDiskUse(true).exec();
+		
+		res.json({status:200 , message : "Success"});
+	} catch(err) {
+		console.log("err - ", err);
+		res.json({status:0 , message : "Error"});
+	}
 }
 exports.updateAlltagsCollection_API = updateAlltagsCollection_API;
 
@@ -1468,7 +1464,7 @@ var updateMediaCountsPerGt_API = function (req , res) {
 			}
 		},
 		{$unwind : "$GroupTags"},
-		{$group : {_id:{GroupTagId:"$GroupTags.GroupTagID"},MediaCount:{$sum:1}}},
+		{$group : {_id:{GroupTagId:"$GroupTags"},MediaCount:{$sum:1}}},
 		{$sort : {MediaCount : -1}},
 		//{$out : "mediaCountPerGt"}
 	]).allowDiskUse(true).exec(function(err , documents) {
@@ -1649,8 +1645,9 @@ var updateRandomSortIdPerMedia = function () {
 }
 exports.updateRandomSortIdPerMedia = updateRandomSortIdPerMedia;
 
-var updateAlltagsCollection = function (req , res) {
-	GroupTag.aggregate([
+var updateAlltagsCollection = async function () {
+	try {
+		await GroupTag.aggregate([
 		//{ $match : {MediaCount : {$gt : 0}, status : {$in : [1 , 3]}} }, //updated logic after python api - 2021
 		{ $match : {status : {$in : [1 , 3]}} },
 		{ $unwind: { path: "$Tags", preserveNullAndEmptyArrays: true} },
@@ -1684,21 +1681,18 @@ var updateAlltagsCollection = function (req , res) {
 		{ $match : {tagStatus : 1} },
 		//{ $sort : {GroupTagTitle : 1} },
 		{ $out : "alltags" }
-	]).allowDiskUse(true).exec(function(err , result){
-		if(!err){
-			//res.json({status:200 , message : "Success"});
-			//console.log({status:200 , message : "Success"});
-		}
-		else{
-			//res.json({status:0 , message : "Error"});
-			//console.log({status:0 , message : "Error"});
-		}
-	});
+	]).allowDiskUse(true).exec();
+		//console.log({status:200 , message : "Success"});
+	} catch(err) {
+		console.log("updateAlltagsCollection error: ", err);
+		//console.log({status:0 , message : "Error"});
+	}
 }
 exports.updateAlltagsCollection = updateAlltagsCollection;
 
-var updateAlltagsCollection_API = function (req , res) {
-	GroupTag.aggregate([
+var updateAlltagsCollection_API = async function (req , res) {
+	try {
+		await GroupTag.aggregate([
 		//{ $match : {MediaCount : {$gt : 0}, status : {$in : [1 , 3]}} },	//updated logic after python api - 2021
 		{ $match : {status : {$in : [1 , 3]}} },
 		{ $unwind: { path: "$Tags", preserveNullAndEmptyArrays: true} },
@@ -1733,15 +1727,13 @@ var updateAlltagsCollection_API = function (req , res) {
 		{ $match : {tagStatus : 1} },
 		//{ $sort : {GroupTagTitle : 1} },
 		{ $out : "alltags" }
-	]).allowDiskUse(true).exec(function(err , result){
-		if(!err){
-			res.json({status:200 , message : "Success"});
-		}
-		else{
-			console.log("err - ", err);
-			res.json({status:0 , message : "Error"});
-		}
-	});
+	]).allowDiskUse(true).exec();
+		
+		res.json({status:200 , message : "Success"});
+	} catch(err) {
+		console.log("err - ", err);
+		res.json({status:0 , message : "Error"});
+	}
 }
 exports.updateAlltagsCollection_API = updateAlltagsCollection_API;
 
@@ -2492,8 +2484,8 @@ var SynedPostEmailCron = async function (testMode = false) {
             $('.post-tooltip-box').remove();
             PostStatement = $.html();
 
-            // Get email template
-            let templateName = dataRecord.EmailTemplate == 'PracticalThinker' ? "Surprise__Post_2Image" : "Surprise__Post";
+            // Always use Surprise__Post_2Image template (no OUTLOOK version)
+            const templateName = "Surprise__Post_2Image";
             
             // Check for blended image
             const blendImage1 = PostImage1;
@@ -2510,32 +2502,18 @@ var SynedPostEmailCron = async function (testMode = false) {
 
                     if (fs.existsSync(uploadDir + "/" + file_name)) {
                         blendedImage = `https://www.scrpt.com/streamposts/${hexcode}.png`;
-                        templateName = templateName == "Surprise__Post_2Image" ? "Surprise__Post_2Image_OUTLOOK" : "Surprise__Post_OUTLOOK";
+                        console.log("✅ Using pre-blended image:", hexcode + '.png');
                     }
                 }
             }
 
             if (!blendedImage && (blendImage1 == blendImage2)) {
                 blendedImage = blendImage1.replace('/Media/img/300/', '/Media/img/600/');
-                templateName = templateName == "Surprise__Post_2Image" ? "Surprise__Post_2Image_OUTLOOK" : "Surprise__Post_OUTLOOK";
+                console.log("✅ Using same image as blended (both images are identical)");
             }
 
-            // Try to find the template, with fallback to base template
+            // Try to find the template
             let results = await EmailTemplate.find({ name: templateName }, {});
-            
-            // Fallback: if template not found, try without _OUTLOOK suffix
-            if (!results.length && templateName.includes('_OUTLOOK')) {
-                templateName = templateName.replace('_OUTLOOK', '');
-                console.log(`⚠️ Template not found, falling back to: ${templateName}`);
-                results = await EmailTemplate.find({ name: templateName }, {});
-            }
-            
-            // Fallback: if Surprise__Post_2Image not found, use Surprise__Post
-            if (!results.length && templateName.includes('_2Image')) {
-                templateName = templateName.replace('_2Image', '');
-                console.log(`⚠️ Template not found, falling back to: ${templateName}`);
-                results = await EmailTemplate.find({ name: templateName }, {});
-            }
             
             if (!results.length) {
                 console.log("❌ No email template found for:", templateName, "- skipping SyncedPost:", dataRecord._id);
@@ -2557,19 +2535,28 @@ var SynedPostEmailCron = async function (testMode = false) {
             const PostImage2_600 = PostImage2.replace('/Media/img/300/', '/Media/img/600/');
 
             let newHtml = results[0].description.replace(/{SharedByUserName}/g, SharedByUserName);
-            newHtml = newHtml.replace(/{PostImage1}/g, PostImage1_600);
-            newHtml = newHtml.replace(/{PostImage2}/g, PostImage2_600);
+            
+            // If blended image exists, use it and hide separate images
+            // If no blended image, show separate images
+            if (blendedImage) {
+                newHtml = newHtml.replace(/{BlendedImage}/g, blendedImage);
+                newHtml = newHtml.replace(/{PostImage1}/g, ''); // Hide separate images
+                newHtml = newHtml.replace(/{PostImage2}/g, ''); // Hide separate images
+            } else {
+                newHtml = newHtml.replace(/{PostImage1}/g, PostImage1_600);
+                newHtml = newHtml.replace(/{PostImage2}/g, PostImage2_600);
+                newHtml = newHtml.replace(/{BlendedImage}/g, ''); // Hide blended image
+            }
+            
             newHtml = newHtml.replace(/{TextAboveVisual}/g, dataRecord.TextAboveVisual);
             newHtml = newHtml.replace(/{TextBelowVisual}/g, dataRecord.TextBelowVisual);
             newHtml = newHtml.replace(/{PostStatement}/g, PostStatement);
             newHtml = newHtml.replace(/{PostURL}/g, PostURL);
             newHtml = newHtml.replace(/{SoundFileUrl}/g, dataRecord.SoundFileUrl);
             newHtml = newHtml.replace(/{BlendMode}/g, dataRecord.BlendMode);
-            newHtml = newHtml.replace(/{BlendedImage}/g, blendedImage || '');
             newHtml = newHtml.replace(/{publisher}/g, dataRecord.CapsuleData.MetaData.publisher);
 
             let subject = dataRecord.Subject || results[0].subject || 'Scrpt - ' + SharedByUserName + ' shared a post with you!';
-            const EmailBeaconImg = PostImage1_600 || 'https://www.scrpt.com/assets/Media/img/300/default.png';
 
             // Find users and send emails
             try {
@@ -2583,43 +2570,91 @@ var SynedPostEmailCron = async function (testMode = false) {
                     UnsubscribedStreams: true 
                 });
 
-                    if (UserData.length) {
+                if (UserData.length) {
+                    // Generate unique EmailBeaconHash for this delivery
+                    const EmailBeaconHash = (+new Date(String(dataRecord.DateOfDelivery))).toString(36).slice(-8);
+                    let EmailBeaconImg = '';
+                    
+                    const emails = [];
                     for (let i = 0; i < UserData.length; i++) {
                         const RecipientName = UserData[i].Name ? UserData[i].Name.split(' ')[0] : "";
                         const shareWithEmail = UserData[i].Email || null;
+                        emails.push(shareWithEmail);
+                        
                         const userUnsubscribedStreams = UserData[i].UnsubscribedStreams || [];
 
-                            if (shareWithEmail && (userUnsubscribedStreams.indexOf(String(dataRecord.CapsuleId)) < 0)) {
-                                console.log("Attempting to send scheduled email to:", shareWithEmail);
+                        if (shareWithEmail && (userUnsubscribedStreams.indexOf(String(dataRecord.CapsuleId)) < 0)) {
+                            // Create personalized tracking pixel for this specific recipient
+                            if (dataRecord.CapsuleId && dataRecord.PageId && dataRecord.PostId && EmailBeaconHash) {
+                                EmailBeaconImg = `<img src='https://www.scrpt.com/assets/img/email-stats.png?CapsuleId=${dataRecord.CapsuleId}&PageId=${dataRecord.PageId}&PostId=${dataRecord.PostId}&EmailIndex=${EmailBeaconHash}&UserEmail=${shareWithEmail}' />`;
+                            }
+                            
+                            if (dataRecord.Subject) {
+                                dataRecord.Subject = dataRecord.Subject.replace(/{SharedByUserName}/g, SharedByUserName);
+                                dataRecord.Subject = dataRecord.Subject.replace(/{RecipientName}/g, RecipientName);
+                                subject = dataRecord.Subject;
+                            }
+                            
+                            console.log("Attempting to send scheduled email to:", shareWithEmail);
+                            try {
+                                await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, newHtml, subject, EmailBeaconImg);
+                                console.log("Successfully sent email to:", shareWithEmail);
+
+                                await SyncedPost.updateOne(
+                                    {
+                                        _id: dataRecord._id,
+                                        "EmailEngineDataSets.DateOfDelivery": dataRecord.DateOfDelivery
+                                    },
+                                    {
+                                        $set: {
+                                            "EmailEngineDataSets.$.Delivered": true
+                                        }
+                                    }
+                                );
+                                console.log("Marked as delivered for SyncedPost:", dataRecord._id);
+                            } catch (sendError) {
+                                console.error("Failed to send email to", shareWithEmail, "for SyncedPost", dataRecord._id, ":", sendError);
+                            }
+                        } else {
+                            console.log("Skipping email to", shareWithEmail, "- unsubscribed or no email");
+                        }
+                    }
+                    
+                    // Handle non-registered users (emails not found in User collection)
+                    if (emails.length != dataRecord.ReceiverEmails.length) {
+                        const difference = dataRecord.ReceiverEmails.filter(x => emails.indexOf(x) === -1);
+                        for (let i = 0; i < difference.length; i++) {
+                            const RecipientName = difference[i] ? difference[i].split('@')[0] : "";
+                            const shareWithEmail = difference[i] ? difference[i] : null;
+
+                            if (shareWithEmail) {
+                                // Create personalized tracking pixel for non-registered user
+                                if (dataRecord.CapsuleId && dataRecord.PageId && dataRecord.PostId && EmailBeaconHash) {
+                                    EmailBeaconImg = `<img src='https://www.scrpt.com/assets/img/email-stats.png?CapsuleId=${dataRecord.CapsuleId}&PageId=${dataRecord.PageId}&PostId=${dataRecord.PostId}&EmailIndex=${EmailBeaconHash}&UserEmail=${shareWithEmail}' />`;
+                                }
+
+                                if (dataRecord.Subject) {
+                                    dataRecord.Subject = dataRecord.Subject.replace(/{SharedByUserName}/g, SharedByUserName);
+                                    dataRecord.Subject = dataRecord.Subject.replace(/{RecipientName}/g, RecipientName);
+                                    subject = dataRecord.Subject;
+                                }
+                                
+                                console.log("Attempting to send scheduled email to non-registered user:", shareWithEmail);
                                 try {
                                     await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, newHtml, subject, EmailBeaconImg);
-                                    console.log("Successfully sent email to:", shareWithEmail);
-
-                                    await SyncedPost.updateOne(
-                                        {
-                                            _id: dataRecord._id,
-                                            "EmailEngineDataSets.DateOfDelivery": dataRecord.DateOfDelivery
-                                        },
-                                        {
-                                            $set: {
-                                                "EmailEngineDataSets.$.Delivered": true
-                                            }
-                                        }
-                                    );
-                                console.log("Marked as delivered for SyncedPost:", dataRecord._id);
+                                    console.log("Successfully sent email to non-registered user:", shareWithEmail);
                                 } catch (sendError) {
-                                    console.error("Failed to send email to", shareWithEmail, "for SyncedPost", dataRecord._id, ":", sendError);
+                                    console.error("Failed to send email to non-registered user", shareWithEmail, ":", sendError);
                                 }
-                            } else {
-                            console.log("Skipping email to", shareWithEmail, "- unsubscribed or no email");
                             }
                         }
-                    } else {
-                    console.log("No active user found for recipients:", dataRecord.ReceiverEmails);
                     }
-                } catch (userFindError) {
-                    console.error("Error finding users for SyncedPost", dataRecord._id, ":", userFindError);
+                } else {
+                    console.log("No active user found for recipients:", dataRecord.ReceiverEmails);
                 }
+            } catch (userFindError) {
+                console.error("Error finding users for SyncedPost", dataRecord._id, ":", userFindError);
+            }
             }
             console.log("---------------------------------SynedPostEmailCron END----------------------------------------");
     } catch (cronError) {
