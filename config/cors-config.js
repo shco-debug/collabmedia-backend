@@ -54,7 +54,7 @@ const corsOptions = {
     console.log('CORS: Blocking origin:', origin);
     callback(new Error('Not allowed by CORS'));
   },
-  credentials: false, // No cookies needed with JWT
+  credentials: true, // Allow cookies and credentials (needed for session cookies and JWT)
   methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS', 'PATCH'],
   allowedHeaders: [
     'Origin',
@@ -66,7 +66,7 @@ const corsOptions = {
     'capsule_id',
     'chapter_id'
   ],
-  exposedHeaders: [],
+  exposedHeaders: ['Set-Cookie', 'Authorization'],
   optionsSuccessStatus: 200, // Some legacy browsers choke on 204
   preflightContinue: false,
   // Add more permissive settings for development

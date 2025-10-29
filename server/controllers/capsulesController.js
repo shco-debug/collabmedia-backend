@@ -2193,12 +2193,33 @@ var invitationForMe = function (req, res) {
 _________________________________________________________________________
 */
 
-var ForSalesByMe = function (req, res) {
+var ForSalesByMe = async function (req, res) {
+  try {
+    // Safe session access for admin, subadmin, and regular users
+    var myself = null;
+
+    if (req.session && req.session.user) {
+      myself = req.session.user;
+    } else if (req.session && req.session.admin) {
+      myself = req.session.admin;
+    } else if (req.session && req.session.subadmin) {
+      myself = req.session.subadmin;
+    }
+
+    if (!myself) {
+      var response = {
+        status: 401,
+        message: "User session not found. Please login.",
+        results: null,
+      };
+      return res.json(response);
+    }
+
   var limit = req.body.perPage ? req.body.perPage : 0;
   var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
   var conditions = {
-    CreaterId: req.session.user._id,
+      CreaterId: myself._id,
     "LaunchSettings.Audience": "BUYERS",
     IsPublished: true,
     IsAllowedForSales: true,
@@ -2212,16 +2233,15 @@ var ForSalesByMe = function (req, res) {
 
   var fields = {};
 
-  Capsule.find(conditions, fields)
+    // Use async/await instead of callbacks (Mongoose v8+ requirement)
+    const results = await Capsule.find(conditions, fields)
     .sort(sortObj)
     .skip(offset)
     .limit(limit)
-    .exec(function (err, results) {
-      if (!err) {
-        Capsule.find(conditions, fields)
-          .count()
-          .exec(function (errr, resultsLength) {
-            if (!errr) {
+      .exec();
+
+    const resultsLength = await Capsule.countDocuments(conditions).exec();
+
               var response = {
                 count: resultsLength,
                 status: 200,
@@ -2229,22 +2249,15 @@ var ForSalesByMe = function (req, res) {
                 results: results,
               };
               res.json(response);
-            } else {
+  } catch (error) {
+    console.error("Error in ForSalesByMe:", error);
               var response = {
                 status: 501,
                 message: "Something went wrong.",
+      error: error.message,
               };
               res.json(response);
             }
-          });
-      } else {
-        var response = {
-          status: 501,
-          message: "Something went wrong.",
-        };
-        res.json(response);
-      }
-    });
 };
 
 /*________________________________________________________________________
@@ -7966,7 +7979,7 @@ var galleryCapsulesList = function (req, res) {
 
   const conditions = {
     "LaunchSettings.Audience": "BUYERS",
-    IsPublished: true,
+    IsPublished: false, // Changed to false - show unpublished streams marked for buyers (drafts/previews)
     IsAllowedForSales: true,
     Status: true,
     IsDeleted: false,
