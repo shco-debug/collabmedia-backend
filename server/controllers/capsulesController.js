@@ -9689,10 +9689,10 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
           preserveNullAndEmptyArrays: true,
         },
       },
-      // Lookup capsule creator data (admin only)
+      // Lookup capsule creator data (from users collection)
       {
         $lookup: {
-          from: "admin",
+          from: "users",
           localField: "capsuleData.CreaterId",
           foreignField: "_id",
           as: "capsuleCreator",
@@ -9715,7 +9715,7 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
           capsuleOwnerName: "$capsuleOwner.Name",
           capsuleOwnerProfilePic: "$capsuleOwner.ProfilePic",
           capsuleCreatorId: "$capsuleData.CreaterId",
-          capsuleCreatorName: "$capsuleCreator.name",
+          capsuleCreatorName: "$capsuleCreator.Name",
           capsuleCreatorProfilePic: "$capsuleCreator.ProfilePic",
         },
       },
@@ -10042,6 +10042,631 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
     res.json({
       code: 500,
       msg: "Error fetching posts from purchased capsules",
+      error: error.message,
+      response: [],
+    });
+  }
+};
+
+/*________________________________________________________________________
+   * @Date:      		2025-10-31
+   * @Method :   		getUserMixedFeedPosts
+   * @Purpose:   		Fetch posts from user's streams (SyncedPost, Delivered=false) + 
+   *                  posts where friends interacted (from any stream)
+   * @Param:     		limit, skip, type, selectedKeyword
+   * @Return:    	 	Mixed feed with same format as getUserPurchasedCapsulesPosts
+   * @Access Category:	"User Feed"
+   * @Collections:     SyncedPost (base), MediaActionLogs, StreamLikes, StreamComments
+_________________________________________________________________________
+*/
+var getUserMixedFeedPosts = async function (req, res) {
+  try {
+    const limit = req.body.limit || 10;
+    const skip = req.body.skip || 0;
+    const type = req.body.type || null;
+    const selectedKeyword = req.body.selectedKeyword || null;
+    const loginUserId = req.session.user._id;
+
+    // STEP 1: Get user's friends
+    const Friend = require('./../models/friendsModel.js');
+    const SyncedPost = require('./../models/syncedpostModel.js');
+    const StreamLikes = require('./../models/StreamLikes.js');
+    const StreamComments = require('./../models/StreamCommentsModel.js');
+    const StreamCommentLikes = require('./../models/StreamCommentLikesModel.js');
+    
+    const friends = await Friend.find({
+      UserID: String(loginUserId),
+      IsDeleted: false,
+      Status: true,
+      'Friend.IsRegistered': true
+    }).lean();
+
+    const friendIds = friends
+      .map(f => {
+        try {
+          return f.Friend && f.Friend.ID ? new mongoose.Types.ObjectId(f.Friend.ID) : null;
+        } catch (e) {
+          return null;
+        }
+      })
+      .filter(id => id !== null);
+
+    console.log(`📊 getUserMixedFeedPosts: Found ${friends.length} friends, ${friendIds.length} valid friend IDs`);
+
+    // STEP 2: Get user's owned capsules (for filtering user's own posts)
+    const userCapsules = await Capsule.find({
+      OwnerId: new mongoose.Types.ObjectId(loginUserId),
+      IsDeleted: { $ne: true },
+    }).lean();
+
+    const userCapsuleIds = userCapsules.map((c) => c._id);
+    console.log(`📊 User owns ${userCapsuleIds.length} capsules`);
+
+    // STEP 3: Get PostIds where friends have interacted (from any stream)
+    let friendInteractedPostIds = [];
+    
+    if (friendIds.length > 0) {
+      // From StreamLikes
+      const streamLikes = await StreamLikes.find({
+        UserId: { $in: friendIds },
+        IsDeleted: false
+      }, { SocialPostId: 1 }).lean();
+      
+      // From StreamComments
+      const streamComments = await StreamComments.find({
+        UserId: { $in: friendIds },
+        IsDeleted: 0
+      }, { SocialPostId: 1 }).lean();
+      
+      // From StreamCommentLikes (friends who liked comments)
+      const streamCommentLikes = await StreamCommentLikes.find({
+        LikedById: { $in: friendIds },
+        IsDeleted: false
+      }).populate('CommentId', 'SocialPostId').lean();
+      
+      // Combine all PostIds
+      const postIdsSet = new Set();
+      
+      streamLikes.forEach(like => {
+        if (like.SocialPostId) postIdsSet.add(String(like.SocialPostId));
+      });
+      
+      streamComments.forEach(comment => {
+        if (comment.SocialPostId) postIdsSet.add(String(comment.SocialPostId));
+      });
+      
+      streamCommentLikes.forEach(commentLike => {
+        if (commentLike.CommentId && commentLike.CommentId.SocialPostId) {
+          postIdsSet.add(String(commentLike.CommentId.SocialPostId));
+        }
+      });
+      
+      friendInteractedPostIds = Array.from(postIdsSet).map(id => {
+        try {
+          return new mongoose.Types.ObjectId(id);
+        } catch (e) {
+          return null;
+        }
+      }).filter(id => id !== null);
+      
+      console.log(`📊 Found ${friendInteractedPostIds.length} posts where friends interacted`);
+    }
+
+    // STEP 4: Query SyncedPost for BOTH sources
+    // Source 1: User's stream posts (Delivered = false)
+    // Source 2: Posts where friends interacted (any stream)
+    
+    const syncedPostConditions = {
+      $or: [
+        // Source 1: User's own streams, not yet delivered
+        {
+          CapsuleId: { $in: userCapsuleIds },
+          IsDeleted: false,
+          Status: true,
+          'EmailEngineDataSets.Delivered': false
+        },
+        // Source 2: Any posts where friends interacted
+        ...(friendInteractedPostIds.length > 0 
+          ? [{
+              PostId: { $in: friendInteractedPostIds },
+              IsDeleted: false,
+              Status: true
+            }]
+          : []
+        )
+      ]
+    };
+
+    const pipeline = [
+      { $match: syncedPostConditions },
+      
+      // Unwind EmailEngineDataSets to get post details
+      { $unwind: { path: "$EmailEngineDataSets", preserveNullAndEmptyArrays: false } },
+      
+      // Project main fields from SyncedPost
+      {
+        $project: {
+          _id: "$_id",
+          CapsuleId: "$CapsuleId",
+          PageId: "$PageId",
+          PostId: "$PostId",
+          PostStatement: "$PostStatement",
+          PostOwnerId: "$PostOwnerId",
+          SyncedBy: "$SyncedBy",
+          ReceiverEmails: "$ReceiverEmails",
+          CreatedOn: "$CreatedOn",
+          Delivered: "$EmailEngineDataSets.Delivered",
+          VisualUrls: "$EmailEngineDataSets.VisualUrls",
+          SoundFileUrl: "$EmailEngineDataSets.SoundFileUrl",
+          TextAboveVisual: "$EmailEngineDataSets.TextAboveVisual",
+          TextBelowVisual: "$EmailEngineDataSets.TextBelowVisual",
+          DateOfDelivery: "$EmailEngineDataSets.DateOfDelivery",
+          BlendMode: "$EmailEngineDataSets.BlendMode",
+          EmailTemplate: "$EmailTemplate",
+          Subject: "$EmailSubject",
+          IsOnetimeStream: "$IsOnetimeStream",
+          IsOnlyPostImage: "$IsOnlyPostImage",
+          hexcode_blendedImage_temp: "$EmailEngineDataSets.hexcode_blendedImage",
+        },
+      },
+      
+      // Lookup actual Media document for additional fields
+      {
+        $lookup: {
+          from: "media",
+          let: { postId: "$PostId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", { $toObjectId: "$$postId" }] }
+              }
+            }
+          ],
+          as: "mediaDoc"
+        }
+      },
+      { $unwind: { path: "$mediaDoc", preserveNullAndEmptyArrays: true } },
+      
+      // Add media fields to root
+      {
+        $addFields: {
+          MediaType: "$mediaDoc.MediaType",
+          LinkType: "$mediaDoc.LinkType",
+          Content: "$mediaDoc.Content",
+          Location: "$mediaDoc.Location",
+          UploadedBy: "$mediaDoc.UploadedBy",
+          UploadedOn: { $ifNull: ["$mediaDoc.UploadedOn", "$CreatedOn"] },
+          UploaderID: "$mediaDoc.UploaderID",
+          GroupTags: "$mediaDoc.GroupTags",
+          BlendSettings: "$mediaDoc.BlendSettings",
+          thumbnail: "$mediaDoc.thumbnail",
+          Locator: "$mediaDoc.Locator",
+          AutoId: "$mediaDoc.AutoId",
+          ContentType: "$mediaDoc.ContentType",
+        }
+      },
+      
+      // Apply media type filter
+      ...(type && type !== "all"
+        ? [
+            {
+              $match: {
+                $or: [
+                  { MediaType: type },
+                  ...(type === "Image"
+                    ? [
+                        { MediaType: "Link", LinkType: "image" },
+                        { MediaType: "1MJPost" },
+                        { MediaType: "2MJPost" },
+                        { MediaType: "1UnsplashPost" },
+                        { MediaType: "2UnsplashPost" },
+                      ]
+                    : []),
+                  ...(type === "Video"
+                    ? [
+                        { MediaType: "Link", LinkType: { $ne: "image" } },
+                        { MediaType: "Video" },
+                        { MediaType: "Audio" },
+                      ]
+                    : []),
+                ],
+              },
+            },
+          ]
+        : []),
+
+      // Apply keyword filter
+      ...(selectedKeyword
+        ? [
+            {
+              $match: {
+                $or: [
+                  { "GroupTags.GroupTagID": selectedKeyword },
+                  { GroupTags: selectedKeyword },
+                ],
+              },
+            },
+          ]
+        : []),
+      
+      // Lookup Capsule data
+      {
+        $lookup: {
+          from: "Capsules",
+          localField: "CapsuleId",
+          foreignField: "_id",
+          as: "capsuleData",
+        },
+      },
+      { $unwind: { path: "$capsuleData", preserveNullAndEmptyArrays: true } },
+      
+      // Lookup Page data
+      {
+        $lookup: {
+          from: "Pages",
+          localField: "PageId",
+          foreignField: "_id",
+          as: "pageData",
+        },
+      },
+      { $unwind: { path: "$pageData", preserveNullAndEmptyArrays: true } },
+      
+      // Lookup Chapter data (to get chapterId and chapterTitle)
+      {
+        $lookup: {
+          from: "Chapters",
+          let: { pageId: "$PageId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $in: ["$$pageId", "$pages"] },
+                IsDeleted: { $ne: true }
+              }
+            }
+          ],
+          as: "chapterData",
+        },
+      },
+      { $unwind: { path: "$chapterData", preserveNullAndEmptyArrays: true } },
+      
+      // Lookup capsule owner
+      {
+        $lookup: {
+          from: "users",
+          localField: "capsuleData.OwnerId",
+          foreignField: "_id",
+          as: "capsuleOwner",
+        },
+      },
+      { $unwind: { path: "$capsuleOwner", preserveNullAndEmptyArrays: true } },
+      
+      // Lookup capsule creator
+      {
+        $lookup: {
+          from: "users",
+          localField: "capsuleData.CreaterId",
+          foreignField: "_id",
+          as: "capsuleCreator",
+        },
+      },
+      { $unwind: { path: "$capsuleCreator", preserveNullAndEmptyArrays: true } },
+      
+      // Add capsule, page, and chapter info to root
+      {
+        $addFields: {
+          capsuleId: "$CapsuleId",
+          capsuleTitle: "$capsuleData.Title",
+          capsuleOwnerName: "$capsuleOwner.Name",
+          capsuleOwnerEmail: "$capsuleOwner.Email",
+          capsuleOwnerProfilePic: "$capsuleOwner.ProfilePic",
+          capsuleCreatorName: "$capsuleCreator.Name",
+          capsuleCreatorEmail: "$capsuleCreator.Email",
+          capsuleCreatorProfilePic: "$capsuleCreator.ProfilePic",
+          pageId: "$PageId",
+          pageTitle: "$pageData.Title",
+          pageType: "$pageData.PageType",
+          chapterId: "$chapterData._id",
+          chapterTitle: "$chapterData.Title",
+        }
+      },
+      
+      // Sort by upload date (newest first)
+      { $sort: { UploadedOn: -1, _id: -1 } },
+      
+      // Apply pagination
+      { $skip: skip },
+      { $limit: limit },
+      
+      // Lookup StreamLikes for each post
+      {
+        $lookup: {
+          from: "StreamLikes",
+          localField: "PostId",
+          foreignField: "SocialPostId",
+          as: "streamLikesArr",
+        },
+      },
+      
+      // Lookup StreamComments for each post
+      {
+        $lookup: {
+          from: "StreamComments",
+          let: { postId: "$PostId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$SocialPostId", "$$postId"] },
+                IsDeleted: 0
+              }
+            }
+          ],
+          as: "streamCommentsArr",
+        },
+      },
+      
+      // Unwind comments to lookup user data
+      {
+        $unwind: {
+          path: "$streamCommentsArr",
+          preserveNullAndEmptyArrays: true,
+        },
+      },
+      
+      // Lookup user data for each comment
+      {
+        $lookup: {
+          from: "users",
+          localField: "streamCommentsArr.UserId",
+          foreignField: "_id",
+          as: "streamCommentsArr.user",
+        },
+      },
+      
+      // Lookup comment likes for each comment
+      {
+        $lookup: {
+          from: "StreamCommentLikes",
+          localField: "streamCommentsArr._id",
+          foreignField: "CommentId",
+          as: "streamCommentsArr.commentLikes",
+        },
+      },
+      
+      // Group back by post ID to aggregate comments
+      {
+        $group: {
+          _id: "$PostId",
+          root: { $first: "$$ROOT" },
+          comments: { $push: "$streamCommentsArr" },
+        },
+      },
+      
+      // Replace root with post data
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: ["$root", { comments: "$comments" }],
+          },
+        },
+      },
+      
+      // Filter out empty comments (from preserveNullAndEmptyArrays)
+      {
+        $addFields: {
+          comments: {
+            $filter: {
+              input: "$comments",
+              cond: { $ne: ["$$this._id", null] }
+            }
+          }
+        }
+      },
+      
+      // Add user field to each comment and calculate comment like counts
+      {
+        $addFields: {
+          comments: {
+            $map: {
+              input: "$comments",
+              as: "comment",
+              in: {
+                _id: "$$comment._id",
+                UserId: "$$comment.UserId",
+                Comment: "$$comment.Comment",
+                CreatedOn: "$$comment.CreatedOn",
+                PrivacySetting: "$$comment.PrivacySetting",
+                IsDeleted: "$$comment.IsDeleted",
+                user: { $arrayElemAt: ["$$comment.user", 0] },
+                CommentLikeCount: {
+                  $size: {
+                    $filter: {
+                      input: "$$comment.commentLikes",
+                      cond: { $eq: ["$$this.IsDeleted", false] }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          likes: "$streamLikesArr",
+          likeCount: {
+            $size: {
+              $filter: {
+                input: "$streamLikesArr",
+                cond: { $eq: ["$$this.IsDeleted", false] }
+              }
+            }
+          },
+          commentCount: {
+            $size: {
+              $filter: {
+                input: "$comments",
+                cond: { $ne: ["$$this._id", null] }
+              }
+            }
+          }
+        },
+      },
+      // Project final structure matching getUserPurchasedCapsulesPosts
+      {
+        $project: {
+          _id: "$PostId",
+          MediaType: 1,
+          LinkType: 1,
+          Content: 1,
+          Location: 1,
+          UploadedBy: 1,
+          UploadedOn: 1,
+          UploaderID: 1,
+          GroupTags: 1,
+          BlendSettings: 1,
+          thumbnail: 1,
+          Locator: 1,
+          AutoId: 1,
+          ContentType: 1,
+          PostStatement: 1,
+          VisualUrls: 1,
+          BlendMode: 1,
+          hexcode_blendedImage_temp: 1,
+          // Capsule info
+          capsuleId: 1,
+          capsuleTitle: 1,
+          capsuleOwnerName: 1,
+          capsuleOwnerEmail: 1,
+          capsuleOwnerProfilePic: 1,
+          capsuleCreatorName: 1,
+          capsuleCreatorEmail: 1,
+          capsuleCreatorProfilePic: 1,
+          // Page info
+          pageId: 1,
+          pageTitle: 1,
+          pageType: 1,
+          // Chapter info
+          chapterId: 1,
+          chapterTitle: 1,
+          // Interactions
+          likes: 1,
+          comments: 1,
+          likeCount: 1,
+          commentCount: 1,
+          // Remove temp fields
+          streamLikesArr: 0,
+          streamCommentsArr: 0,
+          root: 0,
+          capsuleData: 0,
+          capsuleOwner: 0,
+          capsuleCreator: 0,
+          pageData: 0,
+          chapterData: 0,
+          mediaDoc: 0,
+        },
+      },
+      // Re-sort after group
+      { $sort: { UploadedOn: -1, _id: -1 } },
+    ];
+
+    const posts = await SyncedPost.aggregate(pipeline).exec();
+
+    // Add user's interaction status for each post
+    if (req.session.user && req.session.user._id) {
+      const userId = req.session.user._id;
+      posts.forEach(function (post) {
+        // Check if user liked this post
+        post.isLikedByMe = post.likes && post.likes.some(function (like) {
+          return String(like.UserId) === String(userId);
+        });
+        
+        // Check if user commented on this post
+        post.isCommentedByMe = post.comments && post.comments.some(function (comment) {
+          return String(comment.UserId) === String(userId);
+        });
+        
+        // Initialize dislikes (StreamLikes doesn't have dislikes, only likes)
+        post.dislikes = [];
+        post.dislikeCount = 0;
+        post.isDislikedByMe = false;
+      });
+    } else {
+      // Initialize interaction status without session
+      posts.forEach(function (post) {
+        post.isLikedByMe = false;
+        post.isDislikedByMe = false;
+        post.isCommentedByMe = false;
+        post.dislikes = [];
+        post.dislikeCount = 0;
+      });
+    }
+
+    // Get total count for pagination
+    const countPipeline = pipeline.slice(0, -3); // Remove skip, limit, and sort
+    countPipeline.push({ $count: "total" });
+    const countResult = await SyncedPost.aggregate(countPipeline).exec();
+    const totalCount = countResult.length > 0 ? countResult[0].total : 0;
+
+    // Calculate hexcode_blendedImage and clean BlendSettings
+    const crypto = require('crypto');
+    const fs = require('fs');
+    const cleanedPosts = posts.map(post => {
+      // Calculate hexcode_blendedImage for blended posts
+      let hexcode_blendedImage = post.hexcode_blendedImage_temp || null;
+      
+      if (!hexcode_blendedImage && post.VisualUrls && post.VisualUrls.length >= 2 && post.BlendMode) {
+        const blendImage1 = post.VisualUrls[0];
+        const blendImage2 = post.VisualUrls[1];
+        const blendMode = post.BlendMode;
+        
+        if (blendImage1 && blendImage2 && blendMode && blendImage1 !== blendImage2) {
+          const data = blendImage1 + blendImage2 + blendMode;
+          const hexcode = crypto.createHash("md5").update(data).digest("hex");
+          if (hexcode) {
+            hexcode_blendedImage = `/streamposts/${hexcode}.png`;
+          }
+        } else if (blendImage1 === blendImage2 && blendImage1) {
+          // For single image posts, use the image itself
+          hexcode_blendedImage = blendImage1.replace("/Media/img/300/", "/Media/img/600/");
+        }
+      }
+      
+      // Add hexcode_blendedImage to post
+      if (hexcode_blendedImage) {
+        post.hexcode_blendedImage = hexcode_blendedImage;
+      }
+      
+      // Remove temporary field
+      delete post.hexcode_blendedImage_temp;
+      
+      // Remove allBlendConfigurations from BlendSettings
+      if (post.BlendSettings && post.BlendSettings.allBlendConfigurations) {
+        const { allBlendConfigurations, ...cleanedBlendSettings } = post.BlendSettings;
+        post.BlendSettings = cleanedBlendSettings;
+      }
+      
+      return post;
+    });
+
+    res.json({
+      code: 200,
+      msg: "Success",
+      response: cleanedPosts,
+      count: totalCount,
+      userCapsules: userCapsules.length,
+      friendsCount: friends.length,
+      friendInteractedPostsCount: friendInteractedPostIds.length,
+      pagination: {
+        skip: skip,
+        limit: limit,
+        hasMore: skip + limit < totalCount,
+      },
+      filters: {
+        type: type,
+        selectedKeyword: selectedKeyword,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Error in getUserMixedFeedPosts:", error);
+    res.json({
+      code: 500,
+      msg: "Error fetching mixed feed posts",
       error: error.message,
       response: [],
     });
@@ -10547,6 +11172,7 @@ exports.updateCartForFrequency = updateCartForFrequency;
 
 exports.getMyPurchases = getMyPurchases;
 exports.getUserPurchasedCapsulesPosts = getUserPurchasedCapsulesPosts;
+exports.getUserMixedFeedPosts = getUserMixedFeedPosts;
 exports.getMySales = getMySales;
 exports.getSalesExcel = getSalesExcel;
 exports.getCapsuleMembers = getCapsuleMembers;

@@ -1006,6 +1006,11 @@ module.exports = (app) => {
 	app.use('/api/share', shareRoutes);
 	router.shareRoutes = shareRoutes;
 	
+	// Card Details routes (for payment card management)
+	const cardDetailsRoutes = express.Router();
+	app.use('/cards', cardDetailsRoutes);
+	router.cardDetailsRoutes = cardDetailsRoutes;
+	
 	// Main API routes (for general endpoints like /media/createSinglePost)
 	const mainRoutes = express.Router();
 	app.use('/', mainRoutes);

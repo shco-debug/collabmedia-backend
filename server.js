@@ -65,6 +65,9 @@ app.use(cors(corsOptions));
 app.use(bodyParser.json({ limit: "50mb" }));
 app.use(bodyParser.urlencoded({ extended: true, limit: "50mb" }));
 
+// Serve static files from public directory
+app.use(express.static(path.join(__dirname, 'public')));
+
 // CORS is now handled by the cors package with proper configuration
 // This prevents conflicts and provides consistent CORS handling
 
@@ -256,6 +259,7 @@ require("./server/middlewares.js")(router.referralRoutes);
 require("./server/middlewares.js")(router.journalRoutes);
 require("./server/middlewares.js")(router.mediaActionRoutes);
 require("./server/middlewares.js")(router.userActivityRoutes);
+require("./server/middlewares.js")(router.cardDetailsRoutes);
 require("./server/middlewares.js")(router.mainRoutes);
 
 // NOW load the route handlers AFTER middlewares are applied
@@ -383,6 +387,11 @@ require("./server/routes/frontend/api/mediaActionRoutes.js")(
 );
 require("./server/routes/frontend/api/userActivityRoutes.js")(
   router.userActivityRoutes
+);
+
+// Card Details routes
+require("./server/routes/frontend/api/cardDetailsRoutes.js")(
+  router.cardDetailsRoutes
 );
 
 // Relationship routes

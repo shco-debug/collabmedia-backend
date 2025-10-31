@@ -452,6 +452,10 @@ module.exports = function(router){
 		journalControllerV2.generatePostBlendImage_INTERNAL_API(req, res);
 	});
 	
+	router.post('/journal/resetUsedMediaForPage_INTERNAL_API', function(req, res) {
+		journalControllerV2.resetUsedMediaForPage_INTERNAL_API(req, res);
+	});
+	
 	// Keyword ranking API (gen_toptagsv2 equivalent)
 	router.post('/api/gen_toptagsv2', function(req, res) {
 		journalControllerV2.gen_toptagsv2_API(req, res);

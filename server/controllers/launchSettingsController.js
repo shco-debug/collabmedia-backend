@@ -6,8 +6,8 @@ var Referral = require('./../models/referralModel.js');
 var Cart = require('./../models/cartModel.js');
 var Order = require('./../models/orderModel.js');
 var Transaction = require('./../models/transectionHistoryModel.js')
-//var stripe = require("stripe")(process.STRIPE_CONFIG.DEV.secret_key);	//test mode
-var stripe = require("stripe")(process.STRIPE_CONFIG.LIVE.secret_key); //live mode
+var stripe = require("stripe")(process.STRIPE_CONFIG.DEV.secret_key);	//test mode
+//var stripe = require("stripe")(process.STRIPE_CONFIG.LIVE.secret_key); //live mode
 var mongoose = require("mongoose");
 var ObjectId = mongoose.Types.ObjectId;
 

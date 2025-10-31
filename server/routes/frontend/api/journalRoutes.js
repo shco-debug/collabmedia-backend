@@ -323,6 +323,10 @@ module.exports = function(router){
 		Journal.setStreamMediaSelectionCriteria__INTERNAL_API(req, res);
 	})
 
+	router.post('/resetUsedMediaForPage_INTERNAL_API', function (req, res) {
+		Journal.resetUsedMediaForPage_INTERNAL_API(req, res);
+	})
+
 	router.get('/downloadStreamPostMetaData_INTERNAL_API', function (req, res) {
 		Journal.downloadStreamPostMetaData_INTERNAL_API(req, res);
 	})

@@ -355,6 +355,9 @@ module.exports = function(router){
 	router.post('/getUserPurchasedCapsulesPosts',function(req,res){
 		Capsule.getUserPurchasedCapsulesPosts(req,res);
 	});
+	router.post('/getUserMixedFeedPosts',function(req,res){
+		Capsule.getUserMixedFeedPosts(req,res);
+	});
 	router.post('/getMySales',function(req,res){
 		Capsule.getMySales(req,res);
 	});

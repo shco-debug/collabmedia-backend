@@ -41,13 +41,13 @@ module.exports = function(){
 	process.STRIPE_CONFIG = {
 		DEV : {
 			token_api : "https://connect.stripe.com/oauth/token",
-			stripe_client_id : process.env.STRIPE_CLIENT_ID || "ca_AynXWWXR3loPwmLaGAvEAJHmm0GEObyE",
-			secret_key : process.env.STRIPE_SECRET_KEY_DEV || "sk_test_5M7DrMG5iek1yRa8DEwhcG2W"
+			stripe_client_id : process.env.STRIPE_CLIENT_ID || "",
+			secret_key : process.env.STRIPE_SECRET_KEY || ""
 		},
 		LIVE : {
 			token_api : "https://connect.stripe.com/oauth/token",
-			stripe_client_id : process.env.STRIPE_CLIENT_ID || "ca_AynXWWXR3loPwmLaGAvEAJHmm0GEObyE",
-			secret_key : process.env.STRIPE_SECRET_KEY_LIVE || "sk_live_3kZkuWPnVFoIIqCCY295aAJp00D7sADLR0"
+			stripe_client_id : process.env.STRIPE_CLIENT_ID_LIVE || process.env.STRIPE_CLIENT_ID || "",
+			secret_key : process.env.STRIPE_SECRET_KEY_LIVE || ""
 		}
 	};
 
