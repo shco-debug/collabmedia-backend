@@ -13,8 +13,8 @@ module.exports = {
       secure: true, // true for port 465 (SSL/TLS)
       requireTLS: false,
       auth: {
-        user: process.env.SMTP_USER || 'hello@lifeattimes.com',
-        pass: process.env.SMTP_PASS || 'B*T0XuwTtKN&kM@a'
+        user: process.env.SMTP_USER ,
+        pass: process.env.SMTP_PASS 
       },
       timeout: 30000,
       connectionTimeout: 30000,
@@ -36,9 +36,9 @@ module.exports = {
 
     // Email settings
     email: {
-      from: process.env.SMTP_FROM || 'Scrpt <hello@lifeattimes.com>',
-      replyTo: process.env.SMTP_REPLY_TO || 'hello@lifeattimes.com',
-      senderLine: process.env.SMTP_FROM || 'Scrpt <hello@lifeattimes.com>'
+      from: process.env.SMTP_FROM ,
+      replyTo: process.env.SMTP_REPLY_TO ,
+      senderLine: process.env.SMTP_FROM 
     }
   },
 
@@ -50,8 +50,8 @@ module.exports = {
       secure: true, // true for port 465 (SSL/TLS)
       requireTLS: false,
       auth: {
-        user: process.env.SMTP_USER || 'hello@lifeattimes.com',
-        pass: process.env.SMTP_PASS || 'B*T0XuwTtKN&kM@a'
+        user: process.env.SMTP_USER,
+        pass: process.env.SMTP_PASS 
       },
       timeout: 30000, // 30 seconds timeout
       connectionTimeout: 30000, // 30 seconds connection timeout
@@ -60,9 +60,9 @@ module.exports = {
       }
     },
     email: {
-      from: process.env.SMTP_FROM || 'Scrpt <hello@lifeattimes.com>',
-      replyTo: process.env.SMTP_REPLY_TO || 'hello@lifeattimes.com',
-      senderLine: process.env.SMTP_FROM || 'Scrpt <hello@lifeattimes.com>'
+      from: process.env.SMTP_FROM ,
+      replyTo: process.env.SMTP_REPLY_TO ,
+      senderLine: process.env.SMTP_FROM 
     }
   },
 
@@ -70,9 +70,9 @@ module.exports = {
   test: {
     mock: true,
     email: {
-      from: 'Scrpt <darshan@scrpt.com>',
-      replyTo: 'darshan@scrpt.com',
-      senderLine: 'Scrpt <darshan@scrpt.com>'
+      from: 'Ahaday <hello@ahaday.com>',
+      replyTo: 'hello@ahaday.com',
+      senderLine: 'Ahaday <hello@ahaday.com>'
     }
   }
 };

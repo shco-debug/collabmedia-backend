@@ -19,6 +19,7 @@ var async_lib = require("async");
 var Friend = require("./../models/friendsModel.js");
 const axios = require("axios");
 var PageStream = require("./../models/pageStreamModel.js");
+var PageUsedMedia = require("./../models/pageUsedMediaModel.js");
 var StreamEmailTracker = require("./../models/StreamEmailTrackerModel.js");
 var StreamConversation = require("./../models/StreamConversationModel.js");
 var StreamComments = require("./../models/StreamCommentsModel.js");
@@ -33,6 +34,111 @@ var AppSettings = require("../../server/models/appSettingModel.js");
 var CommonAlgo = require("./../components/commonAlgorithms.js");
 var Utilities = require("./utilities.js");
 var awsS3Utils = require("./../utilities/awsS3Utils.js");
+
+// ===== GLOBAL IN-MEMORY CACHE FOR PAGE USED MEDIA =====
+// Hybrid approach: Fast in-memory cache + persistent DB storage
+// Structure: Map { pageId => Set([mediaId1, mediaId2, ...]) }
+const pageUsedMediaCache = new Map();
+
+// Helper: Get used MediaIds for a page (checks memory first, then DB)
+const getUsedMediaIdsForPage = async (pageId) => {
+  if (!pageId) return [];
+  
+  const pageIdStr = String(pageId);
+  
+  // Check memory cache first
+  if (pageUsedMediaCache.has(pageIdStr)) {
+    const cached = Array.from(pageUsedMediaCache.get(pageIdStr));
+    console.log(`💾 Cache HIT for page ${pageIdStr}: ${cached.length} images excluded`);
+    return cached;
+  }
+  
+  // Cache miss - load from database
+  try {
+    const record = await PageUsedMedia.findOne({ pageId: new ObjectId(pageId) });
+    const usedIds = record && record.usedMediaIds ? record.usedMediaIds.map(id => String(id)) : [];
+    
+    // Warm the cache
+    pageUsedMediaCache.set(pageIdStr, new Set(usedIds));
+    console.log(`🔥 Cache WARMED for page ${pageIdStr}: Loaded ${usedIds.length} images from DB`);
+    
+    return usedIds;
+  } catch (error) {
+    console.log(`⚠️ Error loading used media for page ${pageIdStr}:`, error.message);
+    return [];
+  }
+};
+
+// Helper: Add used MediaIds for a page (updates both memory and DB)
+const addUsedMediaIdsForPage = async (pageId, mediaIds) => {
+  if (!pageId || !mediaIds || mediaIds.length === 0) return;
+  
+  const pageIdStr = String(pageId);
+  
+  // Filter out null/undefined values
+  const validMediaIds = mediaIds.filter(id => id).map(id => String(id));
+  if (validMediaIds.length === 0) return;
+  
+  // Update memory cache immediately
+  if (!pageUsedMediaCache.has(pageIdStr)) {
+    pageUsedMediaCache.set(pageIdStr, new Set());
+  }
+  validMediaIds.forEach(id => pageUsedMediaCache.get(pageIdStr).add(id));
+  
+  const totalCached = pageUsedMediaCache.get(pageIdStr).size;
+  console.log(`✅ Added ${validMediaIds.length} images to cache. Total excluded for page: ${totalCached}`);
+  
+  // Update database (async, non-blocking)
+  try {
+    await PageUsedMedia.findOneAndUpdate(
+      { pageId: new ObjectId(pageId) },
+      { 
+        $addToSet: { usedMediaIds: { $each: validMediaIds.map(id => new ObjectId(id)) } },
+        $set: { lastUpdated: Date.now() }
+      },
+      { upsert: true, new: true }
+    );
+    console.log(`💾 Database updated for page ${pageIdStr}`);
+  } catch (error) {
+    console.log(`⚠️ Error updating PageUsedMedia for page ${pageIdStr}:`, error.message);
+  }
+};
+
+// Helper: Clear cache for a page (useful for testing/reset)
+const clearUsedMediaCacheForPage = (pageId) => {
+  if (!pageId) return;
+  const pageIdStr = String(pageId);
+  pageUsedMediaCache.delete(pageIdStr);
+  console.log(`🗑️ Cleared cache for page ${pageIdStr}`);
+};
+
+// Helper: Reset used media for a page (clears both cache and DB)
+const resetUsedMediaForPage_INTERNAL_API = async (req, res) => {
+  const pageId = req.body.pageId || req.query.pageId;
+  
+  if (!pageId) {
+    return res.json({ code: 400, message: "pageId is required" });
+  }
+  
+  try {
+    // Clear memory cache
+    clearUsedMediaCacheForPage(pageId);
+    
+    // Delete from database
+    await PageUsedMedia.deleteOne({ pageId: new ObjectId(pageId) });
+    
+    return res.json({ 
+      code: 200, 
+      message: `Successfully reset used media tracking for page ${pageId}` 
+    });
+  } catch (error) {
+    return res.json({ 
+      code: 500, 
+      message: "Error resetting used media", 
+      error: error.message 
+    });
+  }
+};
 
 var crypto = require("crypto");
 //var exec = require('child_process').exec;
@@ -90,17 +196,15 @@ async function __getKeywordIdsByNames_CMIDW(selectedWords) {
 
   if (selectedWords.length) {
     conditions["$or"] = [
-      //{ GroupTagTitle : {$in : selectedWords} },  // ❌ Skip GroupTagTitle (like SCRPT)
-      { "Tags.TagTitle": { $in: selectedWords } }  // ✅ ONLY search Tags array (like alltags.MainGroupTagTitle)
+      { GroupTagTitle: { $in: selectedWords } }
     ];
   }
 
   var fields = {
     GroupTagTitle: 1,
-    Tags: 1,  // ✅ Include Tags array in results
     _id: 1,
   };
-  console.log("   - Executing groupTags.find() with Tags array search...");
+  console.log("   - Executing groupTags.find() with GroupTagTitle search...");
   console.log("   - Searching for keywords:", selectedWords);
 
   var results = await groupTags.find(conditions, fields); //.limit(10);
@@ -118,23 +222,10 @@ async function __getKeywordIdsByNames_CMIDW(selectedWords) {
     if (keywordIds.indexOf(groupTagId) < 0) {
       keywordIds.push(groupTagId);
       
-      var matchedKeyword = "";
-      
-      // Find which Tag matched (like alltags.MainGroupTagTitle)
-      var tags = results[i].Tags || [];
-      for (var j = 0; j < tags.length; j++) {
-        if (tags[j].TagTitle && selectedWords.includes(tags[j].TagTitle) && tags[j].status === 1) {
-          matchedKeyword = tags[j].TagTitle.toLowerCase().trim();
-          break;  // Use first match (like SCRPT uses MainGroupTagTitle)
-        }
-      }
-      
-      // Fallback to GroupTagTitle if no Tag matched (shouldn't happen with current query)
-      if (!matchedKeyword) {
-        matchedKeyword = typeof results[i].GroupTagTitle === "string"
-          ? results[i].GroupTagTitle.toLowerCase().trim()
-          : "";
-      }
+      // Use GroupTagTitle (maps to alltags.MainGroupTagTitle in scrpt)
+      var matchedKeyword = typeof results[i].GroupTagTitle === "string"
+        ? results[i].GroupTagTitle.toLowerCase().trim()
+        : "";
       
       secondaryKeywordsMap[groupTagId] = matchedKeyword;
     }
@@ -163,14 +254,12 @@ async function __getKeywordIdsByNames(selectedWordsArr) {
   };
   if (selectedWords.length) {
     conditions["$or"] = [
-      //{ GroupTagTitle: { $in: selectedWords } },  // ❌ Skip GroupTagTitle (like SCRPT)
-      { "Tags.TagTitle": { $in: selectedWords } }   // ✅ ONLY search Tags array (like alltags.MainGroupTagTitle)
+      { GroupTagTitle: { $in: selectedWords } }
     ];
   }
 
   var fields = {
     GroupTagTitle: 1,
-    Tags: 1,
     _id: 1,
   };
 
@@ -5682,7 +5771,7 @@ var getMediaFromSet = async function (req, callback) {
   var subsetByRank = reqObj.subsetByRank ? reqObj.subsetByRank : [];
   var subsetByRankObj2 = reqObj.subsetByRankObj2 ? reqObj.subsetByRankObj2 : {};
   var selectedKeywords = reqObj.generatedKeywords
-    ? reqObj.generatedKeywords.slice(0, 2) // Limit to 2 keywords for performance
+    ? reqObj.generatedKeywords  // STEP 2 FIX: Use ALL keywords (like scrpt)
     : [];
     
   var SecondaryKeywords = reqObj.SecondaryKeywords || [];
@@ -5745,13 +5834,38 @@ var getMediaFromSet = async function (req, callback) {
     InAppropFlagCount: { $lt: 5 },
   };
 
+  // ===== HYBRID CACHE: Exclude already-used images for this page =====
+  const pageId = reqObj.PageId;
+  if (pageId) {
+    try {
+      const usedMediaIds = await getUsedMediaIdsForPage(pageId);
+      
+      if (usedMediaIds.length > 0) {
+        const excludedObjectIds = usedMediaIds.map(id => {
+          try {
+            return new ObjectId(id);
+          } catch (e) {
+            return null;
+          }
+        }).filter(id => id !== null);
+        
+        if (excludedObjectIds.length > 0) {
+          conditions["_id"] = { $nin: excludedObjectIds };
+          console.log(`🚫 IMAGE 1: Excluding ${excludedObjectIds.length} already-used images from page ${pageId}`);
+        }
+      }
+    } catch (error) {
+      console.log(`⚠️ Error fetching used media for page ${pageId}:`, error.message);
+    }
+  }
+
   var fields = {};
 
   var sortObj = { "value.RandomSortId": -1 };
 
   var page = 1;
   //var per_page = 48;
-  var per_page = 100;  // Reduced for better performance
+  var per_page = 2500;  // STEP 3 FIX: Match scrpt result pool size
   var limit = page * per_page; //48
 
   var aggregateStages = [];
@@ -6420,7 +6534,7 @@ var getMediaFromSet2 = async function (req, callback) {
     ? reqObj.subsetByRankObj2
     : {};
   var selectedKeywords = reqObj.generatedKeywords2
-    ? reqObj.generatedKeywords2.slice(0, 2) // Limit to 2 keywords for performance
+    ? reqObj.generatedKeywords2  // STEP 2 FIX: Use ALL keywords (like scrpt)
     : [];
     
   var SecondaryKeywords = reqObj.SecondaryKeywords2 || [];
@@ -6488,13 +6602,38 @@ var getMediaFromSet2 = async function (req, callback) {
     InAppropFlagCount: { $lt: 5 },
   };
 
+  // ===== HYBRID CACHE: Exclude already-used images for this page =====
+  const pageId = reqObj.PageId;
+  if (pageId) {
+    try {
+      const usedMediaIds = await getUsedMediaIdsForPage(pageId);
+      
+      if (usedMediaIds.length > 0) {
+        const excludedObjectIds = usedMediaIds.map(id => {
+          try {
+            return new ObjectId(id);
+          } catch (e) {
+            return null;
+          }
+        }).filter(id => id !== null);
+        
+        if (excludedObjectIds.length > 0) {
+          conditions["_id"] = { $nin: excludedObjectIds };
+          console.log(`🚫 IMAGE 2: Excluding ${excludedObjectIds.length} already-used images from page ${pageId}`);
+        }
+      }
+    } catch (error) {
+      console.log(`⚠️ Error fetching used media for page ${pageId}:`, error.message);
+    }
+  }
+
   var fields = {};
 
   var sortObj = { "value.RandomSortId": -1 };
 
   var page = 1;
   //var per_page = 48;
-  var per_page = 100;  // Reduced for better performance
+  var per_page = 2500;  // STEP 3 FIX: Match scrpt result pool size
   var limit = page * per_page; //48
 
   var aggregateStages = [];
@@ -19834,7 +19973,7 @@ async function sendCoffeeInvitationEmail(
 
     // Get SMTP configuration
     const smtpConfig = process.EMAIL_ENGINE?.info?.smtpOptions;
-    const senderLine = process.EMAIL_ENGINE?.info?.senderLine || 'Scrpt <hello@lifeattimes.com>';
+    const senderLine = process.EMAIL_ENGINE?.info?.senderLine ;
 
     if (!smtpConfig) {
       console.error('❌ SMTP configuration not found');
@@ -21067,13 +21206,18 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
         }
       }
       
-      // Image 1: Use only first primary keyword ID
-      req.body.generatedKeywords = keyword1Id ? [keyword1Id] : [];
+      // STEP 1 FIX: Use ALL keywords for BOTH images (like scrpt)
+      var allPrimaryKeywordIds = [];
+      if (keyword1Id) allPrimaryKeywordIds.push(keyword1Id);
+      if (keyword2Id) allPrimaryKeywordIds.push(keyword2Id);
       
-      // Image 2: Use only second primary keyword ID
-      req.body.generatedKeywords2 = keyword2Id ? [keyword2Id] : [];
+      // Image 1: Use ALL primary keywords (same as scrpt)
+      req.body.generatedKeywords = allPrimaryKeywordIds;
       
-      // Keyword splitting logs removed for cleaner output
+      // Image 2: Use ALL primary keywords (same as scrpt)
+      req.body.generatedKeywords2 = allPrimaryKeywordIds;
+      
+      console.log("✅ Both images will use ALL keywords:", allPrimaryKeywordIds);
     } else {
       // Fallback: use all keywords for both images if not enough primary keywords
       req.body.generatedKeywords = keywords || [];
@@ -21455,6 +21599,26 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
           };
           await PageStream(DateToSave).save();
 
+          // ===== HYBRID CACHE: Track used MediaIds from first blend (main post image) =====
+          if (set1.length > 0 && set2.length > 0) {
+            const usedMediaIds = [];
+            
+            // Track ONLY the first blend pair (main post image)
+            // Versions 2-30 can reuse images
+            if (set1[0] && set1[0].MediaId) {
+              usedMediaIds.push(String(set1[0].MediaId));
+            }
+            if (set2[0] && set2[0].MediaId) {
+              usedMediaIds.push(String(set2[0].MediaId));
+            }
+            
+            // Update both memory cache and database
+            if (usedMediaIds.length > 0) {
+              await addUsedMediaIdsForPage(PageId, usedMediaIds);
+              console.log(`📌 Tracked ${usedMediaIds.length} images for post ${PostId} in page ${PageId}`);
+            }
+          }
+
           // Save blend settings to Media collection for 2MJ posts and Unsplash posts
           if ((PostStreamType === "2MJPost" || PostStreamType === "1UnsplashPost" || PostStreamType === "2UnsplashPost") && SelectedBlendImages.length > 0) {
             try {
@@ -21704,6 +21868,8 @@ var createNewUserAccount_INTERNAL_API = async function (req, res) {
     newUser.Password = newUser.generateHash(body.Password);
     newUser.Name = body.Name;
     newUser.NickName = body.NickName ? body.NickName : body.Name;
+    // Generate unique username from email (required field with unique constraint)
+    newUser.UserName = body.Email.split('@')[0] + '_' + Date.now();
     newUser.Gender = body.Gender;
     newUser.EmailConfirmationStatus = true;
 
@@ -21734,11 +21900,15 @@ var createNewUserAccount_INTERNAL_API = async function (req, res) {
       message: "User created successfully." 
     });
   } catch (error) {
+    console.error("❌ createNewUserAccount_INTERNAL_API Error:", error);
+    console.error("Error details:", error.message);
+    console.error("Error stack:", error.stack);
     return res.json({ 
       code: 500, 
       newUserId: newUserId, 
       userData: userData, 
-      message: "Failed to create user." 
+      message: "Failed to create user: " + error.message,
+      error: error.message 
     });
   }
 };
@@ -25125,6 +25295,7 @@ exports.addComments_INTERNAL_API = addComments_INTERNAL_API;
 exports.addGTAsyncAwait__INTERNAL_API = addGTAsyncAwait__INTERNAL_API; //used by automation tool to map keywords
 exports.setStreamMediaSelectionCriteria__INTERNAL_API =
   setStreamMediaSelectionCriteria__INTERNAL_API;
+exports.resetUsedMediaForPage_INTERNAL_API = resetUsedMediaForPage_INTERNAL_API; // Reset used media tracking for a page
 exports.downloadStreamPostMetaData_INTERNAL_API =
   downloadStreamPostMetaData_INTERNAL_API;
 
