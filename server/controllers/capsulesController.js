@@ -944,18 +944,10 @@ _________________________________________________________________________
 
 var findAllPaginated = async function (req, res) {
   try {
-    // Safe session access for admin, subadmin, and regular users
-    var myself = null;
-
-    if (req.session && req.session.user) {
-      myself = req.session.user;
-    } else if (req.session && req.session.admin) {
-      myself = req.session.admin;
-    } else if (req.session && req.session.subadmin) {
-      myself = req.session.subadmin;
-    }
-
-    if (!myself) {
+    console.log('🔍 findAllPaginated called');
+    
+    // Get user from session
+    if (!req.session || !req.session.user) {
       var response = {
         status: 401,
         message: "User session not found",
@@ -964,37 +956,54 @@ var findAllPaginated = async function (req, res) {
       return res.json(response);
     }
 
+    // Fetch user from database to get current Role and permissions
+    const currentUser = await User.findById(req.session.user._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      var response = {
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    const myself = currentUser;
+    console.log('👤 Current user:', { id: myself._id, name: myself.Name, role: myself.Role });
+
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
+    // Get ALL capsules user has access to (created, shared, purchased, journal)
     var conditions = {
       $or: [
         {
           CreaterId: myself._id,
-          Origin: "created",
-          IsPublished: true,
-          "LaunchSettings.Audience": "ME",
+          Origin: "created"
         },
         {
           CreaterId: myself._id,
-          Origin: "duplicated",
-          IsPublished: true,
-          "LaunchSettings.Audience": "ME",
+          Origin: "duplicated"
         },
         {
           CreaterId: myself._id,
-          Origin: "addedFromLibrary",
-          IsPublished: true,
-          "LaunchSettings.Audience": "ME",
+          Origin: "addedFromLibrary"
         },
         {
-          CreaterId: myself._id,
-          IsPublished: true,
-          "LaunchSettings.Audience": "OTHERS",
+          CreaterId: { $ne: myself._id },
+          OwnerId: myself._id,
+          Origin: "shared"
         },
         {
           OwnerId: myself._id,
-          IsPublished: true
+          Origin: "published"
+        },
+        {
+          CreaterId: myself._id,
+          Origin: "journal"
         }
       ],
       Status: true,
@@ -1004,6 +1013,8 @@ var findAllPaginated = async function (req, res) {
     var sortObj = {
       ModifiedOn: -1,
     };
+
+    console.log('📋 Query conditions:', JSON.stringify(conditions, null, 2));
 
     // 🎯 OPTIMIZED: Only select fields needed for dashboard cards
     var fields = {
@@ -1033,6 +1044,15 @@ var findAllPaginated = async function (req, res) {
       .limit(limit)
       .exec();
     const resultsLength = await Capsule.countDocuments(conditions).exec();
+    
+    console.log(`✅ Found ${resultsLength} total capsules, returning ${results.length} results`);
+    console.log('📊 Sample results:', results.slice(0, 2).map(r => ({ 
+      id: r._id, 
+      title: r.Title, 
+      published: r.IsPublished, 
+      audience: r.LaunchSettings?.Audience,
+      origin: r.Origin
+    })));
 
     // 🎯 Populate CreaterId for dashboard cards
     const populatedResults = await Promise.all(
@@ -1111,7 +1131,7 @@ var findAllPaginated = async function (req, res) {
       tags: [], // Empty for now - can be populated separately if needed
       status: capsule.Status,
       isPublished: capsule.IsPublished,
-      isLaunched: capsule.IsPublished,
+      isLaunched: capsule.IsLaunched,  // FIXED: was capsule.IsPublished (copy-paste error)
       isDeleted: capsule.IsDeleted,
       origin: capsule.Origin,
       ownerId: capsule.OwnerId?.toString(),
@@ -1155,42 +1175,57 @@ _________________________________________________________________________
 
 var createdByMe = async function (req, res) {
   try {
+    // Get user from session
+    if (!req.session || !req.session.user) {
+      var response = {
+        status: 401,
+        message: "User session not found",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    // Fetch user from database to get current Role and permissions
+    const currentUser = await User.findById(req.session.user._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      var response = {
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      };
+      return res.json(response);
+    }
+
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
+    console.log('🔍 createdByMe - Current user ID:', currentUser._id);
+
+    // Include both published AND unpublished capsules created by the user
     var conditions = {
       $or: [
         {
-          CreaterId: req.session.user._id,
-          Origin: "created",
-          IsPublished: true,
-          "LaunchSettings.Audience": "ME",
+          CreaterId: currentUser._id,
+          Origin: "created"
         },
         {
-          CreaterId: req.session.user._id,
-          Origin: "duplicated",
-          IsPublished: true,
-          "LaunchSettings.Audience": "ME",
+          CreaterId: currentUser._id,
+          Origin: "duplicated"
         },
         {
-          CreaterId: req.session.user._id,
-          Origin: "addedFromLibrary",
-          IsPublished: true,
-          "LaunchSettings.Audience": "ME",
-        },
-        {
-          CreaterId: req.session.user._id,
-          IsPublished: true,
-          "LaunchSettings.Audience": "OTHERS",
-        },
-        {
-          OwnerId: req.session.user._id,
-          IsPublished: true
+          CreaterId: currentUser._id,
+          Origin: "addedFromLibrary"
         }
       ],
       Status: true,
       IsDeleted: false,
     };
+
+    console.log('📋 createdByMe conditions:', JSON.stringify(conditions, null, 2));
 
     var sortObj = {
       ModifiedOn: -1,
@@ -1205,62 +1240,41 @@ var createdByMe = async function (req, res) {
       .exec();
 
     const resultsLength = await Capsule.countDocuments(conditions).exec();
+    
+    console.log(`✅ createdByMe found ${resultsLength} total capsules, returning ${results.length} results`);
 
-    // Populate CreaterId for createdByMe results
+    // Populate CreaterId for createdByMe results (all users are in User collection)
     const populatedResults = await Promise.all(
       results.map(async (capsule) => {
         if (capsule.CreaterId) {
           try {
-            // Try to find in User collection first
+            // Fetch creator from User collection (includes users, subadmins, and admins)
             const user = await User.findById(capsule.CreaterId)
-              .select("Name ProfilePic")
+              .select("Name ProfilePic Role")
               .exec();
+            
             if (user) {
               capsule.CreaterId = {
                 _id: user._id,
                 Name: user.Name,
                 ProfilePic: user.ProfilePic,
+                Role: user.Role
               };
-              return capsule;
-            }
-
-            // Try to find in Admin collection
-            const admin = await Admin.findById(capsule.CreaterId)
-              .select("name ProfilePic")
-              .exec();
-            if (admin) {
+            } else {
+              // If not found, set default values
               capsule.CreaterId = {
-                _id: admin._id,
-                Name: admin.name,
-                ProfilePic: admin.ProfilePic,
+                _id: capsule.CreaterId,
+                Name: "Unknown User",
+                ProfilePic: "/assets/users/default.png",
+                Role: "user"
               };
-              return capsule;
             }
-
-            // Try to find in SubAdmin collection
-            const subAdmin = await SubAdmin.findById(capsule.CreaterId)
-              .select("name ProfilePic")
-              .exec();
-            if (subAdmin) {
-              capsule.CreaterId = {
-                _id: subAdmin._id,
-                Name: subAdmin.name,
-                ProfilePic: subAdmin.ProfilePic,
-              };
-              return capsule;
-            }
-
-            // If not found in any collection, set default values
-            capsule.CreaterId = {
-              _id: capsule.CreaterId,
-              Name: "Unknown User",
-              ProfilePic: "/assets/users/default.png",
-            };
           } catch (error) {
             capsule.CreaterId = {
               _id: capsule.CreaterId,
               Name: "Unknown User",
               ProfilePic: "/assets/users/default.png",
+              Role: "user"
             };
           }
         }
@@ -1273,6 +1287,116 @@ var createdByMe = async function (req, res) {
       status: 200,
       message: "Capsules listing",
       results: populatedResults,
+    };
+    res.json(response);
+  } catch (error) {
+    console.log(error);
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+    };
+    res.json(response);
+  }
+};
+
+/*________________________________________________________________________
+   * @Date:      		November 3 2025
+   * @Method :   		activeLaunched
+   * Created By: 		AI Assistant
+   * Modified On:		-
+   * @Purpose:   		Get capsules that are both published AND launched
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR"
+_________________________________________________________________________
+*/
+
+var activeLaunched = async function (req, res) {
+  try {
+    // Get user from session
+    if (!req.session || !req.session.user) {
+      var response = {
+        status: 401,
+        message: "User session not found",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    // Fetch user from database to get current Role and permissions
+    const currentUser = await User.findById(req.session.user._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      var response = {
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    var limit = req.body.perPage ? req.body.perPage : 0;
+    var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
+
+    console.log('🚀 activeLaunched - Current user ID:', currentUser._id);
+
+    // Get capsules that are both published AND launched (including purchased streams)
+    var conditions = {
+      $or: [
+        {
+          CreaterId: currentUser._id,
+          Origin: "created"
+        },
+        {
+          CreaterId: currentUser._id,
+          Origin: "duplicated"
+        },
+        {
+          CreaterId: currentUser._id,
+          Origin: "addedFromLibrary"
+        },
+        {
+          CreaterId: { $ne: currentUser._id },
+          OwnerId: currentUser._id,
+          Origin: "shared"
+        },
+        {
+          OwnerId: currentUser._id,
+          Origin: "published"
+        }
+      ],
+      IsPublished: true,
+      IsLaunched: true,
+      Status: true,
+      IsDeleted: false,
+    };
+
+    console.log('📋 activeLaunched conditions:', JSON.stringify(conditions, null, 2));
+
+    var sortObj = {
+      ModifiedOn: -1,
+    };
+
+    var fields = {};
+
+    const results = await Capsule.find(conditions, fields)
+      .sort(sortObj)
+      .skip(offset)
+      .limit(limit)
+      .exec();
+
+    const resultsLength = await Capsule.countDocuments(conditions).exec();
+    
+    console.log(`✅ activeLaunched found ${resultsLength} total capsules, returning ${results.length} results`);
+
+    var response = {
+      count: resultsLength,
+      status: 200,
+      message: "Active launched capsules",
+      results: results,
     };
     res.json(response);
   } catch (error) {
@@ -1299,12 +1423,37 @@ _________________________________________________________________________
 
 var sharedWithMe = async function (req, res) {
   try {
+    // Get user from session
+    if (!req.session || !req.session.user) {
+      var response = {
+        status: 401,
+        message: "User session not found",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    // Fetch user from database to get current Role and permissions
+    const currentUser = await User.findById(req.session.user._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      var response = {
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      };
+      return res.json(response);
+    }
+
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
     var conditions = {
-      CreaterId: { $ne: req.session.user._id },
-      OwnerId: req.session.user._id,
+      CreaterId: { $ne: currentUser._id },
+      OwnerId: currentUser._id,
       Origin: "shared",
       Status: true,
       IsDeleted: false,
@@ -1355,12 +1504,37 @@ _________________________________________________________________________
 
 var byTheHouse = async function (req, res) {
   try {
+    // Get user from session
+    if (!req.session || !req.session.user) {
+      var response = {
+        status: 401,
+        message: "User session not found",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    // Fetch user from database to get current Role and permissions
+    const currentUser = await User.findById(req.session.user._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      var response = {
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      };
+      return res.json(response);
+    }
+
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
     var conditions = {
       Origin: "byTheHouse",
-      CreaterId: req.session.user._id,
+      CreaterId: currentUser._id,
       Status: true,
       IsDeleted: false,
     };
@@ -1862,33 +2036,57 @@ _________________________________________________________________________
 
 var publishedByMe = async function (req, res) {
   try {
+    // Get user from session
+    if (!req.session || !req.session.user) {
+      var response = {
+        status: 401,
+        message: "User session not found",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    // Fetch user from database to get current Role and permissions
+    const currentUser = await User.findById(req.session.user._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      var response = {
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    console.log('🔍 createdByMe - Current user ID:', currentUser._id);
+    
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
+    // Include both published AND unpublished capsules created by the user
     var conditions = {
       $or: [
         {
-          CreaterId: req.session.user._id,
-          Origin: "created",
-          IsPublished: true,
-          "LaunchSettings.Audience": "ME",
+          CreaterId: currentUser._id,
+          Origin: "created"
         },
         {
-          CreaterId: req.session.user._id,
-          Origin: "duplicated",
-          IsPublished: true,
-          "LaunchSettings.Audience": "ME",
+          CreaterId: currentUser._id,
+          Origin: "duplicated"
         },
         {
-          CreaterId: req.session.user._id,
-          Origin: "addedFromLibrary",
-          IsPublished: true,
-          "LaunchSettings.Audience": "ME",
-        },
+          CreaterId: currentUser._id,
+          Origin: "addedFromLibrary"
+        }
       ],
       Status: true,
       IsDeleted: false,
     };
+
+    console.log('📋 createdByMe conditions:', JSON.stringify(conditions, null, 2));
 
     var sortObj = {
       ModifiedOn: -1,
@@ -1935,39 +2133,54 @@ _________________________________________________________________________
 
 var publishedForMe = async function (req, res) {
   try {
-
-    // Safe session access for admin, subadmin, and regular users
-    var myself = null;
-
-    if (req.session && req.session.user) {
-      myself = req.session.user;
-    } else if (req.session && req.session.admin) {
-      myself = req.session.admin;
-    } else if (req.session && req.session.subadmin) {
-      myself = req.session.subadmin;
-    }
-
-    if (!myself) {
+    // Get user from session
+    if (!req.session || !req.session.user) {
       var response = {
         status: 401,
-        message:
-          "User session not found. Please login as admin, subadmin, or regular user.",
+        message: "User session not found",
         results: null,
       };
       return res.json(response);
     }
 
+    // Fetch user from database to get current Role and permissions
+    const currentUser = await User.findById(req.session.user._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      var response = {
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    const myself = currentUser;
+
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-    // SIMPLE APPROACH: Just check if OwnerId matches current user
-    // This will return all capsules owned by the user (purchased, shared, etc.)
+    console.log('🛒 publishedForMe - Current user ID:', myself._id);
+
+    // Match scrpt reference - returns purchased/received capsules (instances created for this user)
     var conditions = {
-      OwnerId: myself._id, // Simple: capsules owned by this user
-      IsPublished: true, // Must be published
+      $or: [
+        {
+          UniqueIdPerOwner: { $exists: true },
+          OwnerId: myself._id,
+          Origin: "published",
+          IsPublished: true,
+          "LaunchSettings.Audience": "ME"
+        }
+      ],
       Status: true,
       IsDeleted: false,
     };
+
+    console.log('📋 publishedForMe conditions:', JSON.stringify(conditions, null, 2));
 
     var sortObj = {
       //Order : 1,
@@ -1984,12 +2197,8 @@ var publishedForMe = async function (req, res) {
       .exec();
     const resultsLength = await Capsule.countDocuments(conditions).exec();
 
-    // Populate CreaterId with name and profile picture from User, Admin, or SubAdmin collections
-    // Note: Schema updated to allow flexible population from multiple collections
-    const User = require("./../models/userModel.js");
-    const Admin = require("./../models/adminModel.js");
-    const SubAdmin = require("./../models/subAdminModel.js");
-
+    // Populate CreaterId with name and profile picture from User collection
+    // All users (regular, subadmin, admin) are in the User collection with Role field
     const populatedResults = await Promise.all(
       results.map(async (capsule) => {
         // Convert Mongoose document to plain object to prevent serialization issues
@@ -1997,54 +2206,27 @@ var publishedForMe = async function (req, res) {
         
         if (capsuleObj.CreaterId) {
           try {
-            // Try User collection first (as per original schema)
-            const user = await User.findById(capsuleObj.CreaterId)
-              .select("Name ProfilePic")
+            // Fetch creator from User collection (includes users, subadmins, and admins)
+            const creator = await User.findById(capsuleObj.CreaterId)
+              .select("Name ProfilePic Role")
               .exec();
-            if (user) {
-              const populatedCreaterId = {
-                _id: user._id.toString(),
-                Name: user.Name,
-                ProfilePic: user.ProfilePic || "/assets/users/default.png",
+            
+            if (creator) {
+              capsuleObj.CreaterId = {
+                _id: creator._id.toString(),
+                Name: creator.Name,
+                ProfilePic: creator.ProfilePic || "/assets/users/default.png",
+                Role: creator.Role
               };
-              capsuleObj.CreaterId = populatedCreaterId;
-              return capsuleObj;
-            }
-
-            // Try Admin collection (now supported by updated schema)
-            const admin = await Admin.findById(capsuleObj.CreaterId)
-              .select("name ProfilePic")
-              .exec();
-            if (admin) {
-              const populatedCreaterId = {
-                _id: admin._id.toString(),
-                Name: admin.name,
-                ProfilePic: admin.ProfilePic || "/assets/users/default.png",
+            } else {
+              // If not found, set default values
+              capsuleObj.CreaterId = {
+                _id: capsuleObj.CreaterId.toString(),
+                Name: "Unknown User",
+                ProfilePic: "/assets/users/default.png",
+                Role: "user"
               };
-              capsuleObj.CreaterId = populatedCreaterId;
-              return capsuleObj;
             }
-
-            // Try SubAdmin collection (now supported by updated schema)
-            const subAdmin = await SubAdmin.findById(capsuleObj.CreaterId)
-              .select("name ProfilePic")
-              .exec();
-            if (subAdmin) {
-              const populatedCreaterId = {
-                _id: subAdmin._id.toString(),
-                Name: subAdmin.name,
-                ProfilePic: subAdmin.ProfilePic || "/assets/users/default.png",
-              };
-              capsuleObj.CreaterId = populatedCreaterId;
-              return capsuleObj;
-            }
-
-            // If not found in any collection, set default values
-            capsuleObj.CreaterId = {
-              _id: capsuleObj.CreaterId.toString(),
-              Name: "Unknown User",
-              ProfilePic: "/assets/users/default.png",
-            };
           } catch (error) {
             console.error(
               "❌ Error populating CreaterId for capsule:",
@@ -2056,6 +2238,7 @@ var publishedForMe = async function (req, res) {
               _id: capsuleObj.CreaterId.toString(),
               Name: "Unknown User",
               ProfilePic: "/assets/users/default.png",
+              Role: "user"
             };
           }
         }
@@ -10948,6 +11131,7 @@ exports.find = find;
 exports.findAll = findAll;
 exports.findAllPaginated = findAllPaginated;
 exports.createdByMe = createdByMe;
+exports.activeLaunched = activeLaunched;
 exports.sharedWithMe = sharedWithMe;
 exports.byTheHouse = byTheHouse;
 exports.populateCapsuleWithGroupTags = populateCapsuleWithGroupTags;

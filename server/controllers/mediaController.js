@@ -2363,224 +2363,72 @@ const syncGdTwoMjImage_INTERNAL_API = async (req, res) => {
 };
 const addMjImageToMedia__INTERNAL_API = async function (req, res) {
   console.log("🎯 addMjImageToMedia__INTERNAL_API function hit!");
-
-  // Log request body with image size instead of full base64
-  if (req.body && req.body.imageData) {
-    const imageSize = req.body.imageData.length;
-    const logBody = { ...req.body };
-    logBody.imageData = `[Base64 Image Data - ${imageSize} characters]`;
-    console.log("📥 Request body:", JSON.stringify(logBody, null, 2));
-  } else if (req.body && req.body.Base64Image) {
-    const imageSize = req.body.Base64Image.length;
-    const logBody = { ...req.body };
-    logBody.Base64Image = `[Base64 Image Data - ${imageSize} characters]`;
-    console.log("📥 Request body:", JSON.stringify(logBody, null, 2));
-  } else {
-    console.log("📥 Request body:", JSON.stringify(req.body, null, 2));
-  }
+  console.log("📥 Request body:", JSON.stringify(req.body, null, 2));
 
   let inputObj = req.body || {};
 
+  // Validate required fields
   const realFileName =
     typeof inputObj.GoogleDriveFilename === "string"
       ? inputObj.GoogleDriveFilename.trim()
       : null;
 
   if (!realFileName) {
-    return res.json({ code: 404, message: "GoogleDriveFilename is invalid" });
+    return res.json({ code: 404, message: "GoogleDriveFilename is required" });
   }
 
-  //first thing to check whether the realFileName in the db or not
-  const mediaRecord = await media.find(
-    { IsDeleted: 0, "MetaData.GoogleDriveFilename": realFileName },
-    { _id: 1 }
-  );
-  if (mediaRecord.length) {
-    console.log(`🔄 Found existing media with same filename: ${realFileName}`);
-
-    // Process tags for existing media if MetaData is provided
-    if (inputObj.MetaData && inputObj.MetaData.Subjects) {
-      console.log(
-        `🏷️ Processing tags for existing media: ${mediaRecord[0]._id}`
-      );
-      const tags = inputObj.Prompt || "";
-      if (tags) {
-        await addGTAsyncAwait(tags, mediaRecord[0]._id, inputObj.MetaData);
-      }
-    }
-
-    return res.json({
-      code: 200,
-      message: "MJ image with the provided name already exists.",
+  // Check if MediaUrls array is provided (new URL-based approach)
+  const mediaUrls = inputObj.MediaUrls || [];
+  if (!mediaUrls.length) {
+    return res.json({ 
+      code: 404, 
+      message: "MediaUrls array is required. Example: [{ Size: 'aspectfit', URL: 'https://...' }]" 
     });
   }
 
-  // Check if same image content already exists on S3 by generating hash
-  const crypto = require("crypto");
-  const buffer = Buffer.from(inputObj.Base64Image, "base64");
-  const imageHash = crypto.createHash("md5").update(buffer).digest("hex");
-
-  // Look for existing media with same image hash
-  const existingImageRecord = await media.findOne(
-    {
-      IsDeleted: 0,
-      ImageHash: imageHash,
-    },
-    {
-      _id: 1,
-      Location: 1,
-    }
+  // Determine media type (default to Image if not specified)
+  const mediaType = inputObj.MediaType || "Image";
+  const contentType = inputObj.ContentType || (
+    mediaType === "Video" ? "video/mp4" : 
+    mediaType === "Audio" ? "audio/mpeg" : 
+    "image/webp"
   );
 
-  if (existingImageRecord) {
-    console.log(`🔄 Found existing image with same content, reusing S3 URL`);
-
-    // Process tags for existing media if MetaData is provided
-    if (inputObj.MetaData && inputObj.MetaData.Subjects) {
-      console.log(
-        `🏷️ Processing tags for existing media: ${existingImageRecord._id}`
-      );
-      const tags = inputObj.Prompt || "";
-      if (tags) {
-        await addGTAsyncAwait(tags, existingImageRecord._id, inputObj.MetaData);
-      }
-    }
-
-    return res.json({
-      code: 200,
-      message:
-        "Image with same content already exists, reusing existing S3 URL.",
-      existingMediaId: existingImageRecord._id,
-      s3Url: existingImageRecord.Location[0]?.URL,
-    });
-  }
-
-  const Reset = "\x1b[0m",
-    FgGreen = "\x1b[32m";
+  const Reset = "\x1b[0m";
+  const FgGreen = "\x1b[32m";
 
   try {
-    if (!realFileName && inputObj.Base64Image) {
-      return res.json({
-        code: 404,
-        message: "Could not find the image in google drive",
-      });
-    }
-
-    // Import AWS S3 utilities
-    const awsS3Utils = require("../utilities/awsS3Utils");
-
-    const extension = "png";
-    var imgUrl = `uploadImageTool_${
-      dateFormat() + "_" + realFileName.replace(/.png/g, "")
-    }.${extension}`;
-
-    // Convert base64 to buffer
-    const buffer = Buffer.from(inputObj.Base64Image, "base64");
-
-    // Upload to S3 instead of local storage
-    const s3Key = `scrptMedia/img/aspectfit/${imgUrl}`;
-    const uploadResult = await awsS3Utils.uploadBufferToS3(
-      buffer,
-      s3Key,
-      "image/png"
+    // Check if media with same filename already exists
+    const existingMediaRecord = await media.findOne(
+      { IsDeleted: 0, "MetaData.GoogleDriveFilename": realFileName },
+      { _id: 1 }
     );
 
-    if (!uploadResult.success) {
-      console.error("❌ S3 Upload failed:", uploadResult.error);
+    if (existingMediaRecord) {
+      console.log(`🔄 Found existing media with same filename: ${realFileName}`);
+
+      // Process tags for existing media if MetaData is provided
+      if (inputObj.MetaData && inputObj.MetaData.Subjects) {
+        console.log(
+          `🏷️ Processing tags for existing media: ${existingMediaRecord._id}`
+        );
+        const tags = inputObj.Prompt || "";
+        if (tags) {
+          await addGTAsyncAwait(tags, existingMediaRecord._id, inputObj.MetaData);
+        }
+      }
+
       return res.json({
-        code: 500,
-        message: "Failed to upload image to S3",
-        error: uploadResult.error,
+        code: 200,
+        message: "Media with the provided filename already exists.",
+        mediaId: existingMediaRecord._id,
       });
     }
 
-    console.log(FgGreen, `- ${realFileName} - synced successfully to S3.`);
+    console.log(FgGreen, `- ${realFileName} - Processing media URLs (no upload needed)`);
     console.log(Reset, `\n`);
 
-    // Generate S3 URL for the uploaded image
-    const bucket = process.env.AWS_BUCKET_NAME || "scrpt";
-    const region = process.env.AWS_REGION || "us-east-1";
-    const s3Url = `https://${bucket}.s3.${region}.amazonaws.com/${s3Key}`;
-
-    console.log("✅ Image uploaded to S3:", s3Url);
-
-    // Process image with Sharp to create optimized WebP and multiple sizes
-    const sharp = require("sharp");
-
-    // Create optimized WebP version
-    const webpBuffer = await sharp(buffer)
-      .webp({ quality: 85, effort: 6 })
-      .toBuffer();
-
-    // Upload WebP version to S3
-    const webpKey = `scrptMedia/img/aspectfit/${imgUrl.replace(
-      ".png",
-      ".webp"
-    )}`;
-    const webpUploadResult = await awsS3Utils.uploadBufferToS3(
-      webpBuffer,
-      webpKey,
-      "image/webp"
-    );
-
-    if (!webpUploadResult.success) {
-      console.error("❌ WebP S3 Upload failed:", webpUploadResult.error);
-    } else {
-      console.log(
-        "✅ WebP image uploaded to S3:",
-        `https://${bucket}.s3.${region}.amazonaws.com/${webpKey}`
-      );
-    }
-
-    // Create multiple sizes for thumbnails
-    const sizes = [
-      { name: "100", width: 100, height: 100 },
-      { name: "300", width: 300, height: 300 },
-      { name: "600", width: 600, height: 600 },
-      { name: "aspectfit_small", width: 575, height: 360 },
-    ];
-
-    const thumbnailUrls = [];
-
-    for (const size of sizes) {
-      try {
-        // Create optimized thumbnail
-        const thumbnailBuffer = await sharp(buffer)
-          .resize(size.width, size.height, {
-            fit: "cover",
-            position: "center",
-          })
-          .webp({ quality: 80, effort: 6 })
-          .toBuffer();
-
-        // Upload thumbnail to S3
-        const thumbnailKey = `scrptMedia/img/${size.name}/${imgUrl.replace(
-          ".png",
-          ".webp"
-        )}`;
-        const thumbnailUploadResult = await awsS3Utils.uploadBufferToS3(
-          thumbnailBuffer,
-          thumbnailKey,
-          "image/webp"
-        );
-
-        if (thumbnailUploadResult.success) {
-          const thumbnailUrl = `https://${bucket}.s3.${region}.amazonaws.com/${thumbnailKey}`;
-          thumbnailUrls.push({
-            size: size.name,
-            url: thumbnailUrl,
-          });
-          console.log(`✅ Thumbnail ${size.name} uploaded to S3`);
-        }
-      } catch (error) {
-        console.error(
-          `❌ Error creating thumbnail ${size.name}:`,
-          error.message
-        );
-      }
-    }
-
-    //save record to Media collection here
+    // Generate auto-increment ID
     var incNum = 0;
     var data = await counters.findOneAndUpdate(
       { _id: "userId" },
@@ -2591,20 +2439,19 @@ const addMjImageToMedia__INTERNAL_API = async function (req, res) {
     incNum = data.seq || 0;
 
     if (!incNum) {
-      return res.json({ code: 501, message: "Something went wrong." });
+      return res.json({ code: 501, message: "Failed to generate auto ID." });
     }
 
-    var type = "Image";
-    var thumbnail = "";
-    var postStatement = "";
-    var photographer = "";
-    var title = "";
+    // Prepare media data
     var Prompt = inputObj.Prompt || "";
+    var title = inputObj.Title || "";
+    var photographer = inputObj.Photographer || "";
+    var postStatement = inputObj.Content || "";
 
     var dataToUpload = {
       Title: title || "",
       Photographer: photographer || "",
-      Location: [],
+      Location: mediaUrls, // Directly use the provided URLs array
       AutoId: incNum,
       UploadedBy: "admin",
       UploadedOn: Date.now(),
@@ -2626,52 +2473,42 @@ const addMjImageToMedia__INTERNAL_API = async function (req, res) {
       IsDeleted: 0,
       TagType: "",
       Content: postStatement,
-      ContentType: "image/png",
-      MediaType: type,
+      ContentType: contentType,
+      MediaType: mediaType,
       AddedHow: "uploadImageTool",
-      thumbnail: thumbnail,
-      Locator: imgUrl.replace(".png", "") + "_" + incNum,
+      thumbnail: inputObj.Thumbnail || "",
+      Locator: realFileName.replace(/\.(png|jpg|jpeg|webp|mp4|mp3)$/gi, "") + "_" + incNum,
       Lightness: inputObj.Lightness || 0,
       DominantColors: inputObj.DominantColors || "",
       MetaData: inputObj.MetaData || {},
-      ImageHash: imageHash, // Store image hash for deduplication
     };
 
-    dataToUpload.Location.push({
-      Size: "",
-      URL: s3Url, // Original PNG URL
-    });
-
-    // Add WebP version
-    if (webpUploadResult.success) {
-      dataToUpload.Location.push({
-        Size: "webp",
-        URL: `https://${bucket}.s3.${region}.amazonaws.com/${webpKey}`,
-      });
-    }
-
-    // Add thumbnail URLs
-    thumbnailUrls.forEach((thumb) => {
-      dataToUpload.Location.push({
-        Size: thumb.size,
-        URL: thumb.url,
-      });
-    });
-
+    // Save media record to database
     var mediaData = await media(dataToUpload).save();
-    console.log("Media record saved = ", mediaData._id);
+    console.log("✅ Media record saved = ", mediaData._id);
+    console.log("📦 Media URLs saved:", mediaUrls.length, "URLs");
+
+    // Process tags if provided
     mediaData = mediaData ? mediaData : {};
     var tags = typeof mediaData.Prompt === "string" ? mediaData.Prompt : "";
     if (tags && mediaData._id) {
       await addGTAsyncAwait(tags, mediaData._id, inputObj.MetaData);
+      console.log("🏷️ Tags processed successfully");
     }
-    return res
-      .status(200)
-      .json({ code: 200, message: "MJ image uploaded successfully." });
+
+    return res.status(200).json({ 
+      code: 200, 
+      message: "Media URLs saved successfully (no upload performed).",
+      mediaId: mediaData._id,
+      urlCount: mediaUrls.length
+    });
   } catch (err) {
-    // TODO(developer) - Handle error
-    console.log(err);
-    return res.status(501).json({ code: 501, message: "Something went wrong" });
+    console.error("❌ Error saving media:", err);
+    return res.status(501).json({ 
+      code: 501, 
+      message: "Something went wrong",
+      error: err.message 
+    });
   }
 };
 var addUnsplashImageToMedia__INTERNAL_API = async function (req, res) {
@@ -4331,6 +4168,9 @@ const filteredData = async function (req, res) {
     fields["AddedWhere"] = { $ne: "contentPage" };
 
     console.log("Fields---------", fields);
+    console.log(`📂 filteredData using collection: ${media.collection.name}`);
+    console.log(`🗄️ filteredData using database: ${media.db.databaseName}`);
+    
     var offset = req.body.offset ? parseInt(req.body.offset) : 0;
     var limit = req.body.limit ? parseInt(req.body.limit) : 0;
     var parameters = {
@@ -4937,6 +4777,134 @@ const findAllStatus = async function (req, res) {
   }
 };
 
+/**
+ * Delete media from database (soft delete only - marks as deleted)
+ * @param {Object} req - Request object
+ * @param {Object} res - Response object
+ * @returns {Promise<Object>} Deletion result
+ */
+const deleteMedia = async function (req, res) {
+  const mongoose = require('mongoose');
+  
+  try {
+    const testMode = req.body.testMode || false;
+    const mediaIds = req.body.media || [];
+    
+    if (!Array.isArray(mediaIds) || mediaIds.length === 0) {
+      return res.status(400).json({
+        code: 400,
+        message: "Invalid or empty media array",
+      });
+    }
+
+    // Convert to both ObjectId and string formats to handle mixed _id types
+    const objectIds = [];
+    const stringIds = [];
+    
+    mediaIds.forEach(id => {
+      try {
+        objectIds.push(new mongoose.Types.ObjectId(id));
+      } catch (e) {
+        // Invalid ObjectId format, skip
+      }
+      stringIds.push(id.toString());
+    });
+
+    const searchQuery = { 
+      $or: [
+        { _id: { $in: objectIds } },
+        { _id: { $in: stringIds } }
+      ]
+    };
+
+    // Use direct MongoDB query to handle both ObjectId and string _id
+    const db = mongoose.connection.db;
+    const collectionName = 'media';
+    
+    let mediaRecords = [];
+    if (db) {
+      const cursor = db.collection(collectionName).find(searchQuery, {
+        projection: { _id: 1, Status: 1, MediaType: 1, Locator: 1, IsDeleted: 1 }
+      });
+      mediaRecords = await cursor.toArray();
+    } else {
+      mediaRecords = await media.find(
+        searchQuery,
+        { _id: 1, Status: 1, MediaType: 1, Locator: 1, IsDeleted: 1 }
+      );
+    }
+
+    if (mediaRecords.length === 0) {
+      return res.status(404).json({
+        code: 404,
+        message: "No media found with provided IDs",
+        searchedIds: mediaIds,
+      });
+    }
+
+    // Check which ones are already deleted
+    const alreadyDeleted = mediaRecords.filter(m => m.IsDeleted === 1).length;
+    const toDelete = mediaRecords.filter(m => m.IsDeleted !== 1).length;
+
+    // If test mode, don't actually delete
+    if (testMode) {
+      return res.status(200).json({
+        code: 200,
+        message: "TEST MODE: Media found but NOT deleted",
+        results: {
+          totalRequested: mediaIds.length,
+          totalFound: mediaRecords.length,
+          alreadyDeleted: alreadyDeleted,
+          toDelete: toDelete,
+          mediaIds: mediaIds,
+          foundMedia: mediaRecords.map(m => ({
+            _id: m._id,
+            Locator: m.Locator,
+            MediaType: m.MediaType,
+            IsDeleted: m.IsDeleted
+          })),
+          testMode: true
+        },
+      });
+    }
+
+    // Soft delete using direct MongoDB query
+    let deletedCount = 0;
+    if (db) {
+      const deleteResult = await db.collection(collectionName).updateMany(
+        searchQuery,
+        { $set: { IsDeleted: 1, DeletedOn: Date.now() } }
+      );
+      deletedCount = deleteResult.modifiedCount || 0;
+    } else {
+      const deleteResult = await media.updateMany(
+        searchQuery,
+        { $set: { IsDeleted: 1, DeletedOn: Date.now() } }
+      );
+      deletedCount = deleteResult.modifiedCount || 0;
+    }
+
+    return res.status(200).json({
+      code: 200,
+      message: "Media soft deleted successfully",
+      results: {
+        totalRequested: mediaIds.length,
+        totalFound: mediaRecords.length,
+        newlyDeleted: deletedCount,
+        alreadyDeleted: alreadyDeleted,
+        mediaIds: mediaIds,
+      },
+    });
+  } catch (err) {
+    console.error("❌ Error in deleteMedia:", err);
+    return res.status(500).json({
+      code: 500,
+      message: "Something went wrong",
+      error: err.message,
+    });
+  }
+};
+
 module.exports = {
   crop_image,
   findAll,
@@ -4957,4 +4925,5 @@ module.exports = {
   searchByLocatorList,
   updatePost,
   findAllStatus,
+  deleteMedia,
 };

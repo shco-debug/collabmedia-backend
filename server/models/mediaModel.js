@@ -126,7 +126,7 @@ var mediaSchema = new mongoose.Schema({
 	PostLinkUrl: {type: String},
 	Themes: {type: Array, default: []}
 	//Descriptors : {type : Array , default : []}			//adding for new keywords hierarchy - Text Search
-},{shardKey:{_id: 1}},{ collection: 'media' });
+},{ collection: 'media', shardKey: {_id: 1} });
 
 // Pre-save middleware to ensure GroupTags maintain proper structure
 mediaSchema.pre('save', function(next) {
