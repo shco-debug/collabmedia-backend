@@ -250,7 +250,7 @@ module.exports = function(router){
 		media.findAllStatus(req, res);
 	});
 	router.post('/massmediaupload/delete', (req, res) => {
-		media.deleteMedia(req, res);
+		media.deleteMedia(req, res);  // Now using modern async/await function
 	});
 	
 	

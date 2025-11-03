@@ -12,7 +12,10 @@ module.exports = function(router){
 	//findAll user Capsules paginated for Capsule library
 	router.post('/',function(req,res){
 		console.log('🔍 POST /capsules - Request received');
-		switch(req.body.qc){
+		// Trim qc parameter to handle trailing spaces
+		const qc = req.body.qc ? req.body.qc.trim() : '';
+		console.log('🔍 Query case (qc):', qc);
+		switch(qc){
 			//Capsule library Apis
 			case 'all':
 				Capsule.findAllPaginated(req,res);
@@ -20,6 +23,10 @@ module.exports = function(router){
 
 			case 'createdByMe':
 				Capsule.createdByMe(req,res);
+				break;
+
+			case 'activeLaunched':
+				Capsule.activeLaunched(req,res);
 				break;
 
 			case 'sharedWithMe':

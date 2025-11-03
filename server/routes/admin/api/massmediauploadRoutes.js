@@ -23,7 +23,7 @@ module.exports = function(router){
 		media.findAllStatus(req,res);
 	})
 	router.post('/delete',function(req,res){
-		mediaOld.deleteMedia(req,res);
+		media.deleteMedia(req,res);  // Updated to use new media controller
 	})
 	// parul 08-01-2015
 	router.post('/viewMedia',function(req,res){
