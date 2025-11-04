@@ -746,6 +746,17 @@ async function generateUniqueRefcode(callback) {
 
 const register = async (req, res) => {
     try {
+        console.log('📝 Register endpoint called with body:', {
+            email: req.body.email,
+            name: req.body.name,
+            nickname: req.body.nickname,
+            gender: req.body.gender,
+            hasReferralLink: !!req.body.referralLink,
+            referralLink: req.body.referralLink,
+            userId: req.body.userId,
+            referralByEmail: req.body.referralByEmail
+        });
+        
         const inputUsername = req.body.username ? req.body.username : "";
         const generatedUsername = inputUsername || req.body.email.split('@')[0];
         let conditions = {};
@@ -799,13 +810,21 @@ const register = async (req, res) => {
                     newUser.Password = newUser.generateHash(req.body.password);
                     newUser.Name = req.body.name;
                     newUser.Gender = req.body.gender;
-                    newUser.NickName = req.body.name;
+                    newUser.NickName = req.body.nickname || req.body.NickName || req.body.name;
                     newUser.referralCode = referCode;
                     newUser.resetPasswordToken = token;
                     newUser.ProfileStatus = 0;
 					newUser.UserName = generatedUsername;
 
             const numAffected = await newUser.save();
+            
+            console.log('✅ New user created:', {
+                _id: numAffected._id,
+                Email: numAffected.Email,
+                Name: numAffected.Name,
+                NickName: numAffected.NickName,
+                referralCode: numAffected.referralCode
+            });
 
             // Create default journal instances
             __createDefaultJournal_BackgroundCall(numAffected._id, numAffected.Email);
@@ -817,9 +836,13 @@ const register = async (req, res) => {
                                     referradToUserId: numAffected._id,
                                     referradToEmail: numAffected.Email,
                                     referradByEmail: req.body.referralByEmail,
-                                    referradCapsuleId: req.body.referCapsuleId
+                                    referradCapsuleId: req.body.referCapsuleId || ''
                 };
-                                __updateReferralCollacton(referralData);
+                                console.log('🎁 Creating referral tracking record:', referralData);
+                                await __updateReferralCollacton(referralData);
+                                console.log('✅ Referral tracking record created');
+                            } else {
+                                console.log('ℹ️ No referral link provided - skipping referral tracking');
                             }
 
                             sendmail(newUser.Email, "register", newUser, res);
@@ -1050,22 +1073,36 @@ exports.requestInvitation = requestInvitation;
 
 var __updateReferralCollacton = async function (referralData) {
     try {
-    //console.log("__updateReferralCollacton-------------------", referralData);
-    var newReferral = new Referral();
-    newReferral.ReferredById = referralData.referradByUserId;
-    newReferral.ReferredToId = referralData.referradToUserId;
-    newReferral.ReferredByEmail = referralData.referradByEmail;
-    newReferral.ReferredToEmail = referralData.referradToEmail;
-    newReferral.ReferralCode = referralData.referralLink;
-        if (referralData.referradCapsuleId != '') {
-        newReferral.ReferradCapsuleId = referralData.referradCapsuleId;
-    }
+        console.log("🔄 __updateReferralCollacton called with:", referralData);
+        
+        var newReferral = new Referral();
+        newReferral.ReferredById = referralData.referradByUserId;
+        newReferral.ReferredToId = referralData.referradToUserId;
+        newReferral.ReferredByEmail = referralData.referradByEmail;
+        newReferral.ReferredToEmail = referralData.referradToEmail;
+        newReferral.ReferralCode = referralData.referralLink;
+        if (referralData.referradCapsuleId && referralData.referradCapsuleId != '') {
+            newReferral.ReferradCapsuleId = referralData.referradCapsuleId;
+        }
         
         const updateReferralData = await newReferral.save();
-            console.log("success", updateReferralData);
+        console.log("✅ Referral record saved to DB:", {
+            _id: updateReferralData._id,
+            ReferredById: updateReferralData.ReferredById,
+            ReferredToId: updateReferralData.ReferredToId,
+            status: updateReferralData.status
+        });
+        
+        // MongoDB query to find this record
+        console.log("\n📝 MongoDB Query to find this referral:");
+        console.log(`db.referrals.findOne({ _id: ObjectId("${updateReferralData._id}") })`);
+        console.log("==========================================\n");
+        
+        return updateReferralData;
     } catch (error) {
-        console.log("err", error);
-        }
+        console.error("❌ Error in __updateReferralCollacton:", error);
+        throw error;
+    }
 };
 exports.__updateReferralCollacton = __updateReferralCollacton;
 

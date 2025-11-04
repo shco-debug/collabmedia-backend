@@ -18160,7 +18160,7 @@ var addCommentOnComment = async function (req, res) {
   if (streamId && Members.length === 0) {
     try {
       var streamMembers = await StreamMembers.findOne({
-        StreamId: ObjectId(streamId),
+        StreamId: new ObjectId(streamId),
         IsDeleted: false
       }).select('Members');
       
@@ -21863,6 +21863,12 @@ var createNewUserAccount_INTERNAL_API = async function (req, res) {
   }
 
   try {
+    // Import referral controller for generating unique codes
+    const referralController = require('./referralController.js');
+    
+    // Generate unique referral code for new user
+    const referCode = await referralController.generateUniqueRefcode();
+    
     var newUser = new User();
     newUser.Email = body.Email;
     newUser.Password = newUser.generateHash(body.Password);
@@ -21872,6 +21878,7 @@ var createNewUserAccount_INTERNAL_API = async function (req, res) {
     newUser.UserName = body.Email.split('@')[0] + '_' + Date.now();
     newUser.Gender = body.Gender;
     newUser.EmailConfirmationStatus = true;
+    newUser.referralCode = referCode; // Assign referral code to new user
 
     var numAffected = await newUser.save();
     numAffected = typeof numAffected == "object" ? numAffected : {};
@@ -21892,6 +21899,22 @@ var createNewUserAccount_INTERNAL_API = async function (req, res) {
 
     __updateChapterCollection(newUser.Email, numAffected._id);
     __updateChapterCollection__invitationCase(newUser.Email, numAffected._id);
+
+    // Handle referral tracking if referral data is provided
+    if (body.referralLink || (body.userId && body.referralByEmail)) {
+      const userControllerModule = require('./userController.js');
+      const referralData = {
+        referralLink: body.referralLink || '',
+        referradByUserId: body.userId,
+        referradToUserId: numAffected._id,
+        referradToEmail: numAffected.Email,
+        referradByEmail: body.referralByEmail,
+        referradCapsuleId: body.referCapsuleId || ''
+      };
+      
+      console.log('🎁 Creating referral tracking record:', referralData);
+      await userControllerModule.__updateReferralCollacton(referralData);
+    }
 
     return res.json({ 
       code: 200, 

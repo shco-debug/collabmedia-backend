@@ -4465,24 +4465,39 @@ var savedOrder = function (
                                 referradByCredit
                               );
                               if (referradByCredit) {
+                                // Update referral status to true
+                                Referral.updateOne(
+                                  { _id: ReferralData._id },
+                                  { $set: { status: true } }
+                                )
+                                  .then(function (referralStatusUpdate) {
+                                    console.log(
+                                      "✅ Referral status updated to true:",
+                                      referralStatusUpdate
+                                    );
+                                  })
+                                  .catch(function (err) {
+                                    console.error("❌ Error updating referral status:", err);
+                                  });
+
                                 var transaction = new Transaction();
                                 transaction.TransectionId = ReferralData._id;
                                 transaction.TransectionType = "Credit";
                                 transaction.Amount =
                                   AppSettingData.ReferralDiscount;
-                                transaction.save(function (
-                                  err,
-                                  updateCrTransectionData
-                                ) {
-                                  if (err) {
-                                    console.log("err");
-                                  } else {
+                                
+                                // Convert callback to promise
+                                transaction.save()
+                                  .then(function (updateCrTransectionData) {
                                     console.log(
-                                      "success",
+                                      "✅ Transaction saved successfully:",
                                       updateCrTransectionData
                                     );
-                                  }
-                                });
+                                  })
+                                  .catch(function (err) {
+                                    console.error("❌ Error saving transaction:", err);
+                                  });
+                                
                                 var response = {
                                   status: 200,
                                   result: referradByCredit,

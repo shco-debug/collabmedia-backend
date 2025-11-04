@@ -1300,6 +1300,193 @@ var createdByMe = async function (req, res) {
 };
 
 /*________________________________________________________________________
+   * @Date:      		November 4 2025
+   * @Method :   		ownedByMe
+   * Created By: 		AI Assistant
+   * Modified On:		-
+   * @Purpose:   		Get capsules for the current user's "My Streams" tab (Frontend only)
+   *                  - SubAdmin: Streams they CREATED (CreaterId)
+   *                  - Normal User: Streams they OWN (OwnerId - created, purchased, gifted, shared)
+   *                  Shows ALL streams regardless of published/launched status
+   *                  NOTE: Admin role is NOT handled by this endpoint (admin uses separate system)
+   * @Param:     		2
+   * @Return:    	 	yes
+   * @Access Category:	"UR"
+_________________________________________________________________________
+*/
+
+var ownedByMe = async function (req, res) {
+  try {
+    // Get user from session
+    if (!req.session || !req.session.user) {
+      var response = {
+        status: 401,
+        message: "User session not found",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    // Fetch user from database to get current Role and permissions
+    const currentUser = await User.findById(req.session.user._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      var response = {
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      };
+      return res.json(response);
+    }
+
+    var limit = req.body.perPage ? req.body.perPage : 0;
+    var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
+
+    console.log('🔍 ownedByMe - Current user:', { id: currentUser._id, role: currentUser.Role });
+
+    // Role-based logic:
+    // - SubAdmin: Show streams they CREATED (CreaterId)
+    // - Normal User: Show streams they OWN (OwnerId)
+    const isSubAdmin = currentUser.Role === 'subadmin';
+    const userIdField = isSubAdmin ? 'CreaterId' : 'OwnerId';
+
+    console.log('🎯 Using field:', userIdField, 'for role:', currentUser.Role);
+
+    // Get all capsules created/owned by the user (no matter if published/launched)
+    var conditions = {
+      [userIdField]: currentUser._id,
+      Status: true,
+      IsDeleted: false,
+    };
+
+    console.log('📋 ownedByMe conditions:', JSON.stringify(conditions, null, 2));
+
+    var sortObj = {
+      ModifiedOn: -1,
+    };
+
+    // 🎯 OPTIMIZED: Only select fields needed for dashboard cards
+    var fields = {
+      _id: 1,
+      Title: 1,
+      Description: 1,
+      CoverArt: 1,
+      LaunchSettings: 1,
+      ModifiedOn: 1,
+      CreaterId: 1,
+      OwnerId: 1,
+      Origin: 1,
+      IsPublished: 1,
+      IsLaunched: 1,
+      Status: 1,
+      IsDeleted: 1,
+      Price: 1,
+      PostCount: 1,
+      MemberCount: 1
+    };
+
+    const results = await Capsule.find(conditions, fields)
+      .sort(sortObj)
+      .skip(offset)
+      .limit(limit)
+      .exec();
+
+    const resultsLength = await Capsule.countDocuments(conditions).exec();
+    
+    console.log(`✅ ownedByMe found ${resultsLength} total capsules, returning ${results.length} results`);
+    console.log('📊 Sample results:', results.slice(0, 2).map(r => ({ 
+      id: r._id, 
+      title: r.Title, 
+      published: r.IsPublished,
+      launched: r.IsLaunched,
+      audience: r.LaunchSettings?.Audience,
+      origin: r.Origin
+    })));
+
+    // 🎯 Populate CreaterId for dashboard cards
+    const populatedResults = await Promise.all(
+      results.map(async (capsule) => {
+        if (capsule.CreaterId) {
+          try {
+            // Try to find in User collection first
+            const user = await User.findById(capsule.CreaterId)
+              .select("Name ProfilePic")
+              .exec();
+            if (user) {
+              capsule.CreaterId = {
+                _id: user._id,
+                Name: user.Name,
+                ProfilePic: user.ProfilePic,
+              };
+              return capsule;
+            }
+
+            // Try to find in Admin collection
+            const admin = await Admin.findById(capsule.CreaterId)
+              .select("name ProfilePic")
+              .exec();
+            if (admin) {
+              capsule.CreaterId = {
+                _id: admin._id,
+                Name: admin.name,
+                ProfilePic: admin.ProfilePic,
+              };
+              return capsule;
+            }
+
+            // Try to find in SubAdmin collection
+            const subAdmin = await SubAdmin.findById(capsule.CreaterId)
+              .select("name ProfilePic")
+              .exec();
+            if (subAdmin) {
+              capsule.CreaterId = {
+                _id: subAdmin._id,
+                Name: subAdmin.name,
+                ProfilePic: subAdmin.ProfilePic,
+              };
+              return capsule;
+            }
+
+            // If not found in any collection, set default values
+            capsule.CreaterId = {
+              _id: capsule.CreaterId,
+              Name: "Unknown User",
+              ProfilePic: "/assets/users/default.png",
+            };
+          } catch (error) {
+            capsule.CreaterId = {
+              _id: capsule.CreaterId,
+              Name: "Unknown User",
+              ProfilePic: "/assets/users/default.png",
+            };
+          }
+        }
+        return capsule;
+      })
+    );
+
+    var response = {
+      count: resultsLength,
+      status: 200,
+      message: isSubAdmin ? "Capsules created by current user" : "Capsules owned by current user",
+      results: populatedResults,
+    };
+    res.json(response);
+  } catch (error) {
+    console.error('❌ Error in ownedByMe:', error);
+    var response = {
+      status: 501,
+      message: "Unable to get capsule listing",
+      results: null,
+    };
+    res.json(response);
+  }
+};
+
+/*________________________________________________________________________
    * @Date:      		November 3 2025
    * @Method :   		activeLaunched
    * Created By: 		AI Assistant
@@ -7514,16 +7701,21 @@ _________________________________________________________________________
 */
 
 var allPublicCapsules = function (req, res) {
-  const limit = req.body.perPage ? req.body.perPage : 0;
-  const offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
+  console.log('🔍 allPublicCapsules function called');
+  // Support both GET (query params) and POST (body params)
+  const limit = req.body.perPage || req.query.perPage ? parseInt(req.body.perPage || req.query.perPage) : 20;
+  const offset = req.body.pageNo || req.query.pageNo ? (parseInt(req.body.pageNo || req.query.pageNo) - 1) * limit : 0;
 
   const conditions = {
     "LaunchSettings.Audience": "BUYERS",
     IsPublished: true,
+    IsLaunched: true,  // Only show launched streams
     IsAllowedForSales: true,
     Status: true,
     IsDeleted: false,
   };
+  
+  console.log('📋 allPublicCapsules conditions:', JSON.stringify(conditions, null, 2));
 
   const sortObj = {
     ModifiedOn: -1,
@@ -7542,7 +7734,7 @@ var allPublicCapsules = function (req, res) {
 
   // Don't show "The Elements" capsule to regular users (non-special users)
   if (req.session && req.session.user && specialUsers.indexOf(req.session.user.Email) < 0) {
-    conditions._id = { $nin: [mongoose.Types.ObjectId("60749d76d308334419f2fcf1")] };
+    conditions._id = { $nin: [new mongoose.Types.ObjectId("60749d76d308334419f2fcf1")] };
   }
 
   Capsule.find(conditions, fields)
@@ -10562,9 +10754,7 @@ var getUserMixedFeedPosts = async function (req, res) {
       // Sort by upload date (newest first)
       { $sort: { UploadedOn: -1, _id: -1 } },
       
-      // Apply pagination
-      { $skip: skip },
-      { $limit: limit },
+      // DON'T paginate here - need to do it after $group to get unique posts
       
       // Lookup StreamLikes for each post
       {
@@ -10585,7 +10775,7 @@ var getUserMixedFeedPosts = async function (req, res) {
             {
               $match: {
                 $expr: { $eq: ["$SocialPostId", "$$postId"] },
-                IsDeleted: 0
+                IsDeleted: false  // Changed from 0 to false (boolean)
               }
             }
           ],
@@ -10621,42 +10811,54 @@ var getUserMixedFeedPosts = async function (req, res) {
         },
       },
       
-      // Group back by post ID to aggregate comments
+      // Group back by post ID to aggregate comments (only push non-null comments)
       {
         $group: {
           _id: "$PostId",
           root: { $first: "$$ROOT" },
-          comments: { $push: "$streamCommentsArr" },
+          allComments: { $push: "$streamCommentsArr" },
+          streamLikesArr: { $first: "$streamLikesArr" }, // Preserve the likes array
         },
       },
       
-      // Replace root with post data
-      {
-        $replaceRoot: {
-          newRoot: {
-            $mergeObjects: ["$root", { comments: "$comments" }],
-          },
-        },
-      },
-      
-      // Filter out empty comments (from preserveNullAndEmptyArrays)
+      // Filter out null comments after grouping
       {
         $addFields: {
           comments: {
             $filter: {
-              input: "$comments",
-              cond: { $ne: ["$$this._id", null] }
+              input: "$allComments",
+              cond: { $and: [
+                { $ne: ["$$this", null] },
+                { $ne: ["$$this._id", null] }
+              ]}
             }
           }
         }
       },
       
+      // Replace root with post data (comments already filtered above)
+      {
+        $replaceRoot: {
+          newRoot: {
+            $mergeObjects: ["$root", { comments: "$comments", streamLikesArr: "$streamLikesArr" }],
+          },
+        },
+      },
+      
       // Add user field to each comment and calculate comment like counts
       {
         $addFields: {
-          comments: {
+          commentsRaw: {
             $map: {
-              input: "$comments",
+              input: {
+                $filter: {
+                  input: "$comments",
+                  cond: { $and: [
+                    { $ne: ["$$this._id", null] },
+                    { $ne: ["$$this", null] }
+                  ]}
+                }
+              },
               as: "comment",
               in: {
                 _id: "$$comment._id",
@@ -10669,11 +10871,28 @@ var getUserMixedFeedPosts = async function (req, res) {
                 CommentLikeCount: {
                   $size: {
                     $filter: {
-                      input: "$$comment.commentLikes",
+                      input: { $ifNull: ["$$comment.commentLikes", []] },
                       cond: { $eq: ["$$this.IsDeleted", false] }
                     }
                   }
                 }
+              }
+            }
+          }
+        }
+      },
+      // Final filter to remove any comments with missing _id (catches null, undefined, and missing)
+      {
+        $addFields: {
+          comments: {
+            $filter: {
+              input: "$commentsRaw",
+              cond: { 
+                $and: [
+                  { $ifNull: ["$$this._id", false] }, // False if _id is null/missing
+                  { $ne: [{ $type: "$$this._id" }, "missing"] }, // Check field exists
+                  { $ne: ["$$this.Comment", null] } // Also ensure Comment field exists
+                ]
               }
             }
           },
@@ -10685,16 +10904,14 @@ var getUserMixedFeedPosts = async function (req, res) {
                 cond: { $eq: ["$$this.IsDeleted", false] }
               }
             }
-          },
-          commentCount: {
-            $size: {
-              $filter: {
-                input: "$comments",
-                cond: { $ne: ["$$this._id", null] }
-              }
-            }
           }
         },
+      },
+      // Calculate commentCount AFTER filtering (in separate stage to reference filtered comments)
+      {
+        $addFields: {
+          commentCount: { $size: "$comments" }
+        }
       },
       // Project final structure matching getUserPurchasedCapsulesPosts
       {
@@ -10738,23 +10955,31 @@ var getUserMixedFeedPosts = async function (req, res) {
           comments: 1,
           likeCount: 1,
           commentCount: 1,
-          // Remove temp fields
-          streamLikesArr: 0,
-          streamCommentsArr: 0,
-          root: 0,
-          capsuleData: 0,
-          capsuleOwner: 0,
-          capsuleCreator: 0,
-          pageData: 0,
-          chapterData: 0,
-          mediaDoc: 0,
+          // Note: commentsRaw and allComments are automatically excluded in inclusion projection
         },
       },
       // Re-sort after group
       { $sort: { UploadedOn: -1, _id: -1 } },
+      
+      // Apply pagination AFTER grouping to limit unique posts
+      { $skip: skip },
+      { $limit: limit },
     ];
 
     const posts = await SyncedPost.aggregate(pipeline).exec();
+
+    // Debug: Show which posts have comments
+    console.log("\n📊 ========== POSTS SUMMARY ==========");
+    posts.forEach((post, index) => {
+      const hasComments = post.comments && post.comments.length > 0;
+      const hasLikes = post.likes && post.likes.length > 0;
+      console.log(`Post #${index + 1}: ${post._id}`);
+      console.log(`  ✉️  Comments: ${post.commentCount} | Likes: ${post.likeCount}`);
+      if (hasComments) {
+        console.log(`  💬 First comment: "${post.comments[0].Comment?.substring(0, 40)}..."`);
+      }
+    });
+    console.log("========================================\n");
 
     // Add user's interaction status for each post
     if (req.session.user && req.session.user._id) {
@@ -10786,8 +11011,8 @@ var getUserMixedFeedPosts = async function (req, res) {
       });
     }
 
-    // Get total count for pagination
-    const countPipeline = pipeline.slice(0, -3); // Remove skip, limit, and sort
+    // Get total count for pagination (count unique posts after grouping, before skip/limit)
+    const countPipeline = pipeline.slice(0, -2); // Remove skip and limit only (keep final sort)
     countPipeline.push({ $count: "total" });
     const countResult = await SyncedPost.aggregate(countPipeline).exec();
     const totalCount = countResult.length > 0 ? countResult[0].total : 0;
@@ -11137,6 +11362,7 @@ exports.find = find;
 exports.findAll = findAll;
 exports.findAllPaginated = findAllPaginated;
 exports.createdByMe = createdByMe;
+exports.ownedByMe = ownedByMe;
 exports.activeLaunched = activeLaunched;
 exports.sharedWithMe = sharedWithMe;
 exports.byTheHouse = byTheHouse;
@@ -12395,3 +12621,4 @@ exports.updateCartForFrequency_ActiveCapsule = updateCartForFrequency_ActiveCaps
 exports.toggleStream = toggleStream;
 exports.checkPostStreams = checkPostStreams;
 exports.unsubscribe_changeSettings = unsubscribe_changeSettings;
+

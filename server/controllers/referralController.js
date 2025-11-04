@@ -31,32 +31,37 @@ async function getReferralCode(req, res) {
             });
         }
 
-        if (req.body.referralCode == undefined || req.body.referralCode == null || req.body.referralCode == '') {
-            const referCode = await generateUniqueRefcode();
-            var query = { _id: req.session.user._id };
-            await user.updateOne(query, { $set: { referralCode: referCode } });
+        // First, check if user already has a referral code in the database
+        const currentUser = await user.findOne({ _id: req.session.user._id }, { referralCode: 1, _id: 1 });
+        
+        var referCode;
+        var backendUrl = process.BACKEND_URL || process.env.BACKEND_URL || 'http://localhost:3002';
+        
+        if (currentUser && currentUser.referralCode) {
+            // User already has a referral code - return existing one
+            referCode = currentUser.referralCode;
+            console.log('✅ Using existing referral code from DB:', referCode);
+        } else {
+            // User doesn't have a referral code - generate new one
+            referCode = await generateUniqueRefcode();
+            await user.updateOne({ _id: req.session.user._id }, { $set: { referralCode: referCode } });
             
-            const updatedUser = await user.findOne({ '_id': req.session.user._id });
+            const updatedUser = await user.findOne({ _id: req.session.user._id });
             req.session.user = updatedUser;
             
-            var referralLink = process.HOST_URL + '/referral/' + referCode;
-            var referralData = {
-                userId: req.body.userId,
-                message: req.body.messageData,
-                referralCode: referCode,
-                referralLink: referralLink
-            }
-            res.json({ "code": "200", "response": referralData })
-        } else {
-            var referralLink = process.HOST_URL + '/referral/' + req.body.referralCode;
-            var referralData = {
-                userId: req.body.userId,
-                message: req.body.messageData,
-                referralCode: req.body.referralCode,
-                referralLink: referralLink
-            }
-            res.json({ "code": "200", "response": referralData })
+            console.log('🆕 Generated NEW referral code:', referCode);
         }
+        
+        var referralLink = backendUrl + '/referral/' + referCode;
+        var referralData = {
+            userId: req.session.user._id,
+            message: req.body.messageData || '',
+            referralCode: referCode,
+            referralLink: referralLink
+        }
+        
+        console.log('🔗 Referral link:', referralLink);
+        res.json({ "code": "200", "response": referralData })
     } catch (err) {
         console.error("Error in getReferralCode:", err);
         res.status(500).json({ "code": "500", "message": "Internal server error" });
@@ -68,28 +73,37 @@ exports.getReferralCode = getReferralCode;
 async function checkReferralCode(req, res) {
     try {
         console.log("checkReferralCode", req.body);
+        
+        if (!req.body.referralCode) {
+            return res.json({ "code": "400", "message": "Referral code is required" });
+        }
+        
         var referralData = {};
-        var conditions = {
-            _id: req.body.capsule_id,
-            IsDeleted: false
+        var referralCode = req.body.referralCode;
+        
+        // Find user by referral code
+        const userReferData = await user.findOne({ referralCode: referralCode, IsDeleted: false });
+        console.log("data==============", userReferData);
+        
+        if (!userReferData) {
+            return res.json({ "code": "404", "message": "Referral code not found" });
         }
-        if (req.body.referralCode) {
-            var referralCode = req.body.referralCode;
-            const userReferData = await user.findOne({ referralCode: referralCode, IsDeleted: false });
-            console.log("data==============", userReferData);
-            
-            if (userReferData) {
-                const capsuleReferdata = await Capsule.findOne(conditions);
-                referralData.capsuleReferdata = capsuleReferdata;
-                referralData.userReferData = userReferData;
-                console.log("referralData-------------", referralData);
-                res.json({ "code": "200", "response": referralData });
-            } else {
-                res.json({ "code": "404", "message": "Referral code not found" });
+        
+        // Only query capsule if capsule_id is provided and valid
+        var capsuleReferdata = null;
+        if (req.body.capsule_id && req.body.capsule_id.trim() !== '') {
+            const conditions = {
+                _id: req.body.capsule_id,
+                IsDeleted: false
             }
-        } else {
-            res.json({ "code": "400", "message": "Referral code is required" });
+            capsuleReferdata = await Capsule.findOne(conditions);
         }
+        
+        referralData.capsuleReferdata = capsuleReferdata;
+        referralData.userReferData = userReferData;
+        console.log("referralData-------------", referralData);
+        res.json({ "code": "200", "response": referralData });
+        
     } catch (err) {
         console.error("Error in checkReferralCode:", err);
         res.status(500).json({ "code": "500", "message": "Internal server error" });

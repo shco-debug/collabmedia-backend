@@ -15,10 +15,14 @@ module.exports = function(){
 	process.urls = {};
 
 	// Use environment variables for URLs instead of hardcoded values
-	// FOR LOCAL DEVELOPMENT: Using localhost:3000 for email verification links
+	// Frontend URL (where users access the site)
 	process.AppAccessProtocal = process.env.APP_PROTOCOL || 'http://';
 	process.AppBaseURL = process.env.APP_BASE_URL || 'localhost:3000';
-	process.HOST_URL = process.AppAccessProtocal + process.AppBaseURL;
+	process.HOST_URL = process.AppAccessProtocal + process.AppBaseURL; // Frontend: localhost:3000
+	
+	// Backend URL (where API runs - for referral redirects)
+	process.BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3002';
+	process.FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
 	
 	// FOR PRODUCTION: Uncomment this and comment above
 	// process.AppAccessProtocal = process.env.APP_PROTOCOL || 'https://';

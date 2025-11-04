@@ -17,7 +17,12 @@ module.exports = function(){
 	// Use environment variables for URLs
 	process.AppAccessProtocal = process.env.APP_PROTOCOL || 'https://';
 	process.AppBaseURL = process.env.APP_BASE_URL || 'www.scrpt.com';
-	process.HOST_URL = process.AppAccessProtocal + process.AppBaseURL;
+	process.HOST_URL = process.AppAccessProtocal + process.AppBaseURL; // Frontend URL
+	
+	// Backend and Frontend URLs for environment-aware configurations
+	process.BACKEND_URL = process.env.BACKEND_URL || 'https://collabmedia-backend.vercel.app';
+	process.FRONTEND_URL = process.env.FRONTEND_URL || 'https://www.ahady.com';
+	
 	process.perUserSpace = 524288000;   //500 MB
 
 	process.CAPSULE_VERIFIER = ["manishpodiyal@gmail.com","scrptco@gmail.com"];

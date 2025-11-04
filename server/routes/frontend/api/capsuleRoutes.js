@@ -25,6 +25,10 @@ module.exports = function(router){
 				Capsule.createdByMe(req,res);
 				break;
 
+			case 'ownedByMe':
+				Capsule.ownedByMe(req,res);
+				break;
+
 			case 'activeLaunched':
 				Capsule.activeLaunched(req,res);
 				break;
@@ -202,6 +206,10 @@ module.exports = function(router){
 
             case 'createdByMe':
                 Capsule.createdByMe(req, res);
+                break;
+
+            case 'ownedByMe':
+                Capsule.ownedByMe(req, res);
                 break;
 
             case 'sharedWithMe':
