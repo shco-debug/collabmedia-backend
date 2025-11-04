@@ -25,6 +25,9 @@ const bodyParser = require("body-parser");
 // Load environment variables
 require("dotenv").config();
 
+// ⚡ CRITICAL: Load environment config BEFORE anything else
+// This sets process.STRIPE_CONFIG, process.EMAIL_ENGINE, etc.
+require("./config/env/development.js")();
 
 // Import models
 const UserModel = require("./server/models/userModel.js");
@@ -35,6 +38,13 @@ console.log(
     process.env.SECRET_API_KEY ? "SET" : "NOT SET"
   } >>>>>`
 );
+
+// Verify Stripe config loaded
+console.log(`<<<<< Stripe Config Loaded: ${process.STRIPE_CONFIG ? "YES" : "NO"} >>>>>`);
+if (process.STRIPE_CONFIG) {
+  console.log(`<<<<< Stripe DEV Key: ${process.STRIPE_CONFIG.DEV?.secret_key ? "SET" : "NOT SET"} >>>>>`);
+  console.log(`<<<<< Stripe LIVE Key: ${process.STRIPE_CONFIG.LIVE?.secret_key ? "SET" : "NOT SET"} >>>>>`);
+}
 
 // Configure shortid
 shortid.worker(1);

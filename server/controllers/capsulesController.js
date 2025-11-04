@@ -2061,32 +2061,38 @@ var publishedByMe = async function (req, res) {
       return res.json(response);
     }
 
-    console.log('🔍 createdByMe - Current user ID:', currentUser._id);
+    console.log('🔍 publishedByMe - Current user ID:', currentUser._id);
+    console.log('🔍 publishedByMe - User Role:', currentUser.Role);
     
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-    // Include both published AND unpublished capsules created by the user
+    // For ADMIN: Check CreaterId (who created the stream)
+    // For REGULAR USER: Check OwnerId (who owns the stream)
+    const isAdmin = currentUser.Role === 'admin';
+    const userIdField = isAdmin ? 'CreaterId' : 'OwnerId';
+    
     var conditions = {
       $or: [
         {
-          CreaterId: currentUser._id,
+          [userIdField]: currentUser._id,
           Origin: "created"
         },
         {
-          CreaterId: currentUser._id,
+          [userIdField]: currentUser._id,
           Origin: "duplicated"
         },
         {
-          CreaterId: currentUser._id,
+          [userIdField]: currentUser._id,
           Origin: "addedFromLibrary"
         }
       ],
       Status: true,
       IsDeleted: false,
+      IsPublished: true  // Only get published capsules
     };
 
-    console.log('📋 createdByMe conditions:', JSON.stringify(conditions, null, 2));
+    console.log('📋 publishedByMe conditions (Role: ' + currentUser.Role + '):', JSON.stringify(conditions, null, 2));
 
     var sortObj = {
       ModifiedOn: -1,

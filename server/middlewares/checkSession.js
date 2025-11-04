@@ -234,6 +234,14 @@ module.exports = function(req, res, next){
 		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}
+	else if(reqUrl.substring(0,6) == '/refer'){
+		var frontendApiPrefix = '/refer';
+		var unprotectedRoutes = [
+			'/checkReferralCode', // Allow checking referral code without login
+			'/getReferralPoint'   // Allow getting referral settings without login
+		];
+		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
+	}
 	else if(reqUrl.substring(0,4) == '/fsg' ||
 			reqUrl.substring(0,8) == '/domains' ||
 			reqUrl.substring(0,12) == '/collections' ||

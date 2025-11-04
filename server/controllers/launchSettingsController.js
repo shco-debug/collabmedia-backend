@@ -6,8 +6,31 @@ var Referral = require('./../models/referralModel.js');
 var Cart = require('./../models/cartModel.js');
 var Order = require('./../models/orderModel.js');
 var Transaction = require('./../models/transectionHistoryModel.js')
-var stripe = require("stripe")(process.STRIPE_CONFIG.DEV.secret_key);	//test mode
-//var stripe = require("stripe")(process.STRIPE_CONFIG.LIVE.secret_key); //live mode
+
+// Lazy-load Stripe to ensure process.STRIPE_CONFIG is available
+let stripe = null;
+function getStripe() {
+	if (!stripe) {
+		console.log('🔍 Initializing Stripe...');
+		console.log('   process.STRIPE_CONFIG exists:', !!process.STRIPE_CONFIG);
+		console.log('   process.STRIPE_CONFIG.DEV exists:', !!process.STRIPE_CONFIG?.DEV);
+		console.log('   DEV secret_key exists:', !!process.STRIPE_CONFIG?.DEV?.secret_key);
+		
+		if (!process.STRIPE_CONFIG || !process.STRIPE_CONFIG.DEV || !process.STRIPE_CONFIG.DEV.secret_key) {
+			const error = new Error('Stripe configuration not loaded. process.STRIPE_CONFIG is missing.');
+			console.error('❌', error.message);
+			throw error;
+		}
+		
+		const key = process.STRIPE_CONFIG.DEV.secret_key;
+		console.log(`   Using Stripe key: ${key.substring(0, 10)}...`);
+		stripe = require("stripe")(key);	//test mode
+		//stripe = require("stripe")(process.STRIPE_CONFIG.LIVE.secret_key); //live mode
+		console.log('✅ Stripe initialized successfully');
+	}
+	return stripe;
+}
+
 var mongoose = require("mongoose");
 var ObjectId = mongoose.Types.ObjectId;
 
@@ -3332,7 +3355,7 @@ var capsuleLaunchEngine = function (__capsuleId, MakingFor, req, res) {
 					req.body.token = req.body.token ? req.body.token : null;
 
 					if (req.body.token == 'trial') {	//Trial Publish for test convinience
-						stripe.tokens.create({
+						getStripe().tokens.create({
 							card: {
 								"number": '4242424242424242',
 								"exp_month": 12,
@@ -3353,28 +3376,35 @@ var capsuleLaunchEngine = function (__capsuleId, MakingFor, req, res) {
 						createCharges();
 					}
 
-					function createCharges() {
-						console.log("tokentokentokentokentokentoken-------------",token);
-						stripe.customers.create({
-							source: token,
-							description: email
-						}).then(function (customer) {
-							try {
-								return stripe.charges.create({
-									amount: parseInt(order.TotalPayment * 100), // Amount in cents
-									currency: "usd",
-									customer: customer.id
-								});
-							} catch (e) {
-								var response = {
-									status: 200,
-									message: "Payement catch 1 successfully",
-									error: e,
-								}
-								res.json(response);
-							}
+								function createCharges() {
+									console.log("💰 Creating Stripe charge...");
+									console.log("   Token:", token);
+									console.log("   Email:", email);
+									console.log("   Amount: $" + order.TotalPayment);
+									
+									getStripe().customers.create({
+										source: token,
+										description: email
+									}).then(function (customer) {
+										console.log('✅ Stripe customer created:', customer.id);
+										try {
+											return getStripe().charges.create({
+												amount: parseInt(order.TotalPayment * 100), // Amount in cents
+												currency: "usd",
+												customer: customer.id
+											});
+										} catch (e) {
+											console.error('❌ Stripe charge creation failed:', e.message);
+											var response = {
+												status: 500,
+												message: "Payment processing failed",
+												error: e.message,
+											}
+											res.json(response);
+										}
 
 						}).then(function (charge) {
+							console.log('✅ Stripe charge completed:', charge.id, 'Status:', charge.status);
 							orderInit.PGatewayResult = charge;
 							if (charge.paid && charge.failure_code == null) {
 								orderInit.TransactionState = 'Completed';
@@ -3486,10 +3516,28 @@ var capsuleLaunchEngine = function (__capsuleId, MakingFor, req, res) {
 									// //console.log(response);
 								}
 							});
+						}).catch(function(stripeError) {
+							console.error('❌ Stripe Promise Chain Error:', stripeError.message);
+							console.error('   Type:', stripeError.type);
+							console.error('   Code:', stripeError.code);
+							return res.status(500).json({
+								status: 500,
+								message: 'Payment processing failed',
+								error: stripeError.message,
+								stripeError: {
+									type: stripeError.type,
+									code: stripeError.code
+								}
+							});
 						});
 					}
 				} else {
-					// //console.log("0000000000000000000000000000000000----------------", err);
+					console.error('❌ Order.save failed:', err.message);
+					return res.status(500).json({
+						status: 500,
+						message: 'Failed to create order',
+						error: err.message
+					});
 				}
 			});
 			break;
@@ -4597,6 +4645,19 @@ function __getStringAfterNameRuled(str, OwnerGender, OwnerName) {
 
 var buyNow = function (req, res) {	//buy your cart.
 	console.log("------------------------------ buyNow Called --------------------------------------------");
+	
+	// Verify Stripe is configured
+	try {
+		getStripe(); // This will throw if config is missing
+	} catch (stripeError) {
+		console.error("❌ Stripe initialization error:", stripeError.message);
+		return res.status(500).json({
+			status: 500,
+			message: "Payment processing failed",
+			error: stripeError.message
+		});
+	}
+	
 	//get shopping cart details at server end. so that nothing can be fraud...
 	var conditions = {
 		//CreatedById : req.session.user._id ? req.session.user._id : null,
@@ -4734,82 +4795,107 @@ var buyNow = function (req, res) {	//buy your cart.
 
 					}
 
+					console.log('💾 Saving order to database...');
 					Order(order).save(function (err, result) {
-						if (!err) {
-							//var token = req.body.token ? req.body.token : null;
-							//var email = req.body.tokenEmail ? req.body.tokenEmail : req.session.user.Email;
-							var token = null;
-							var email = null;
+						if (err) {
+							console.error('❌ Order save failed:', err.message);
+							return res.status(500).json({
+								status: 500,
+								message: 'Failed to save order',
+								error: err.message
+							});
+						}
+						
+						console.log('✅ Order saved successfully, ID:', result._id);
+						var token = null;
+						var email = null;
 
-							req.body.token = req.body.token ? req.body.token : null;
-							if (req.body.token == 'free') {
-								var buy = {
-									paid: null,
-									failure_code: null
-								}
-								var fromFree = 'free';
-								console.log("---------------------- Calling savedOrder 1111111--------------");
-								savedOrder(buy, orderInit, fromFree, rdm_credit, result, order, req, res);
-							} else {
-
-								if (req.body.token == 'trial') {	//Trial Publish for test convinience
-									stripe = require("stripe")(process.STRIPE_CONFIG.DEV.secret_key);	//test mode
-									stripe.tokens.create({
-										card: {
-											"number": '4242424242424242',
-											"exp_month": 12,
-											"exp_year": 2035,
-											"cvc": '123'
-										}
-									}, function (err, tokenObj) {
-										//// //console.log("-----------tokenObj---------",tokenObj);
-										// asynchronously called
-										token = tokenObj.id;
-										email = req.session.user.Email;
-										createCharges();
-									});
-								}
-								else {
-									token = req.body.token ? req.body.token : null;
-									email = req.body.tokenEmail ? req.body.tokenEmail : req.session.user.Email;
-									createCharges();
-								}
-
-								function createCharges() {
-									stripe.customers.create({
-										source: token,
-										description: email
-									}).then(function (customer) {
-										try {
-											return stripe.charges.create({
-												amount: parseInt(order.TotalPayment * 100), // Amount in cents
-												currency: "usd",
-												customer: customer.id
-											});
-										} catch (e) {
-											var response = {
-												status: 200,
-												message: "Payement catch 1 successfully",
-												error: e,
-											}
-											res.json(response);
-										}
-
-									}).then(function (charge) {
-										console.log("---------------------- Calling savedOrder --------------");
-										var fromstripe = 'stripe';
-										savedOrder(charge, orderInit, fromstripe, rdm_credit, result, order, req, res);
-									});
-								}
+						req.body.token = req.body.token ? req.body.token : null;
+						console.log('💳 Payment token received:', req.body.token);
+						
+						if (req.body.token == 'free') {
+							console.log('💰 Processing FREE payment...');
+							var buy = {
+								paid: null,
+								failure_code: null
 							}
+							var fromFree = 'free';
+							console.log("---------------------- Calling savedOrder 1111111--------------");
+							savedOrder(buy, orderInit, fromFree, rdm_credit, result, order, req, res);
 						} else {
-							//console.log("YES-------------HERE 0000000000", err);
-							var response = {
-								status: 501,
-								message: "Something went wrong.",
-								err : err
+							console.log('💳 Processing STRIPE payment...');
+							
+							if (req.body.token == 'trial') {	//Trial Publish for test convinience
+								console.log('🧪 TRIAL mode: Creating test token...');
+								getStripe().tokens.create({
+									card: {
+										"number": '4242424242424242',
+										"exp_month": 12,
+										"exp_year": 2035,
+										"cvc": '123'
+									}
+								}, function (err, tokenObj) {
+									if (err) {
+										console.error('❌ Stripe token creation failed:', err.message);
+										return res.status(500).json({
+											status: 500,
+											message: 'Payment processing failed',
+											error: err.message
+										});
+									}
+									console.log('✅ Test token created:', tokenObj.id);
+									token = tokenObj.id;
+									email = req.session.user.Email;
+									createCharges();
+								});
 							}
-							res.json(response);
+							else {
+								token = req.body.token ? req.body.token : null;
+								email = req.body.tokenEmail ? req.body.tokenEmail : req.session.user.Email;
+								createCharges();
+							}
+
+							function createCharges() {
+								console.log('💰 Creating Stripe charge...');
+								console.log('   Token:', token);
+								console.log('   Email:', email);
+								console.log('   Amount: $' + order.TotalPayment);
+								
+								getStripe().customers.create({
+									source: token,
+									description: email
+								}).then(function (customer) {
+									console.log('✅ Stripe customer created:', customer.id);
+									try {
+										return getStripe().charges.create({
+											amount: parseInt(order.TotalPayment * 100), // Amount in cents
+											currency: "usd",
+											customer: customer.id
+										});
+									} catch (e) {
+										console.error('❌ Stripe charge creation failed:', e.message);
+										var response = {
+											status: 500,
+											message: "Payment processing failed",
+											error: e.message,
+										}
+										res.json(response);
+									}
+
+								}).then(function (charge) {
+									console.log('✅ Stripe charge completed:', charge.id);
+									console.log("---------------------- Calling savedOrder --------------");
+									var fromstripe = 'stripe';
+									savedOrder(charge, orderInit, fromstripe, rdm_credit, result, order, req, res);
+								}).catch(function(stripeError) {
+									console.error('❌ Stripe Promise Chain Error:', stripeError.message);
+									return res.status(500).json({
+										status: 500,
+										message: 'Payment processing failed',
+										error: stripeError.message
+									});
+								});
+							}
 						}
 					});
 				}

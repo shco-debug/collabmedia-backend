@@ -45,6 +45,10 @@ module.exports = function(){
 		}
 	};
 
+	console.log('🔧 Loading Stripe configuration from .env...');
+	console.log('   STRIPE_SECRET_KEY from env:', process.env.STRIPE_SECRET_KEY ? 'SET' : 'NOT SET');
+	console.log('   STRIPE_SECRET_KEY_LIVE from env:', process.env.STRIPE_SECRET_KEY_LIVE ? 'SET' : 'NOT SET');
+	
 	process.STRIPE_CONFIG = {
 		DEV : {
 			token_api : "https://connect.stripe.com/oauth/token",
@@ -57,6 +61,9 @@ module.exports = function(){
 			secret_key : process.env.STRIPE_SECRET_KEY_LIVE || ""
 		}
 	};
+	
+	console.log('✅ process.STRIPE_CONFIG set:', !!process.STRIPE_CONFIG);
+	console.log('   DEV secret_key:', process.STRIPE_CONFIG.DEV.secret_key ? process.STRIPE_CONFIG.DEV.secret_key.substring(0, 10) + '...' : 'NOT SET');
 
 	process.REVENUE_MODEL_CONFIG = {
 		CREATE_Others_Commission : 9.99,	//in USD $

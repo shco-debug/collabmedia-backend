@@ -384,4 +384,217 @@ module.exports = function (router) {
   router.get("/fixUploadedImages_BROWSER_API", async (req, res) => {
     media.fixUploadedImages_BROWSER_API(req, res);
   });
+
+  // Verify card by charging $1.00 and immediately refunding it
+  router.post("/verifyCard", async (req, res) => {
+    try {
+      if (!process.STRIPE_CONFIG) {
+        return res.status(500).json({
+          code: 500,
+          message: 'Stripe configuration not loaded'
+        });
+      }
+      
+      // Detect environment and use appropriate Stripe key
+      const isProduction = process.env.NODE_ENV === 'production';
+      let stripeKey;
+      
+      if (isProduction) {
+        if (!process.STRIPE_CONFIG.LIVE || !process.STRIPE_CONFIG.LIVE.secret_key) {
+          return res.status(500).json({
+            code: 500,
+            message: 'Stripe LIVE configuration missing'
+          });
+        }
+        stripeKey = process.STRIPE_CONFIG.LIVE.secret_key;
+      } else {
+        if (!process.STRIPE_CONFIG.DEV || !process.STRIPE_CONFIG.DEV.secret_key) {
+          return res.status(500).json({
+            code: 500,
+            message: 'Stripe DEV configuration missing'
+          });
+        }
+        stripeKey = process.STRIPE_CONFIG.DEV.secret_key;
+      }
+      
+      const stripe = require("stripe")(stripeKey);
+      const { token, email } = req.body;
+      
+      if (!token) {
+        return res.status(400).json({
+          code: 400,
+          message: 'Token is required'
+        });
+      }
+      
+      if (!email) {
+        return res.status(400).json({
+          code: 400,
+          message: 'Email is required'
+        });
+      }
+      
+      // Step 1: Create Stripe customer
+      const customer = await stripe.customers.create({
+        email: email,
+        source: token
+      });
+      
+      // Step 2: Charge $1.00 to verify card
+      const charge = await stripe.charges.create({
+        amount: 100, // $1.00 in cents
+        currency: 'usd',
+        customer: customer.id,
+        description: 'Card verification - will be refunded immediately'
+      });
+      
+      // Step 3: Immediately refund the $1.00
+      const refund = await stripe.refunds.create({
+        charge: charge.id
+      });
+      
+      res.json({
+        code: 200,
+        message: 'Card verified successfully. $1.00 charged and immediately refunded.',
+        cardVerified: true,
+        verification: {
+          chargeId: charge.id,
+          refundId: refund.id,
+          cardLast4: charge.payment_method_details?.card?.last4 || 'N/A',
+          cardBrand: charge.payment_method_details?.card?.brand || 'N/A',
+          customerId: customer.id,
+          status: 'verified_and_refunded'
+        }
+      });
+      
+    } catch (err) {
+      res.status(500).json({
+        code: 500,
+        message: 'Card verification failed',
+        error: err.message,
+        cardVerified: false
+      });
+    }
+  });
+
+  // Refund a payment (full or partial)
+  router.post("/refundPayment__TEST_API", async (req, res) => {
+    try {
+      if (!process.STRIPE_CONFIG || !process.STRIPE_CONFIG.DEV || !process.STRIPE_CONFIG.DEV.secret_key) {
+        return res.status(500).json({
+          code: 500,
+          message: 'Stripe configuration not loaded'
+        });
+      }
+      
+      const stripe = require("stripe")(process.STRIPE_CONFIG.DEV.secret_key);
+      const { chargeId, amount, reason = 'requested_by_customer' } = req.body;
+      
+      if (!chargeId) {
+        return res.status(400).json({
+          code: 400,
+          message: 'chargeId is required. Get this from the payment response or Stripe dashboard.'
+        });
+      }
+      
+      // Create refund
+      const refundData = { charge: chargeId };
+      if (amount) {
+        refundData.amount = amount; // Partial refund (in cents)
+      }
+      if (reason) {
+        refundData.reason = reason; // 'duplicate', 'fraudulent', 'requested_by_customer'
+      }
+      
+      const refund = await stripe.refunds.create(refundData);
+      
+      // Get charge details
+      const charge = await stripe.charges.retrieve(chargeId);
+      
+      res.json({
+        code: 200,
+        message: amount ? `Partial refund of $${amount/100} processed` : 'Full refund processed',
+        refund: {
+          id: refund.id,
+          amount: refund.amount / 100, // Convert cents to dollars
+          currency: refund.currency,
+          status: refund.status,
+          reason: refund.reason
+        },
+        charge: {
+          id: charge.id,
+          originalAmount: charge.amount / 100,
+          amountRefunded: charge.amount_refunded / 100,
+          fullyRefunded: charge.refunded
+        }
+      });
+      
+    } catch (err) {
+      res.status(500).json({
+        code: 500,
+        message: 'Refund failed',
+        error: err.message,
+        details: err.type
+      });
+    }
+  });
+
+  // Test endpoint to generate Stripe tokens for different test scenarios
+  router.post("/generateStripeTestToken__TEST_API", async (req, res) => {
+    try {
+      // Verify Stripe config is loaded
+      if (!process.STRIPE_CONFIG || !process.STRIPE_CONFIG.DEV || !process.STRIPE_CONFIG.DEV.secret_key) {
+        return res.status(500).json({
+          code: 500,
+          message: 'Stripe configuration not loaded. Please restart the server.',
+          debug: {
+            hasConfig: !!process.STRIPE_CONFIG,
+            hasDev: !!process.STRIPE_CONFIG?.DEV,
+            hasKey: !!process.STRIPE_CONFIG?.DEV?.secret_key
+          }
+        });
+      }
+      
+      const stripe = require("stripe")(process.STRIPE_CONFIG.DEV.secret_key);
+      
+      const { cardType = 'success' } = req.body;
+      
+      const testCards = {
+        success: { number: '4242424242424242', desc: 'Successful payment' },
+        decline: { number: '4000000000000002', desc: 'Card declined' },
+        insufficient: { number: '4000000000009995', desc: 'Insufficient funds' },
+        expired: { number: '4000000000000069', desc: 'Expired card' },
+        processing_error: { number: '4000000000000119', desc: 'Processing error' },
+        incorrect_cvc: { number: '4000000000000127', desc: 'Incorrect CVC' },
+        '3d_secure': { number: '4000002500003155', desc: 'Requires 3D Secure' },
+      };
+      
+      const card = testCards[cardType] || testCards.success;
+      
+      const tokenObj = await stripe.tokens.create({
+        card: {
+          number: card.number,
+          exp_month: 12,
+          exp_year: 2030,
+          cvc: '123'
+        }
+      });
+      
+      res.json({
+        code: 200,
+        message: `Test token generated: ${card.desc}`,
+        token: tokenObj.id,
+        cardType: cardType,
+        testCard: card.number,
+        usage: `Use this token in buyNow API: { "token": "${tokenObj.id}" }`
+      });
+      
+    } catch (err) {
+      res.status(500).json({
+        code: 500,
+        message: 'Failed to generate test token',
+        error: err.message
+      });
+    }
+  });
 };

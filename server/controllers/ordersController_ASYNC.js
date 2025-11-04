@@ -11,12 +11,37 @@ var Order = require("./../models/orderModel.js");
 const { createCapsuleInstance } = require("./capsuleInstanceManager_ABSOLUTE_FINAL.js");
 
 var Transaction = require("./../models/transectionHistoryModel.js");
-// Initialize Stripe with DEV key by default, will be overridden in functions if needed
-var stripe = require("stripe")(
-  process.STRIPE_CONFIG
-    ? process.STRIPE_CONFIG.DEV.secret_key
-    : "sk_test_5M7DrMG5iek1yRa8DEwhcG2W"
-);
+
+// Lazy-load Stripe to ensure process.STRIPE_CONFIG is available
+let stripe = null;
+function getStripe() {
+	if (!stripe) {
+		if (!process.STRIPE_CONFIG) {
+			throw new Error('Stripe configuration not loaded. process.STRIPE_CONFIG is missing.');
+		}
+		
+		// Detect environment and use appropriate Stripe key
+		const isProduction = process.env.NODE_ENV === 'production';
+		
+		if (isProduction) {
+			// PRODUCTION MODE - Use LIVE Stripe key
+			if (!process.STRIPE_CONFIG.LIVE || !process.STRIPE_CONFIG.LIVE.secret_key) {
+				throw new Error('Stripe LIVE configuration missing. Cannot process live payments.');
+			}
+			console.log('🔴 Using Stripe LIVE mode');
+			stripe = require("stripe")(process.STRIPE_CONFIG.LIVE.secret_key);
+		} else {
+			// DEVELOPMENT/TEST MODE - Use DEV Stripe key
+			if (!process.STRIPE_CONFIG.DEV || !process.STRIPE_CONFIG.DEV.secret_key) {
+				throw new Error('Stripe DEV configuration missing. Cannot process test payments.');
+			}
+			console.log('🟢 Using Stripe TEST mode');
+			stripe = require("stripe")(process.STRIPE_CONFIG.DEV.secret_key);
+		}
+	}
+	return stripe;
+}
+
 var mongoose = require("mongoose");
 var ObjectId = mongoose.Types.ObjectId;
 
@@ -2551,7 +2576,7 @@ var capsuleLaunchEngine = function (__capsuleId, MakingFor, req, res) {
 
           if (req.body.token == "trial") {
             //Trial Publish for test convinience
-            stripe.tokens.create(
+            getStripe().tokens.create(
               {
                 card: {
                   number: "4242424242424242",
@@ -2561,6 +2586,14 @@ var capsuleLaunchEngine = function (__capsuleId, MakingFor, req, res) {
                 },
               },
               function (err, tokenObj) {
+                if (err) {
+                  console.error('❌ Stripe token creation failed:', err.message);
+                  return res.status(500).json({
+                    status: 500,
+                    message: 'Payment processing failed',
+                    error: err.message
+                  });
+                }
                 console.log("-----------tokenObj---------", tokenObj);
                 // asynchronously called
                 token = tokenObj.id;
@@ -2578,14 +2611,15 @@ var capsuleLaunchEngine = function (__capsuleId, MakingFor, req, res) {
 
           function createCharges() {
             console.log("tokentokentokentokentokentoken-------------", token);
-            stripe.customers
+            getStripe().customers
               .create({
                 source: token,
                 description: email,
               })
               .then(function (customer) {
+                console.log('✅ Stripe customer created:', customer.id);
                 try {
-                  return stripe.charges.create({
+                  return getStripe().charges.create({
                     amount: parseInt(order.TotalPayment * 100), // Amount in cents
                     currency: "usd",
                     customer: customer.id,
@@ -2752,6 +2786,20 @@ var capsuleLaunchEngine = function (__capsuleId, MakingFor, req, res) {
                   .catch(function (err) {
                     console.error("Error updating order:", err);
                   });
+              })
+              .catch(function(stripeError) {
+                console.error('❌ Stripe Promise Chain Error:', stripeError.message);
+                console.error('   Type:', stripeError.type);
+                console.error('   Code:', stripeError.code);
+                return res.status(500).json({
+                  status: 500,
+                  message: 'Payment processing failed',
+                  error: stripeError.message,
+                  stripeError: {
+                    type: stripeError.type,
+                    code: stripeError.code
+                  }
+                });
               });
           }
         })
@@ -3995,11 +4043,14 @@ var buyNow = async function (req, res) {
       );
       console.log("Debug: order.CartItems length:", order.CartItems.length);
       console.log("Debug: cartItems length:", cartItems.length);
+      console.log('🔄 Preparing to calculate totals...');
 
       order.TotalPayment = 0;
       order.TotalPlatformCommission = 0;
 
+      console.log('💰 Calculating order totals...');
       if (order.CartItems.length > 0) {
+        console.log('✅ Order has cart items, processing...');
         var userCreditAmount = req.session.user;
 
         if (
@@ -4039,13 +4090,18 @@ var buyNow = async function (req, res) {
           }
         }
 
+        console.log('💾 Saving order to database...');
         const savedResult = await Order(order).save();
+        console.log('✅ Order saved successfully, ID:', savedResult._id);
 
         var token = null;
         var email = null;
 
         req.body.token = req.body.token ? req.body.token : null;
+        console.log('💳 Payment token received:', req.body.token);
+        
         if (req.body.token === "free") {
+          console.log('💰 Processing FREE payment...');
           var buy = {
             paid: null,
             failure_code: null,
@@ -4066,12 +4122,12 @@ var buyNow = async function (req, res) {
             isSelectivePurchase
           );
         } else {
+          console.log('💳 Processing STRIPE payment...');
+          
           if (req.body.token === "trial") {
-            var stripe = require("stripe")(
-              process.STRIPE_CONFIG.DEV.secret_key
-            );
+            console.log('🧪 TRIAL mode: Creating test token...');
             try {
-              const tokenObj = await stripe.tokens.create({
+              const tokenObj = await getStripe().tokens.create({
                 card: {
                   number: "4242424242424242",
                   exp_month: 12,
@@ -4079,6 +4135,7 @@ var buyNow = async function (req, res) {
                   cvc: "123",
                 },
               });
+              console.log('✅ Test token created:', tokenObj.id);
               token = tokenObj.id;
               email = req.session.user.Email;
               await createCharges();
@@ -4091,25 +4148,35 @@ var buyNow = async function (req, res) {
               return res.json(response);
             }
           } else {
+            console.log('💳 Using provided token (not trial)...');
             token = req.body.token ? req.body.token : null;
             email = req.body.tokenEmail
               ? req.body.tokenEmail
               : req.session.user.Email;
+            console.log('   Token:', token);
+            console.log('   Email:', email);
             await createCharges();
           }
 
           async function createCharges() {
             try {
-              const customer = await stripe.customers.create({
+              console.log('💰 Creating Stripe charge...');
+              console.log('   Token:', token);
+              console.log('   Email:', email);
+              console.log('   Amount: $' + order.TotalPayment);
+              
+              const customer = await getStripe().customers.create({
                 source: token,
                 description: email,
               });
+              console.log('✅ Stripe customer created:', customer.id);
 
-              const charge = await stripe.charges.create({
+              const charge = await getStripe().charges.create({
                 amount: parseInt(order.TotalPayment * 100), // Amount in cents
                 currency: "usd",
                 customer: customer.id,
               });
+              console.log('✅ Stripe charge completed:', charge.id, 'Status:', charge.status);
 
               console.log(
                 "---------------------- Calling savedOrder --------------"
@@ -4127,6 +4194,7 @@ var buyNow = async function (req, res) {
                 isSelectivePurchase
               );
             } catch (e) {
+              console.error('❌ Payment processing error:', e.message);
               var response = {
                 status: 500,
                 message: "Payment processing failed",
