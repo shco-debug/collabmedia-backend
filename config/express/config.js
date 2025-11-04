@@ -294,74 +294,26 @@ module.exports = (app) => {
 		// console.warn('Warning: Jade engine not available, jade templates may not render correctly');
 	}
 	
+	// Redirect /referral/:id/:capsule_id to Next.js signup with both params
 	app.get('/referral/:id/:capsule_id', (req, res) => {
-		// console.log("re1---", req)
-		if (req.session.user) {
-			res.render('layouts/frontend/capsuleLayout.html');
-		}
-		else {
-			const fields = {};
-			fields.referralCode = req.params.id;
-			fields.capsule_id = req.params.capsule_id;
-			const referralData = {};
-			const conditions = {
-				_id: fields.capsule_id,
-				IsDeleted: false
-			}
-			//console.log("checkReferralCode------")
-			//console.log("fields--------@@@@@@@@@@@@@@@------------",fields);
-			if (fields.referralCode) {
-				const referralCode = fields.referralCode;
-				user.findOne({ referralCode: referralCode, IsDeleted: false }).exec((err, userReferData) => {
-					//console.log("data==============", err, userReferData);
-					if (!err) {
-						Capsule.findOne(conditions).exec((err, capsuleReferdata) => {
-							if (!err) {
-								referralData.capsuleReferdata = capsuleReferdata;
-								referralData.userReferData = userReferData;
-								const newreferralData = {};
-								newreferralData.referralData = referralData;
-								newreferralData.metaDescription = referralData.capsuleReferdata.MetaData.description ? referralData.capsuleReferdata.MetaData.description : 'Scrpt publishes digital treats to elevate special days & those between them!';
-								newreferralData.metaImage = "http://www.scrpt.com/assets/Media/capsules/600/" + referralData.capsuleReferdata.CoverArt;
-								
-								newreferralData.metaTitle = referralData.capsuleReferdata.Title;
-								
-								referralData.capsuleReferdata.LaunchSettings = referralData.capsuleReferdata.LaunchSettings ? referralData.capsuleReferdata.LaunchSettings : {};
-								const capsuleFor = referralData.capsuleReferdata.LaunchSettings.CapsuleFor ? referralData.capsuleReferdata.LaunchSettings.CapsuleFor : null;
-								
-								switch ( capsuleFor ) {
-									case 'Birthday' : 
-										newreferralData.metaTitle = `"The new way" to say Happy Birthday`;
-									break;
-									
-									default : 
-										newreferralData.metaTitle = referralData.capsuleReferdata.Title;
-									break;
-								}
-								
-								newreferralData.metaUrl = 'http://www.scrpt.com' + req.url;
-								//console.log("referralData-------------", newreferralData);
-
-								res.render('referral.jade', newreferralData);
-
-								//res.json({ "code": "200", "response": referralData });
-							} else {
-
-								res.render('referral.jade', { newreferralData });
-							}
-						})
-					} else {
-						//console.log("ERROR in userReferData ================>",err);
-						res.render('referral.jade', { newreferralData });
-					}
-				});
-			} else {
-				res.render('referral.jade', { newreferralData });
-			}
-		}
-
+		console.log('🔗 Referral route hit with capsule:', req.params.id, req.params.capsule_id);
+		const referralCode = req.params.id;
+		const capsuleId = req.params.capsule_id;
+		const frontendUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+		return res.redirect(`${frontendUrl}/auth/signup?ref=${referralCode}&capsule=${capsuleId}`);
 	})
 
+	// Redirect to Next.js signup page with referral code
+	app.get('/referral/:id', (req, res) => {
+		console.log('🔗 Referral route hit:', req.params.id);
+		const referralCode = req.params.id;
+		const frontendUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+		console.log('🔀 Redirecting to:', `${frontendUrl}/auth/signup?ref=${referralCode}`);
+		return res.redirect(`${frontendUrl}/auth/signup?ref=${referralCode}`);
+	});
+
+	// Old implementation (kept commented for reference)
+	/*
 	app.get('/referral/:id', (req, res) => {
 		if (req.session.user) {
 			res.render('layouts/frontend/capsuleLayout.html');
@@ -395,6 +347,7 @@ module.exports = (app) => {
 		}
 
 	})
+	*/
 	//Referral Jade page routes-------------------------------------------------
 	
 	app.get('/public-invite/:id/:capsule_id', (req, res) => {
