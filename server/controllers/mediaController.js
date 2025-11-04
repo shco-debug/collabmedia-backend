@@ -2362,9 +2362,8 @@ const syncGdTwoMjImage_INTERNAL_API = async (req, res) => {
   }
 };
 const addMjImageToMedia__INTERNAL_API = async function (req, res) {
-  console.log("🎯 addMjImageToMedia__INTERNAL_API function hit!");
-  console.log("📥 Request body:", JSON.stringify(req.body, null, 2));
-
+  console.log("\n🎯 ========== MJ Image Upload API ==========");
+  
   let inputObj = req.body || {};
 
   // Validate required fields
@@ -2372,6 +2371,10 @@ const addMjImageToMedia__INTERNAL_API = async function (req, res) {
     typeof inputObj.GoogleDriveFilename === "string"
       ? inputObj.GoogleDriveFilename.trim()
       : null;
+
+  console.log("📄 Filename:", realFileName);
+  console.log("📊 Prompt:", inputObj.Prompt ? inputObj.Prompt.substring(0, 80) + "..." : "None");
+  console.log("🔗 URLs count:", inputObj.MediaUrls?.length || 0);
 
   if (!realFileName) {
     return res.json({ code: 404, message: "GoogleDriveFilename is required" });
@@ -2405,19 +2408,19 @@ const addMjImageToMedia__INTERNAL_API = async function (req, res) {
     );
 
     if (existingMediaRecord) {
-      console.log(`🔄 Found existing media with same filename: ${realFileName}`);
+      console.log(`✅ EXISTING MEDIA FOUND`);
+      console.log(`🆔 Media ID: ${existingMediaRecord._id}`);
 
       // Process tags for existing media if MetaData is provided
       if (inputObj.MetaData && inputObj.MetaData.Subjects) {
-        console.log(
-          `🏷️ Processing tags for existing media: ${existingMediaRecord._id}`
-        );
+        console.log(`🏷️ Processing tags...`);
         const tags = inputObj.Prompt || "";
         if (tags) {
           await addGTAsyncAwait(tags, existingMediaRecord._id, inputObj.MetaData);
         }
       }
 
+      console.log("==========================================\n");
       return res.json({
         code: 200,
         message: "Media with the provided filename already exists.",
@@ -2425,8 +2428,7 @@ const addMjImageToMedia__INTERNAL_API = async function (req, res) {
       });
     }
 
-    console.log(FgGreen, `- ${realFileName} - Processing media URLs (no upload needed)`);
-    console.log(Reset, `\n`);
+    console.log(`📦 Processing new media...`);
 
     // Generate auto-increment ID
     var incNum = 0;
@@ -2485,25 +2487,40 @@ const addMjImageToMedia__INTERNAL_API = async function (req, res) {
 
     // Save media record to database
     var mediaData = await media(dataToUpload).save();
-    console.log("✅ Media record saved = ", mediaData._id);
-    console.log("📦 Media URLs saved:", mediaUrls.length, "URLs");
+    
+    console.log("\n✅ ========== MEDIA SAVED SUCCESSFULLY ==========");
+    console.log("🆔 Media ID:", mediaData._id);
+    console.log("📄 Filename:", realFileName);
+    console.log("🔢 AutoId:", mediaData.AutoId);
+    console.log("📍 Locator:", mediaData.Locator);
+    console.log("🔗 URLs saved:", mediaUrls.length);
+    console.log("📊 Source:", mediaData.Source);
+    console.log("💾 MetaData.GoogleDriveFilename:", mediaData.MetaData?.GoogleDriveFilename);
 
     // Process tags if provided
     mediaData = mediaData ? mediaData : {};
     var tags = typeof mediaData.Prompt === "string" ? mediaData.Prompt : "";
     if (tags && mediaData._id) {
       await addGTAsyncAwait(tags, mediaData._id, inputObj.MetaData);
-      console.log("🏷️ Tags processed successfully");
+      console.log("🏷️ Tags processed");
     }
+    
+    console.log("\n📝 MongoDB Query to find this record:");
+    console.log(`db.media.findOne({ _id: ObjectId("${mediaData._id}") })`);
+    console.log("==========================================\n");
 
     return res.status(200).json({ 
       code: 200, 
       message: "Media URLs saved successfully (no upload performed).",
       mediaId: mediaData._id,
-      urlCount: mediaUrls.length
+      urlCount: mediaUrls.length,
+      locator: mediaData.Locator,
+      autoId: mediaData.AutoId
     });
   } catch (err) {
-    console.error("❌ Error saving media:", err);
+    console.error("\n❌ ========== ERROR ==========");
+    console.error("Error:", err.message);
+    console.error("==========================================\n");
     return res.status(501).json({ 
       code: 501, 
       message: "Something went wrong",

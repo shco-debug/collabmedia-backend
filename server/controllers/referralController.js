@@ -5,90 +5,94 @@ var Referral = require('./../models/referralModel.js');
 var AppSetting = require('./../models/appSettingModel.js')
 var mongoose = require('mongoose');
 
-function generateUniqueRefcode(callback) {
+async function generateUniqueRefcode() {
     console.log("generateUniqueRefcode");
     var referralCode = generator.generate({
         length: 5,
         numbers: true
     });
-    user.find({ referralCode: referralCode }, function (err, refcodes) {
-        if (refcodes.length == 0) {
-            callback(referralCode);
-        } else {
-            return generateUniqueRefcode();
-        }
-    })
+    const refcodes = await user.find({ referralCode: referralCode });
+    if (refcodes.length == 0) {
+        return referralCode;
+    } else {
+        return await generateUniqueRefcode();
+    }
 }
 exports.generateUniqueRefcode = generateUniqueRefcode;
 
 
-function getReferralCode(req, res) {
-    if (req.body.referralCode == undefined || req.body.referralCode == null || req.body.referralCode == '') {
+async function getReferralCode(req, res) {
+    try {
+        // Check if user is logged in
+        if (!req.session || !req.session.user || !req.session.user._id) {
+            return res.status(401).json({ 
+                "code": "401", 
+                "message": "User not authenticated. Please login first." 
+            });
+        }
 
-        generateUniqueRefcode(function (referCode) {
-        var query = { _id: req.session.user._id };
-        user.update(query, { $set: { referralCode: referCode } }, function (err, result) {
-            if (err) {
-                console.log("err");
-            } else {
-                user.find({ '_id': req.session.user._id }, function (err, result) {
-                    req.session.user = result;
-                })
+        if (req.body.referralCode == undefined || req.body.referralCode == null || req.body.referralCode == '') {
+            const referCode = await generateUniqueRefcode();
+            var query = { _id: req.session.user._id };
+            await user.updateOne(query, { $set: { referralCode: referCode } });
+            
+            const updatedUser = await user.findOne({ '_id': req.session.user._id });
+            req.session.user = updatedUser;
+            
+            var referralLink = process.HOST_URL + '/referral/' + referCode;
+            var referralData = {
+                userId: req.body.userId,
+                message: req.body.messageData,
+                referralCode: referCode,
+                referralLink: referralLink
             }
-        })
-        var referralLink = process.HOST_URL + '/referral/' + referCode;
-        var referralData = {
-            userId: req.body.userId,
-            message: req.body.messageData,
-            referralCode: req.body.referralCode,
-            referralLink: referralLink
+            res.json({ "code": "200", "response": referralData })
+        } else {
+            var referralLink = process.HOST_URL + '/referral/' + req.body.referralCode;
+            var referralData = {
+                userId: req.body.userId,
+                message: req.body.messageData,
+                referralCode: req.body.referralCode,
+                referralLink: referralLink
+            }
+            res.json({ "code": "200", "response": referralData })
         }
-        res.json({ "code": "200", "response": referralData })
-    })
-
-    } else {
-        var referralLink = process.HOST_URL + '/referral/' + req.body.referralCode;
-        var referralData = {
-            userId: req.body.userId,
-            message: req.body.messageData,
-            referralCode: req.body.referralCode,
-            referralLink: referralLink
-        }
-        res.json({ "code": "200", "response": referralData })
+    } catch (err) {
+        console.error("Error in getReferralCode:", err);
+        res.status(500).json({ "code": "500", "message": "Internal server error" });
     }
-    
 };
 exports.getReferralCode = getReferralCode;
 
 
-function checkReferralCode(req, res) {
-    console.log("checkReferralCode", req.body);
-    var referralData = {};
-    var conditions = {
-        _id: req.body.capsule_id,
-        IsDeleted: false
-    }
-    if (req.body.referralCode) {
-        var referralCode = req.body.referralCode;
-        user.findOne({ referralCode: referralCode, IsDeleted: false }).exec(function (err, userReferData) {
-            console.log("data==============", err, userReferData);
-            if (!err) {
-                Capsule.findOne(conditions).exec(function (err, capsuleReferdata) {
-                    if (!err) {
-                        referralData.capsuleReferdata = capsuleReferdata;
-                        referralData.userReferData = userReferData;
-                        console.log("referralData-------------", referralData);
-                        res.json({ "code": "200", "response": referralData });
-                    } else {
-                        res.json(err);
-                    }
-                })
+async function checkReferralCode(req, res) {
+    try {
+        console.log("checkReferralCode", req.body);
+        var referralData = {};
+        var conditions = {
+            _id: req.body.capsule_id,
+            IsDeleted: false
+        }
+        if (req.body.referralCode) {
+            var referralCode = req.body.referralCode;
+            const userReferData = await user.findOne({ referralCode: referralCode, IsDeleted: false });
+            console.log("data==============", userReferData);
+            
+            if (userReferData) {
+                const capsuleReferdata = await Capsule.findOne(conditions);
+                referralData.capsuleReferdata = capsuleReferdata;
+                referralData.userReferData = userReferData;
+                console.log("referralData-------------", referralData);
+                res.json({ "code": "200", "response": referralData });
             } else {
-                res.json(err);
+                res.json({ "code": "404", "message": "Referral code not found" });
             }
-        });
-    } else {
-        res.json(err);
+        } else {
+            res.json({ "code": "400", "message": "Referral code is required" });
+        }
+    } catch (err) {
+        console.error("Error in checkReferralCode:", err);
+        res.status(500).json({ "code": "500", "message": "Internal server error" });
     }
 }
 exports.checkReferralCode = checkReferralCode;
@@ -96,33 +100,40 @@ exports.checkReferralCode = checkReferralCode;
 
 
 
-function getReferralData(req, res) {
-    var referralUserId = req.body.referralUserId;
-    console.log("getReferralData", referralUserId);
-    var userId = mongoose.Types.ObjectId(referralUserId);
-    Referral.findOne({ ReferredToId: userId }).exec(function (err, UserReferralInfo) {
-        console.log("data==============", err, UserReferralInfo);
-        if (!err) {
-            res.json({ "code": "200", "response": UserReferralInfo });
-        } else {
-            res.json(err);
-        }
-    })
-
+async function getReferralData(req, res) {
+    try {
+        var referralUserId = req.body.referralUserId;
+        console.log("getReferralData", referralUserId);
+        var userId = mongoose.Types.ObjectId(referralUserId);
+        const UserReferralInfo = await Referral.findOne({ ReferredToId: userId });
+        console.log("data==============", UserReferralInfo);
+        res.json({ "code": "200", "response": UserReferralInfo });
+    } catch (err) {
+        console.error("Error in getReferralData:", err);
+        res.status(500).json({ "code": "500", "message": "Internal server error" });
+    }
 }
 exports.getReferralData = getReferralData;
 
-function getUserDataForCredit(req, res) {
-    console.log("data==============", req.session.user._id);
-    var userId = req.session.user._id;
-    user.findOne({ _id: userId }).exec(function (err, UserData) {
-        console.log("---------------", err, UserData);
-        if (!err) {
-            res.json({ "code": "200", "response": UserData });
-        } else {
-            res.json(err);
+async function getUserDataForCredit(req, res) {
+    try {
+        // Check if user is logged in
+        if (!req.session || !req.session.user || !req.session.user._id) {
+            return res.status(401).json({ 
+                "code": "401", 
+                "message": "User not authenticated. Please login first." 
+            });
         }
-    })
+
+        console.log("data==============", req.session.user._id);
+        var userId = req.session.user._id;
+        const UserData = await user.findOne({ _id: userId });
+        console.log("---------------", UserData);
+        res.json({ "code": "200", "response": UserData });
+    } catch (err) {
+        console.error("Error in getUserDataForCredit:", err);
+        res.status(500).json({ "code": "500", "message": "Internal server error" });
+    }
 }
 
 
@@ -131,32 +142,31 @@ exports.getUserDataForCredit = getUserDataForCredit;
 
 
 
-var getReferralPoint = function (req, res) {
-	AppSetting.findOne({ isDeleted: false }, function (err, AppSettingData) {
-		if (err) {
+var getReferralPoint = async function (req, res) {
+	try {
+		const AppSettingData = await AppSetting.findOne({ isDeleted: false });
+		
+		if (!AppSettingData) {
 			res.json({
-				code: 201,
+				code: 404,
 				data: {},
-				message: "INTERNAL_ERROR"
+				message: "No_RECORD_FOUND"
 			});
 		} else {
-			if(!AppSettingData){
-				res.json({
-					code: 404,
-					data: {},
-					message: "No_RECORD_FOUND"
-				});
-			}else{
-				res.json({
-					code: 200,
-					data: AppSettingData,
-					message: "DATA_FOUND_SUCCESSFULLY"
-				});
-				
-			}
-			
+			res.json({
+				code: 200,
+				data: AppSettingData,
+				message: "DATA_FOUND_SUCCESSFULLY"
+			});
 		}
-	});
+	} catch (err) {
+		console.error("Error in getReferralPoint:", err);
+		res.json({
+			code: 201,
+			data: {},
+			message: "INTERNAL_ERROR"
+		});
+	}
 }
 
 exports.getReferralPoint = getReferralPoint;
