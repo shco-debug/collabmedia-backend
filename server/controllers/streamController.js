@@ -10207,6 +10207,35 @@ var addCommentOnSocialPost = async function(req, res) {
 		PrivacySetting : req.body.PrivacySetting ? req.body.PrivacySetting : "PublicWithName"
 	};
 
+	// ✅ Add ParentId support for replies
+	if (req.body.ParentId) {
+		try {
+			dataToSave.ParentId = new mongoose.Types.ObjectId(req.body.ParentId);
+		} catch (e) {
+			console.log('⚠️ Invalid ParentId format:', req.body.ParentId);
+			dataToSave.ParentId = req.body.ParentId; // Use as-is if conversion fails
+		}
+	}
+
+	// ✅ Add OwnerId for privacy filtering (stream owner ID)
+	if (req.body.OwnerId) {
+		try {
+			dataToSave.OwnerId = new mongoose.Types.ObjectId(req.body.OwnerId);
+		} catch (e) {
+			console.log('⚠️ Invalid OwnerId format:', req.body.OwnerId);
+			dataToSave.OwnerId = req.body.OwnerId; // Use as-is if conversion fails
+		}
+	}
+
+	// ✅ DEBUG: Log what's being saved
+	console.log('💾 Saving comment with data:', JSON.stringify({
+		UserId: dataToSave.UserId,
+		Comment: dataToSave.Comment,
+		PrivacySetting: dataToSave.PrivacySetting,
+		OwnerId: dataToSave.OwnerId || 'NOT SET',
+		ParentId: dataToSave.ParentId || 'NOT SET'
+	}, null, 2));
+
 	if( !id ) {
 		StreamComments(dataToSave).save(async function(err, results){
 			var conditions = {

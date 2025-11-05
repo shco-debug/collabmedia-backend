@@ -14790,6 +14790,35 @@ var addCommentOnSocialPost = async function (req, res) {
       : "PublicWithName",
   };
 
+  // ✅ Add ParentId support for replies
+  if (req.body.ParentId) {
+    try {
+      dataToSave.ParentId = new mongoose.Types.ObjectId(req.body.ParentId);
+    } catch (e) {
+      console.log('⚠️ Invalid ParentId format:', req.body.ParentId);
+      dataToSave.ParentId = req.body.ParentId;
+    }
+  }
+
+  // ✅ Add OwnerId for privacy filtering (stream owner ID)
+  if (req.body.OwnerId) {
+    try {
+      dataToSave.OwnerId = new mongoose.Types.ObjectId(req.body.OwnerId);
+    } catch (e) {
+      console.log('⚠️ Invalid OwnerId format:', req.body.OwnerId);
+      dataToSave.OwnerId = req.body.OwnerId;
+    }
+  }
+
+  // ✅ DEBUG: Log what's being saved
+  console.log('💾 [journalControllerV2] Saving comment with data:', JSON.stringify({
+    UserId: dataToSave.UserId,
+    Comment: dataToSave.Comment,
+    PrivacySetting: dataToSave.PrivacySetting,
+    OwnerId: dataToSave.OwnerId || 'NOT SET',
+    ParentId: dataToSave.ParentId || 'NOT SET'
+  }, null, 2));
+
   if (!id) {
     try {
       // Save comment using async/await
@@ -23867,12 +23896,34 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       }
     }
 
+    // ✅ Validate OwnerId user exists before creating post
+    const uploaderID = result[0].OwnerId;
+    
+    if (!uploaderID) {
+      return res.json({ 
+        code: 400, 
+        message: "Stream owner (OwnerId) is missing in PageStream document" 
+      });
+    }
+    
+    // Check if the owner user exists in database
+    const User = require('./../models/userModel.js');
+    const ownerExists = await User.findById(uploaderID).select('_id').lean();
+    
+    if (!ownerExists) {
+      return res.json({ 
+        code: 404, 
+        message: `Stream owner user not found in database (OwnerId: ${uploaderID})`,
+        error: "Cannot create post - stream owner does not exist"
+      });
+    }
+    
     const dataToUpload = {
       Location: locationArray,
       AutoId: incNum,
       UploadedBy: (postStreamType === "Video" || postStreamType === "Audio" || postStreamType === "1VideoPost" || postStreamType === "1AudioPost") ? "admin" : "user",
       UploadedOn: Date.now(),
-      UploaderID: result[0].OwnerId,
+      UploaderID: uploaderID, // ✅ Validated - user exists in database
       Source: "Thinkstock",
       SourceUniqueID: "53ceb02d3aceabbe5d573dba",
       Domains: "53ad6993f222ef325c05039c",

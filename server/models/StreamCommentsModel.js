@@ -6,6 +6,7 @@ var streamCommentsSchema = new mongoose.Schema({
 	SocialPostId: { type : mongoose.Schema.Types.ObjectId },
 	hexcode_blendedImage : { type : String },
 	UserId: { type : mongoose.Schema.Types.ObjectId , ref: 'user'},
+	OwnerId: { type : mongoose.Schema.Types.ObjectId , ref: 'user'},  // ✅ NEW: Stream owner ID for OnlyForOwner privacy
 	Comment: {type:String,maxlength: 15000},
 	PrivacySetting : {type : String , enum : ["PublicWithName","PublicWithoutName","OnlyForOwner","InvitedFriends"] , default : "PublicWithName"},
 	CreatedOn:{type : Date, default: Date.now()},

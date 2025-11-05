@@ -373,6 +373,10 @@ module.exports = function(router){
 	router.post('/getUserMixedFeedPosts',function(req,res){
 		Capsule.getUserMixedFeedPosts(req,res);
 	});
+	// ⚡ NEW: Get more replies for a specific comment (lazy loading)
+	router.get('/getCommentReplies',function(req,res){
+		Capsule.getCommentReplies(req,res);
+	});
 	router.post('/getMySales',function(req,res){
 		Capsule.getMySales(req,res);
 	});
