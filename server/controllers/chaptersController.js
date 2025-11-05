@@ -334,8 +334,27 @@ _________________________________________________________________________
 
 var findAll = async function (req, res) {
   try {
+    // Safe session access for admin, subadmin, and regular users
+    var myself = null;
+
+    if (req.session && req.session.user) {
+      myself = req.session.user;
+    } else if (req.session && req.session.admin) {
+      myself = req.session.admin;
+    } else if (req.session && req.session.subadmin) {
+      myself = req.session.subadmin;
+    }
+
+    if (!myself) {
+      return res.json({
+        status: 401,
+        message: "User session not found",
+        results: null,
+      });
+    }
+    
     var conditions = {
-      CreaterId: req.session.user._id,
+      CreaterId: myself._id,
       CapsuleId: req.headers.capsule_id,
       $or: [
         { Origin: "created" },
@@ -388,43 +407,121 @@ _________________________________________________________________________
 
 var findAllPaginated = async function (req, res) {
   try {
+    // Safe session access for admin, subadmin, and regular users
+    var myself = null;
+
+    if (req.session && req.session.user) {
+      myself = req.session.user;
+    } else if (req.session && req.session.admin) {
+      myself = req.session.admin;
+    } else if (req.session && req.session.subadmin) {
+      myself = req.session.subadmin;
+    }
+
+    if (!myself) {
+      return res.json({
+        status: 401,
+        message: "User session not found",
+        results: null,
+      });
+    }
+
+    // Fetch user from database to get actual Role field
+    const currentUser = await User.findById(myself._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      return res.json({
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      });
+    }
+
+    const userRole = currentUser.Role || 'user';
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-    var conditions = {
-      $or: [
-        {
-          CreaterId: req.session.user._id,
-          Origin: "created",
-          IsLaunched: true,
-          "LaunchSettings.MakingFor": "ME",
-        },
-        {
-          CreaterId: req.session.user._id,
-          Origin: "duplicated",
-          IsLaunched: true,
-          "LaunchSettings.MakingFor": "ME",
-        },
-        {
-          CreaterId: req.session.user._id,
-          Origin: "addedFromLibrary",
-          IsLaunched: true,
-          "LaunchSettings.MakingFor": "ME",
-        },
-        {
-          CreaterId: req.session.user._id,
-          IsLaunched: true,
-          "LaunchSettings.MakingFor": "OTHERS",
-        },
-        {
-          CreaterId: { $ne: req.session.user._id },
-          OwnerId: req.session.user._id,
-          Origin: "shared",
-        },
-      ],
-      Status: true,
-      IsDeleted: false,
-    };
+    console.log('🔍 Chapter findAllPaginated - Role:', userRole);
+
+    var conditions;
+    
+    if (userRole === 'admin') {
+      // For ADMIN: Only launched chapters (creator + shared)
+      conditions = {
+        $or: [
+          {
+            CreaterId: currentUser._id,
+            Origin: "created",
+            IsLaunched: true,  // ✅ Admin sees launched only
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "duplicated",
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "addedFromLibrary",
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "OTHERS",
+          },
+          {
+            CreaterId: { $ne: currentUser._id },
+            OwnerId: currentUser._id,
+            Origin: "shared",
+            IsLaunched: true,  // ✅ Shared must also be launched for admin
+          },
+        ],
+        Status: true,
+        IsDeleted: false,
+      };
+    } else {
+      // For USER/SUBADMIN: Original logic
+      conditions = {
+        $or: [
+          {
+            CreaterId: currentUser._id,
+            Origin: "created",
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "duplicated",
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "addedFromLibrary",
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "OTHERS",
+          },
+          {
+            CreaterId: { $ne: currentUser._id },
+            OwnerId: currentUser._id,
+            Origin: "shared",
+          },
+        ],
+        Status: true,
+        IsDeleted: false,
+      };
+    }
 
     if (req.body.capsuleCheck) {
       conditions.CapsuleId = req.body.capsuleId ? req.body.capsuleId : 0;
@@ -489,50 +586,112 @@ var findAllPaginated = async function (req, res) {
 _________________________________________________________________________
 */
 
-var createdByMe = function (req, res) {
-  var limit = req.body.perPage ? req.body.perPage : 0;
-  var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
-  console.log("--------------------limit = " + limit);
-  console.log("--------------------Offset = " + offset);
-  /*
-	var conditions = {
-		$or : [{Origin : "created"},{Origin : "duplicated"},{Origin : "addedFromLibrary"}],
-		//CapsuleId : req.headers.capsule_id ? req.headers.capsule_id : 0,
-		CreaterId : req.session.user._id,
-		Status : 1,
-		IsLaunched : 0,
-		IsDeleted : 0
-	};
-	*/
-  var conditions = {
-    $or: [
-      {
-        CreaterId: req.session.user._id,
-        Origin: "created",
-        IsLaunched: true,
-        "LaunchSettings.MakingFor": "ME",
-      },
-      {
-        CreaterId: req.session.user._id,
-        Origin: "duplicated",
-        IsLaunched: true,
-        "LaunchSettings.MakingFor": "ME",
-      },
-      {
-        CreaterId: req.session.user._id,
-        Origin: "addedFromLibrary",
-        IsLaunched: true,
-        "LaunchSettings.MakingFor": "ME",
-      },
-      {
-        CreaterId: req.session.user._id,
-        IsLaunched: true,
-        "LaunchSettings.MakingFor": "OTHERS",
-      },
-    ],
-    Status: true,
-    IsDeleted: false,
-  };
+var createdByMe = async function (req, res) {
+  try {
+    // Safe session access for admin, subadmin, and regular users
+    var myself = null;
+
+    if (req.session && req.session.user) {
+      myself = req.session.user;
+    } else if (req.session && req.session.admin) {
+      myself = req.session.admin;
+    } else if (req.session && req.session.subadmin) {
+      myself = req.session.subadmin;
+    }
+
+    if (!myself) {
+      return res.json({
+        status: 401,
+        message: "User session not found",
+        results: null,
+      });
+    }
+
+    // Fetch user from database to get actual Role field
+    const currentUser = await User.findById(myself._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      return res.json({
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      });
+    }
+
+    const userRole = currentUser.Role || 'user';
+    var limit = req.body.perPage ? req.body.perPage : 0;
+    var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
+
+    console.log('🔍 Chapter createdByMe - Role:', userRole);
+
+    var conditions;
+    
+    if (userRole === 'admin') {
+      // For ADMIN: Only launched chapters where admin is creator
+      conditions = {
+        $or: [
+          {
+            CreaterId: currentUser._id,
+            Origin: "created",
+            IsLaunched: true,  // ✅ Admin sees launched only
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "duplicated",
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "addedFromLibrary",
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "OTHERS",
+          },
+        ],
+        Status: true,
+        IsDeleted: false,
+      };
+    } else {
+      // For USER/SUBADMIN: Original logic
+      conditions = {
+        $or: [
+          {
+            CreaterId: currentUser._id,
+            Origin: "created",
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "duplicated",
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "addedFromLibrary",
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "ME",
+          },
+          {
+            CreaterId: currentUser._id,
+            IsLaunched: true,
+            "LaunchSettings.MakingFor": "OTHERS",
+          },
+        ],
+        Status: true,
+        IsDeleted: false,
+      };
+    }
 
   if (req.body.capsuleCheck) {
     conditions.CapsuleId = req.body.capsuleId ? req.body.capsuleId : 0;
@@ -579,41 +738,29 @@ var createdByMe = function (req, res) {
 
   var fields = {};
 
-  Chapter.find(conditions, fields)
-    .sort(sortObj)
-    .skip(offset)
-    .limit(limit)
-    .exec(function (err, results) {
-      if (!err) {
-        Chapter.find(conditions, fields)
-          .count()
-          .exec(function (errr, resultsLength) {
-            if (!errr) {
-              var response = {
-                count: resultsLength,
-                status: 200,
-                message: "Chapters listing",
-                results: results,
-              };
-              res.json(response);
-            } else {
-              console.log(err);
-              var response = {
-                status: 501,
-                message: "Something went wrong.",
-              };
-              res.json(response);
-            }
-          });
-      } else {
-        console.log(err);
-        var response = {
-          status: 501,
-          message: "Something went wrong.",
-        };
-        res.json(response);
-      }
-    });
+    const results = await Chapter.find(conditions, fields)
+      .sort(sortObj)
+      .skip(offset)
+      .limit(limit)
+      .exec();
+
+    const resultsLength = await Chapter.countDocuments(conditions).exec();
+
+    var response = {
+      count: resultsLength,
+      status: 200,
+      message: "Chapters listing",
+      results: results,
+    };
+    res.json(response);
+  } catch (err) {
+    console.log(err);
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+    };
+    res.json(response);
+  }
 };
 
 /*________________________________________________________________________
@@ -628,33 +775,73 @@ var createdByMe = function (req, res) {
 _________________________________________________________________________
 */
 
-var sharedWithMe = function (req, res) {
-  var limit = req.body.perPage ? req.body.perPage : 0;
-  var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
-  console.log("--------------------limit = " + limit);
-  console.log("--------------------Offset = " + offset);
-  /*
-	var conditions = {
-		Origin : "shared",
-		CreaterId : {$ne:req.session.user._id},
-		OwnerId : req.session.user._id,
-		Status : 1,
-		IsLaunched : 0,
-		IsDeleted : 0
-	};
-	*/
+var sharedWithMe = async function (req, res) {
+  try {
+    // Safe session access for admin, subadmin, and regular users
+    var myself = null;
 
-  var conditions = {
-    $or: [
-      {
-        CreaterId: { $ne: req.session.user._id },
-        OwnerId: req.session.user._id,
+    if (req.session && req.session.user) {
+      myself = req.session.user;
+    } else if (req.session && req.session.admin) {
+      myself = req.session.admin;
+    } else if (req.session && req.session.subadmin) {
+      myself = req.session.subadmin;
+    }
+
+    if (!myself) {
+      return res.json({
+        status: 401,
+        message: "User session not found",
+        results: null,
+      });
+    }
+
+    // Fetch user from database to get actual Role field
+    const currentUser = await User.findById(myself._id)
+      .select('_id Name Email Role Permissions')
+      .lean()
+      .exec();
+
+    if (!currentUser) {
+      return res.json({
+        status: 401,
+        message: "User not found in database",
+        results: null,
+      });
+    }
+
+    const userRole = currentUser.Role || 'user';
+    var limit = req.body.perPage ? req.body.perPage : 0;
+    var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
+
+    console.log('🔍 Chapter sharedWithMe - Role:', userRole);
+
+    var conditions;
+    
+    if (userRole === 'admin') {
+      // For ADMIN: Only launched chapters shared to admin
+      conditions = {
+        CreaterId: { $ne: currentUser._id },
+        OwnerId: currentUser._id,
         Origin: "shared",
-      }, //this may not have option for further share. ? - May be key for furtherSharable ?
-    ],
-    Status: true,
-    IsDeleted: false,
-  };
+        IsLaunched: true,  // ✅ Shared must be launched for admin
+        Status: true,
+        IsDeleted: false,
+      };
+    } else {
+      // For USER/SUBADMIN: Original logic
+      conditions = {
+        $or: [
+          {
+            CreaterId: { $ne: currentUser._id },
+            OwnerId: currentUser._id,
+            Origin: "shared",
+          },
+        ],
+        Status: true,
+        IsDeleted: false,
+      };
+    }
 
   if (req.body.capsuleCheck) {
     conditions.CapsuleId = req.body.capsuleId ? req.body.capsuleId : 0;
@@ -702,41 +889,29 @@ var sharedWithMe = function (req, res) {
 
   var fields = {};
 
-  Chapter.find(conditions, fields)
-    .sort(sortObj)
-    .skip(offset)
-    .limit(limit)
-    .exec(function (err, results) {
-      if (!err) {
-        Chapter.find(conditions, fields)
-          .count()
-          .exec(function (errr, resultsLength) {
-            if (!errr) {
-              var response = {
-                count: resultsLength,
-                status: 200,
-                message: "Chapters listing",
-                results: results,
-              };
-              res.json(response);
-            } else {
-              console.log(err);
-              var response = {
-                status: 501,
-                message: "Something went wrong.",
-              };
-              res.json(response);
-            }
-          });
-      } else {
-        console.log(err);
-        var response = {
-          status: 501,
-          message: "Something went wrong.",
-        };
-        res.json(response);
-      }
-    });
+    const results = await Chapter.find(conditions, fields)
+      .sort(sortObj)
+      .skip(offset)
+      .limit(limit)
+      .exec();
+
+    const resultsLength = await Chapter.countDocuments(conditions).exec();
+
+    var response = {
+      count: resultsLength,
+      status: 200,
+      message: "Chapters listing",
+      results: results,
+    };
+    res.json(response);
+  } catch (err) {
+    console.log(err);
+    var response = {
+      status: 501,
+      message: "Something went wrong.",
+    };
+    res.json(response);
+  }
 };
 
 /*________________________________________________________________________

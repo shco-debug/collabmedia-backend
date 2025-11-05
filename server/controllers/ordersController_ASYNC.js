@@ -4416,143 +4416,119 @@ var savedOrder = function (
             status: 200,
             result: creditUpdate,
           };
-          AppSetting.findOne({ isDeleted: false })
-            .then(function (AppSettingData) {
-              console.log("AppSetting-----====-----=====", AppSettingData);
-              if (AppSettingData) {
-                Referral.findOne({
-                  ReferredToId: new mongoose.Types.ObjectId(
-                    req.session.user._id
-                  ),
-                  status: false,
-                })
-                  .then(function (referralInfo) {
-                    console.log("Referral-----====-----=====", referralInfo);
-                    if (referralInfo) {
-                      var ReferralData = referralInfo;
-                      User.updateOne(
-                        {
-                          _id: new mongoose.Types.ObjectId(
-                            req.session.user._id
-                          ),
-                        },
-                        {
-                          $inc: {
-                            CreditAmount: AppSettingData.ReferralDiscount,
-                          },
-                        }
-                      ).then(function (referradToCredit) {
-                        console.log(
-                          "creditUpdate+++++++++++++++++7777777777777777777777++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++",
-                          referradToCredit
-                        );
-                        if (referradToCredit) {
-                          User.updateOne(
-                            {
-                              _id: new mongoose.Types.ObjectId(
-                                ReferralData.ReferredById
-                              ),
-                            },
-                            {
-                              $inc: {
-                                CreditAmount: AppSettingData.ReferralDiscount,
-                              },
-                            }
-                          )
-                            .then(function (referradByCredit) {
-                              console.log(
-                                "++++++++++++++++++++++++++++++++++++++",
-                                referradByCredit
-                              );
-                              if (referradByCredit) {
-                                // Update referral status to true
-                                Referral.updateOne(
-                                  { _id: ReferralData._id },
-                                  { $set: { status: true } }
-                                )
-                                  .then(function (referralStatusUpdate) {
-                                    console.log(
-                                      "✅ Referral status updated to true:",
-                                      referralStatusUpdate
-                                    );
-                                  })
-                                  .catch(function (err) {
-                                    console.error("❌ Error updating referral status:", err);
-                                  });
+          // Check if user was referred
+          Referral.findOne({
+            ReferredToId: new mongoose.Types.ObjectId(req.session.user._id),
+            status: false,
+          })
+            .then(function (referralInfo) {
+              console.log("Referral-----====-----=====", referralInfo);
+              if (referralInfo) {
+                // Calculate referrer credit: 50% of purchase amount after Stripe fees
+                // Stripe fee structure: 2.9% + $0.30 per transaction
+                var purchaseAmount = parseFloat(order.TotalPayment);
+                var stripeFeePercentage = 0.029; // 2.9%
+                var stripeFeeFixed = 0.30; // $0.30
+                var stripeFee = (purchaseAmount * stripeFeePercentage) + stripeFeeFixed;
+                var amountAfterStripeFee = purchaseAmount - stripeFee;
+                var referrerCredit = parseFloat((amountAfterStripeFee * 0.5).toFixed(2)); // 50% of net amount
+                
+                console.log("💰 Referral Credit Calculation:");
+                console.log("   Purchase Amount: $" + purchaseAmount);
+                console.log("   Stripe Fee: $" + stripeFee.toFixed(2));
+                console.log("   Amount After Fee: $" + amountAfterStripeFee.toFixed(2));
+                console.log("   Referrer Credit (50%): $" + referrerCredit);
+                
+                var ReferralData = referralInfo;
+                
+                // Only give credit to the referrer (person who shared the link)
+                // Buyer gets NO discount
+                User.updateOne(
+                  {
+                    _id: new mongoose.Types.ObjectId(ReferralData.ReferredById),
+                  },
+                  {
+                    $inc: {
+                      CreditAmount: referrerCredit,
+                    },
+                  }
+                )
+                  .then(function (referradByCredit) {
+                    console.log(
+                      "++++++++++++++++++++++++++++++++++++++",
+                      referradByCredit
+                    );
+                    if (referradByCredit) {
+                      // Update referral status to true
+                      Referral.updateOne(
+                        { _id: ReferralData._id },
+                        { $set: { status: true } }
+                      )
+                        .then(function (referralStatusUpdate) {
+                          console.log(
+                            "✅ Referral status updated to true:",
+                            referralStatusUpdate
+                          );
+                        })
+                        .catch(function (err) {
+                          console.error("❌ Error updating referral status:", err);
+                        });
 
-                                var transaction = new Transaction();
-                                transaction.TransectionId = ReferralData._id;
-                                transaction.TransectionType = "Credit";
-                                transaction.Amount =
-                                  AppSettingData.ReferralDiscount;
-                                
-                                // Convert callback to promise
-                                transaction.save()
-                                  .then(function (updateCrTransectionData) {
-                                    console.log(
-                                      "✅ Transaction saved successfully:",
-                                      updateCrTransectionData
-                                    );
-                                  })
-                                  .catch(function (err) {
-                                    console.error("❌ Error saving transaction:", err);
-                                  });
-                                
-                                var response = {
-                                  status: 200,
-                                  result: referradByCredit,
-                                };
-                              } else {
-                                var response = {
-                                  status: 501,
-                                  result: err,
-                                };
-                              }
-                            })
-                            .catch(function (err) {
-                              console.error(
-                                "Error updating referral credit:",
-                                err
-                              );
-                            });
-                        } else {
-                          var response = {
-                            status: 501,
-                            result: err,
-                          };
-                        }
-                      });
+                      // Create transaction record for referrer credit
+                      var transaction = new Transaction();
+                      transaction.TransectionId = ReferralData._id;
+                      transaction.TransectionType = "Credit";
+                      transaction.Amount = referrerCredit;
+                      
+                      // Convert callback to promise
+                      transaction.save()
+                        .then(function (updateCrTransectionData) {
+                          console.log(
+                            "✅ Transaction saved successfully:",
+                            updateCrTransectionData
+                          );
+                        })
+                        .catch(function (err) {
+                          console.error("❌ Error saving transaction:", err);
+                        });
+                      
+                      var response = {
+                        status: 200,
+                        result: referradByCredit,
+                        message: "Referrer credited with $" + referrerCredit
+                      };
                     } else {
                       var response = {
                         status: 501,
-                        result: "Unknown error",
+                        result: "Error updating referrer credit",
                       };
                     }
                   })
                   .catch(function (err) {
-                    console.error("Error updating user referral credit:", err);
+                    console.error(
+                      "Error updating referral credit:",
+                      err
+                    );
                   });
               } else {
+                // No referral found - this is fine, user wasn't referred
+                console.log("ℹ️ No active referral found for user (user was not referred or already used)");
                 var response = {
-                  status: 501,
-                  result: err,
+                  status: 200,
+                  message: "No referral to process",
                 };
               }
             })
             .catch(function (err) {
-              console.error("Error finding app settings:", err);
+              console.error("Error checking referral:", err);
             });
-        } else {
-          var response = {
-            status: 501,
-            result: err,
-          };
         }
       })
       .catch(function (err) {
-        console.error("Error updating user credit:", err);
+        console.error("Error updating IsCredit status:", err);
       });
   } else {
+    // Handle subsequent purchases where user already has credit enabled
     if (
       orderInit.TransactionState == "Completed" &&
       req.session.user.IsCredit == true &&
