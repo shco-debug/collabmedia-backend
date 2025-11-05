@@ -994,8 +994,8 @@ var findAllPaginated = async function (req, res) {
     if (userRole === 'admin') {
       // For ADMIN: Only published created capsules + published shared capsules
       conditions = {
-        $or: [
-          {
+      $or: [
+        {
             CreaterId: currentUser._id,
             Origin: "created",
             IsPublished: true  // ✅ Only published for admin
@@ -1026,33 +1026,33 @@ var findAllPaginated = async function (req, res) {
         $or: [
           {
             CreaterId: currentUser._id,
-            Origin: "created"
-          },
-          {
+          Origin: "created"
+        },
+        {
             CreaterId: currentUser._id,
-            Origin: "duplicated"
-          },
-          {
+          Origin: "duplicated"
+        },
+        {
             CreaterId: currentUser._id,
-            Origin: "addedFromLibrary"
-          },
-          {
+          Origin: "addedFromLibrary"
+        },
+        {
             CreaterId: { $ne: currentUser._id },
             OwnerId: currentUser._id,
-            Origin: "shared"
-          },
-          {
+          Origin: "shared"
+        },
+        {
             OwnerId: currentUser._id,
-            Origin: "published"
-          },
-          {
+          Origin: "published"
+        },
+        {
             CreaterId: currentUser._id,
-            Origin: "journal"
-          }
-        ],
-        Status: true,
-        IsDeleted: false,
-      };
+          Origin: "journal"
+        }
+      ],
+      Status: true,
+      IsDeleted: false,
+    };
     }
 
     var sortObj = {
@@ -1256,7 +1256,7 @@ var createdByMe = async function (req, res) {
     }
 
     const userRole = currentUser.Role || 'user';  // Get Role from database
-    
+
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
@@ -1291,23 +1291,23 @@ var createdByMe = async function (req, res) {
     } else {
       // For USER/SUBADMIN: Both published AND unpublished capsules
       conditions = {
-        $or: [
-          {
-            CreaterId: currentUser._id,
-            Origin: "created"
-          },
-          {
-            CreaterId: currentUser._id,
-            Origin: "duplicated"
-          },
-          {
-            CreaterId: currentUser._id,
-            Origin: "addedFromLibrary"
-          }
-        ],
-        Status: true,
-        IsDeleted: false,
-      };
+      $or: [
+        {
+          CreaterId: currentUser._id,
+          Origin: "created"
+        },
+        {
+          CreaterId: currentUser._id,
+          Origin: "duplicated"
+        },
+        {
+          CreaterId: currentUser._id,
+          Origin: "addedFromLibrary"
+        }
+      ],
+      Status: true,
+      IsDeleted: false,
+    };
     }
 
     console.log('📋 createdByMe conditions:', JSON.stringify(conditions, null, 2));
@@ -1378,13 +1378,13 @@ var createdByMe = async function (req, res) {
               return capsule;
             }
 
-            // If not found, set default values
-            capsule.CreaterId = {
-              _id: capsule.CreaterId,
-              Name: "Unknown User",
-              ProfilePic: "/assets/users/default.png",
-              Role: "user"
-            };
+              // If not found, set default values
+              capsule.CreaterId = {
+                _id: capsule.CreaterId,
+                Name: "Unknown User",
+                ProfilePic: "/assets/users/default.png",
+                Role: "user"
+              };
           } catch (error) {
             capsule.CreaterId = {
               _id: capsule.CreaterId,
@@ -1762,7 +1762,7 @@ var sharedWithMe = async function (req, res) {
     }
 
     const userRole = currentUser.Role || 'user';  // Get Role from database
-    
+
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
@@ -1774,13 +1774,13 @@ var sharedWithMe = async function (req, res) {
     if (userRole === 'admin') {
       // For ADMIN: Only published capsules shared TO admin
       conditions = {
-        CreaterId: { $ne: currentUser._id },
-        OwnerId: currentUser._id,
-        Origin: "shared",
+      CreaterId: { $ne: currentUser._id },
+      OwnerId: currentUser._id,
+      Origin: "shared",
         IsPublished: true,  // ✅ Only published for admin
-        Status: true,
-        IsDeleted: false,
-      };
+      Status: true,
+      IsDeleted: false,
+    };
     } else {
       // For USER/SUBADMIN: All shared capsules (published and unpublished)
       conditions = {
@@ -10588,6 +10588,17 @@ _________________________________________________________________________
 */
 var getUserMixedFeedPosts = async function (req, res) {
   try {
+    // ✅ CRITICAL: Check if user is logged in
+    if (!req.session || !req.session.user || !req.session.user._id) {
+      console.error('❌ getUserMixedFeedPosts - No user session found');
+      return res.status(401).json({
+        code: 401,
+        msg: "Unauthorized - User not logged in",
+        response: [],
+        count: 0
+      });
+    }
+
     const limit = req.body.limit || 10;
     const skip = req.body.skip || 0;
     const type = req.body.type || null;
@@ -10599,27 +10610,40 @@ var getUserMixedFeedPosts = async function (req, res) {
     const StreamLikes = require('./../models/StreamLikes.js');
     const StreamComments = require('./../models/StreamCommentsModel.js');
     const StreamCommentLikes = require('./../models/StreamCommentLikesModel.js');
+    const User = require('./../models/userModel.js');
+    const StreamMember = require('./../models/StreamMembersModel.js');
     
     console.log('🚀 getUserMixedFeedPosts - Start');
+    console.log('👤 User ID:', loginUserId);
+    console.log('📊 Params:', { limit, skip, type, selectedKeyword });
     const startTime = Date.now();
     const perfLog = {}; // Performance tracking
 
     // ✅ OPTIMIZATION 1: Parallelize initial queries
     const t1 = Date.now();
-    const [friends, userCapsules] = await Promise.all([
+    console.log('🔍 Fetching friends, capsules, and memberships...');
+    
+    const [friends, userCapsules, userMemberships] = await Promise.all([
       // STEP 1: Get user's friends
       Friend.find({
-        UserID: String(loginUserId),
-        IsDeleted: false,
-        Status: true,
-        'Friend.IsRegistered': true
-      }).lean(),
+      UserID: String(loginUserId),
+      IsDeleted: false,
+      Status: true,
+      'Friend.IsRegistered': true
+      }).lean().maxTimeMS(10000), // 10 second timeout
       
       // STEP 2: Get user's owned capsules (for filtering user's own posts)
       Capsule.find({
         OwnerId: new mongoose.Types.ObjectId(loginUserId),
         IsDeleted: { $ne: true },
-      }).lean()
+      }).lean().maxTimeMS(10000), // 10 second timeout
+
+      // STEP 3: Get user's stream memberships (for InvitedFriends privacy)
+      StreamMember.find({
+        Members: new mongoose.Types.ObjectId(loginUserId),  // ✅ Members is an array
+        IsDeleted: false,
+        Status: true
+      }).select('StreamId').lean().maxTimeMS(10000)
     ]);
 
     const friendIds = friends
@@ -10633,8 +10657,12 @@ var getUserMixedFeedPosts = async function (req, res) {
       .filter(id => id !== null);
 
     const userCapsuleIds = userCapsules.map((c) => c._id);
+    
+    // Extract capsule IDs where user is a member (for InvitedFriends privacy)
+    const memberCapsuleIds = userMemberships.map(m => new mongoose.Types.ObjectId(m.StreamId));
+    
     perfLog.step1_friends_capsules = Date.now() - t1;
-    console.log(`📊 Found ${friends.length} friends (${friendIds.length} valid IDs), ${userCapsuleIds.length} capsules [${perfLog.step1_friends_capsules}ms]`);
+    console.log(`📊 Found ${friends.length} friends (${friendIds.length} valid IDs), ${userCapsuleIds.length} capsules, ${memberCapsuleIds.length} memberships [${perfLog.step1_friends_capsules}ms]`);
 
     // ✅ OPTIMIZATION 2: Parallelize interaction queries
     let friendInteractedPostIds = [];
@@ -10643,22 +10671,22 @@ var getUserMixedFeedPosts = async function (req, res) {
       // STEP 3: Get PostIds where friends have interacted (from any stream)
       const t2 = Date.now();
       const [streamLikes, streamComments, streamCommentLikes] = await Promise.all([
-        // From StreamLikes
+      // From StreamLikes
         StreamLikes.find({
-          UserId: { $in: friendIds },
-          IsDeleted: false
+        UserId: { $in: friendIds },
+        IsDeleted: false
         }, { SocialPostId: 1 }).lean(),
-        
-        // From StreamComments
+      
+      // From StreamComments
         StreamComments.find({
-          UserId: { $in: friendIds },
-          IsDeleted: 0
+        UserId: { $in: friendIds },
+        IsDeleted: 0
         }, { SocialPostId: 1 }).lean(),
-        
-        // From StreamCommentLikes (friends who liked comments)
+      
+      // From StreamCommentLikes (friends who liked comments)
         StreamCommentLikes.find({
-          LikedById: { $in: friendIds },
-          IsDeleted: false
+        LikedById: { $in: friendIds },
+        IsDeleted: false
         }).populate('CommentId', 'SocialPostId').lean()
       ]);
       
@@ -10695,57 +10723,139 @@ var getUserMixedFeedPosts = async function (req, res) {
     // Source 1: User's stream posts (Delivered = false)
     // Source 2: Posts where friends interacted (any stream)
     
-    const syncedPostConditions = {
-      $or: [
-        // Source 1: User's own streams, not yet delivered
-        {
+    // ⚡ CRITICAL FIX: Build $or array only with valid conditions
+    const orConditions = [];
+    
+    // Always add user's own capsules condition (even if empty array)
+    if (userCapsuleIds.length > 0) {
+      orConditions.push({
           CapsuleId: { $in: userCapsuleIds },
           IsDeleted: false,
           Status: true,
           'EmailEngineDataSets.Delivered': false
-        },
-        // Source 2: Any posts where friends interacted
-        ...(friendInteractedPostIds.length > 0 
-          ? [{
+      });
+    }
+    
+    // Add friend-interacted posts condition only if there are any
+    if (friendInteractedPostIds.length > 0) {
+      orConditions.push({
               PostId: { $in: friendInteractedPostIds },
               IsDeleted: false,
               Status: true
-            }]
-          : []
-        )
-      ]
+      });
+    }
+    
+    // ⚡ CRITICAL: If no conditions, return empty result immediately
+    if (orConditions.length === 0) {
+      console.log('❌ No capsules or friend interactions found, returning empty result');
+      return res.json({
+        code: 200,
+        msg: "Success",
+        response: [],
+        count: 0,
+        userCapsules: 0,
+        friendsCount: friends.length,
+        friendInteractedPostsCount: 0,
+        pagination: { skip: skip, limit: limit, hasMore: false },
+        filters: { type: type, selectedKeyword: selectedKeyword },
+      });
+    }
+    
+    const syncedPostConditions = {
+      $or: orConditions
     };
+    
+    console.log('📋 SyncedPost query conditions:', JSON.stringify(syncedPostConditions, null, 2));
+
+    // ⚡ CRITICAL: First check if any documents match before running expensive aggregation
+    const t_count = Date.now();
+    const matchCount = await SyncedPost.countDocuments(syncedPostConditions).maxTimeMS(5000);
+    console.log(`📊 Found ${matchCount} matching SyncedPost documents [${Date.now() - t_count}ms]`);
+    
+    if (matchCount === 0) {
+      console.log('❌ No SyncedPost documents found, returning empty result');
+      return res.json({
+        code: 200,
+        msg: "Success - No posts found",
+        response: [],
+        count: 0,
+        userCapsules: userCapsuleIds.length,
+        friendsCount: friends.length,
+        friendInteractedPostsCount: friendInteractedPostIds.length,
+        pagination: { skip: skip, limit: limit, hasMore: false },
+        filters: { type: type, selectedKeyword: selectedKeyword },
+      });
+    }
 
     const pipeline = [
       { $match: syncedPostConditions },
       
-      // Unwind EmailEngineDataSets to get post details
+      // ⚡ CRITICAL FIX: Sort and paginate BEFORE unwinding to reduce row count
+      { $sort: { CreatedOn: -1, _id: -1 } },
+      { $skip: skip },
+      { $limit: limit * 10 },  // Get 10× limit to account for duplicates after unwind
+      
+      // NOW unwind EmailEngineDataSets (only on limited docs!)
       { $unwind: { path: "$EmailEngineDataSets", preserveNullAndEmptyArrays: false } },
       
-      // Project main fields from SyncedPost
+      // NOW deduplicate by PostId
+      {
+        $group: {
+          _id: "$PostId",
+          // Keep first occurrence of all fields
+          doc_id: { $first: "$_id" },
+          CapsuleId: { $first: "$CapsuleId" },
+          PageId: { $first: "$PageId" },
+          PostId: { $first: "$PostId" },
+          PostStatement: { $first: "$PostStatement" },
+          PostOwnerId: { $first: "$PostOwnerId" },
+          SyncedBy: { $first: "$SyncedBy" },
+          ReceiverEmails: { $first: "$ReceiverEmails" },
+          CreatedOn: { $first: "$CreatedOn" },
+          Delivered: { $first: "$EmailEngineDataSets.Delivered" },
+          VisualUrls: { $first: "$EmailEngineDataSets.VisualUrls" },
+          SoundFileUrl: { $first: "$EmailEngineDataSets.SoundFileUrl" },
+          TextAboveVisual: { $first: "$EmailEngineDataSets.TextAboveVisual" },
+          TextBelowVisual: { $first: "$EmailEngineDataSets.TextBelowVisual" },
+          DateOfDelivery: { $first: "$EmailEngineDataSets.DateOfDelivery" },
+          BlendMode: { $first: "$EmailEngineDataSets.BlendMode" },
+          EmailTemplate: { $first: "$EmailTemplate" },
+          Subject: { $first: "$EmailSubject" },
+          IsOnetimeStream: { $first: "$IsOnetimeStream" },
+          IsOnlyPostImage: { $first: "$IsOnlyPostImage" },
+          hexcode_blendedImage_temp: { $first: "$EmailEngineDataSets.hexcode_blendedImage" },
+          UploaderID: { $first: "$UploaderID" }, // ✅ Preserve for uploader lookup
+        },
+      },
+      
+      // Limit again after grouping to get exactly what we need
+      { $limit: limit },
+      
+      // Project to restore field structure
       {
         $project: {
-          _id: "$_id",
-          CapsuleId: "$CapsuleId",
-          PageId: "$PageId",
-          PostId: "$PostId",
-          PostStatement: "$PostStatement",
-          PostOwnerId: "$PostOwnerId",
-          SyncedBy: "$SyncedBy",
-          ReceiverEmails: "$ReceiverEmails",
-          CreatedOn: "$CreatedOn",
-          Delivered: "$EmailEngineDataSets.Delivered",
-          VisualUrls: "$EmailEngineDataSets.VisualUrls",
-          SoundFileUrl: "$EmailEngineDataSets.SoundFileUrl",
-          TextAboveVisual: "$EmailEngineDataSets.TextAboveVisual",
-          TextBelowVisual: "$EmailEngineDataSets.TextBelowVisual",
-          DateOfDelivery: "$EmailEngineDataSets.DateOfDelivery",
-          BlendMode: "$EmailEngineDataSets.BlendMode",
-          EmailTemplate: "$EmailTemplate",
-          Subject: "$EmailSubject",
-          IsOnetimeStream: "$IsOnetimeStream",
-          IsOnlyPostImage: "$IsOnlyPostImage",
-          hexcode_blendedImage_temp: "$EmailEngineDataSets.hexcode_blendedImage",
+          _id: "$doc_id",
+          CapsuleId: 1,
+          PageId: 1,
+          PostId: 1,
+          PostStatement: 1,
+          PostOwnerId: 1,
+          SyncedBy: 1,
+          ReceiverEmails: 1,
+          CreatedOn: 1,
+          Delivered: 1,
+          VisualUrls: 1,
+          SoundFileUrl: 1,
+          TextAboveVisual: 1,
+          TextBelowVisual: 1,
+          DateOfDelivery: 1,
+          BlendMode: 1,
+          EmailTemplate: 1,
+          Subject: 1,
+          IsOnetimeStream: 1,
+          IsOnlyPostImage: 1,
+          hexcode_blendedImage_temp: 1,
+          UploaderID: 1, // ✅ Preserve for uploader lookup
         },
       },
       
@@ -10828,246 +10938,402 @@ var getUserMixedFeedPosts = async function (req, res) {
           ]
         : []),
       
-      // Lookup Capsule data
+      // ⚡ ULTRA-OPTIMIZED: Combine Capsule + Owner lookup in single stage
       {
         $lookup: {
           from: "Capsules",
-          localField: "CapsuleId",
-          foreignField: "_id",
-          as: "capsuleData",
-        },
-      },
-      { $unwind: { path: "$capsuleData", preserveNullAndEmptyArrays: true } },
-      
-      // Lookup Page data
-      {
-        $lookup: {
-          from: "Pages",
-          localField: "PageId",
-          foreignField: "_id",
-          as: "pageData",
-        },
-      },
-      { $unwind: { path: "$pageData", preserveNullAndEmptyArrays: true } },
-      
-      // Lookup Chapter data (to get chapterId and chapterTitle)
-      {
-        $lookup: {
-          from: "Chapters",
-          let: { pageId: "$PageId" },
+          let: { capsuleId: "$CapsuleId" },
           pipeline: [
+            { $match: { $expr: { $eq: ["$_id", "$$capsuleId"] } } },
+            { $limit: 1 },
+            // Nested lookup for owner (faster in subpipeline)
+      {
+        $lookup: {
+                from: "users",
+                localField: "OwnerId",
+          foreignField: "_id",
+                as: "owner"
+              }
+            },
+            { $unwind: { path: "$owner", preserveNullAndEmptyArrays: true } },
             {
-              $match: {
-                $expr: { $in: ["$$pageId", "$pages"] },
-                IsDeleted: { $ne: true }
+              $project: {
+                _id: 1,
+                Title: 1,
+                OwnerId: 1,
+                ownerName: "$owner.Name",
+                ownerEmail: "$owner.Email",
+                ownerProfilePic: "$owner.ProfilePic"
               }
             }
           ],
-          as: "chapterData",
-        },
+          as: "capsuleData"
+        }
       },
-      { $unwind: { path: "$chapterData", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$capsuleData", preserveNullAndEmptyArrays: true } },
       
-      // Lookup capsule owner
+      // ⚡ Lookup post uploader (creator) details
       {
         $lookup: {
           from: "users",
-          localField: "capsuleData.OwnerId",
-          foreignField: "_id",
-          as: "capsuleOwner",
-        },
+          let: { uploaderId: "$UploaderID" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { 
+                  $eq: [
+                    { $toString: "$_id" },  // ✅ Convert ObjectId to string
+                    "$$uploaderId"           // ✅ UploaderID is stored as string
+                  ] 
+                }
+              }
+            },
+            {
+              $project: {
+                Name: 1,
+                ProfilePic: 1
+              }
+            }
+          ],
+          as: "uploaderData"
+        }
       },
-      { $unwind: { path: "$capsuleOwner", preserveNullAndEmptyArrays: true } },
+      { $unwind: { path: "$uploaderData", preserveNullAndEmptyArrays: true } },
       
-      // Lookup capsule creator
-      {
-        $lookup: {
-          from: "users",
-          localField: "capsuleData.CreaterId",
-          foreignField: "_id",
-          as: "capsuleCreator",
-        },
-      },
-      { $unwind: { path: "$capsuleCreator", preserveNullAndEmptyArrays: true } },
-      
-      // Add capsule, page, and chapter info to root
+      // Add capsule and page info to root (minimal fields only)
       {
         $addFields: {
           capsuleId: "$CapsuleId",
+          capsuleOwnerId: "$capsuleData.OwnerId", // ✅ For OwnerId in like/comment API
+          postOwnerId: "$PostOwnerId", // ✅ For PostOwnerId in like/comment API
           capsuleTitle: "$capsuleData.Title",
-          capsuleOwnerName: "$capsuleOwner.Name",
-          capsuleOwnerEmail: "$capsuleOwner.Email",
-          capsuleOwnerProfilePic: "$capsuleOwner.ProfilePic",
-          capsuleCreatorName: "$capsuleCreator.Name",
-          capsuleCreatorEmail: "$capsuleCreator.Email",
-          capsuleCreatorProfilePic: "$capsuleCreator.ProfilePic",
+          capsuleOwnerName: "$capsuleData.ownerName",
+          capsuleOwnerEmail: "$capsuleData.ownerEmail",
+          capsuleOwnerProfilePic: "$capsuleData.ownerProfilePic",
+          // ✅ Add post creator (uploader) details - ONLY name and pic
+          capsuleCreatorName: "$uploaderData.Name",
+          capsuleCreatorProfilePic: "$uploaderData.ProfilePic",
           pageId: "$PageId",
-          pageTitle: "$pageData.Title",
-          pageType: "$pageData.PageType",
-          chapterId: "$chapterData._id",
-          chapterTitle: "$chapterData.Title",
         }
       },
       
       // Sort by upload date (newest first)
       { $sort: { UploadedOn: -1, _id: -1 } },
       
-      // DON'T paginate here - need to do it after $group to get unique posts
+      // ⚡ CRITICAL FIX: Group by PostId IMMEDIATELY after media lookup to deduplicate
+      // This prevents EmailEngineDataSets multiplication (12 datasets × 4 comments = 48 fake comments!)
+      {
+        $group: {
+          _id: "$PostId",
+          firstDoc: { $first: "$$ROOT" }
+        }
+      },
       
-      // Lookup StreamLikes for each post
+      // Restore document structure
+      {
+        $replaceRoot: { newRoot: "$firstDoc" }
+      },
+      
+      // NOW lookup interactions on deduplicated posts (4 comments, not 48!)
       {
         $lookup: {
           from: "StreamLikes",
           localField: "PostId",
           foreignField: "SocialPostId",
-          as: "streamLikesArr",
+          as: "likes",
         },
       },
       
-      // Lookup StreamComments for each post
-      {
-        $lookup: {
-          from: "StreamComments",
-          let: { postId: "$PostId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ["$SocialPostId", "$$postId"] },
-                IsDeleted: false  // Changed from 0 to false (boolean)
-              }
-            }
-          ],
-          as: "streamCommentsArr",
-        },
-      },
-      
-      // Unwind comments to lookup user data
-      {
-        $unwind: {
-          path: "$streamCommentsArr",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      
-      // Lookup user data for each comment
-      {
-        $lookup: {
-          from: "users",
-          localField: "streamCommentsArr.UserId",
-          foreignField: "_id",
-          as: "streamCommentsArr.user",
-        },
-      },
-      
-      // Lookup comment likes for each comment
-      {
-        $lookup: {
-          from: "StreamCommentLikes",
-          localField: "streamCommentsArr._id",
-          foreignField: "CommentId",
-          as: "streamCommentsArr.commentLikes",
-        },
-      },
-      
-      // Group back by post ID to aggregate comments (only push non-null comments)
-      {
-        $group: {
-          _id: "$PostId",
-          root: { $first: "$$ROOT" },
-          allComments: { $push: "$streamCommentsArr" },
-          streamLikesArr: { $first: "$streamLikesArr" }, // Preserve the likes array
-        },
-      },
-      
-      // Filter out null comments after grouping
+      // Filter out deleted likes (handle both boolean and numeric)
       {
         $addFields: {
-          comments: {
+          likes: {
             $filter: {
-              input: "$allComments",
-              cond: { $and: [
-                { $ne: ["$$this", null] },
-                { $ne: ["$$this._id", null] }
-              ]}
-            }
-          }
-        }
-      },
-      
-      // Replace root with post data (comments already filtered above)
-      {
-        $replaceRoot: {
-          newRoot: {
-            $mergeObjects: ["$root", { comments: "$comments", streamLikesArr: "$streamLikesArr" }],
-          },
-        },
-      },
-      
-      // Add user field to each comment and calculate comment like counts
-      {
-        $addFields: {
-          commentsRaw: {
-            $map: {
-              input: {
-                $filter: {
-                  input: "$comments",
-                  cond: { $and: [
-                    { $ne: ["$$this._id", null] },
-                    { $ne: ["$$this", null] }
-                  ]}
-                }
-              },
-              as: "comment",
-              in: {
-                _id: "$$comment._id",
-                UserId: "$$comment.UserId",
-                Comment: "$$comment.Comment",
-                CreatedOn: "$$comment.CreatedOn",
-                PrivacySetting: "$$comment.PrivacySetting",
-                IsDeleted: "$$comment.IsDeleted",
-                user: { $arrayElemAt: ["$$comment.user", 0] },
-                CommentLikeCount: {
-                  $size: {
-                    $filter: {
-                      input: { $ifNull: ["$$comment.commentLikes", []] },
-                      cond: { $eq: ["$$this.IsDeleted", false] }
-                    }
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      // Final filter to remove any comments with missing _id (catches null, undefined, and missing)
-      {
-        $addFields: {
-          comments: {
-            $filter: {
-              input: "$commentsRaw",
+              input: "$likes",
+              as: "like",
               cond: { 
                 $and: [
-                  { $ifNull: ["$$this._id", false] }, // False if _id is null/missing
-                  { $ne: [{ $type: "$$this._id" }, "missing"] }, // Check field exists
-                  { $ne: ["$$this.Comment", null] } // Also ensure Comment field exists
+                  { $ne: ["$$like.IsDeleted", true] },
+                  { $ne: ["$$like.IsDeleted", 1] }
                 ]
               }
             }
+          }
+        }
+      },
+      
+      // ⚡ Lookup comments with PRIVACY FILTERING
+      {
+        $lookup: {
+          from: "StreamComments",
+          let: { 
+            postId: "$PostId",
+            capsuleId: "$capsuleId"
           },
-          likes: "$streamLikesArr",
+          pipeline: [
+            {
+              $match: {
+                $and: [
+                  // IsDeleted filter
+                  {
+                    $expr: { 
+                      $and: [
+                        { $eq: ["$SocialPostId", "$$postId"] },
+                        { $ne: ["$IsDeleted", true] },
+                        { $ne: ["$IsDeleted", 1] }
+                      ]
+                    }
+                  },
+                  // Top-level comments only (no ParentId)
+                  {
+                    $or: [
+                      { ParentId: { $exists: false } },
+                      { ParentId: null }
+                    ]
+                  },
+                  // ✅ PRIVACY FILTER (FAST - In aggregation!)
+                  {
+                    $or: [
+                      // 1. PublicWithName or no setting
+                      { PrivacySetting: { $exists: false } },
+                      { PrivacySetting: 'PublicWithName' },
+                      
+                      // 2. PublicWithoutName (will anonymize later)
+                      { PrivacySetting: 'PublicWithoutName' },
+                      
+                      // 3. OnlyForOwner - you're the author
+                      { 
+                        PrivacySetting: 'OnlyForOwner',
+                        UserId: new mongoose.Types.ObjectId(loginUserId)
+                      },
+                      
+                      // 4. OnlyForOwner - you're the stream owner
+                      { 
+                        PrivacySetting: 'OnlyForOwner',
+                        OwnerId: new mongoose.Types.ObjectId(loginUserId)
+                      },
+                      
+                      // 5. InvitedFriends - you're a member of this stream
+                      { 
+                        PrivacySetting: 'InvitedFriends',
+                        $expr: { $in: ["$$capsuleId", memberCapsuleIds] }
+                      }
+                    ]
+                  }
+                ]
+              }
+            },
+            // Sort by creation date (newest first)
+            { $sort: { CreatedOn: -1 } },
+            // Limit to first 10 top-level comments for performance
+            { $limit: 10 },
+            // Lookup user data for comment author (only essential fields)
+      {
+        $lookup: {
+          from: "users",
+                let: { userId: "$UserId" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: { $eq: ["$_id", "$$userId"] }
+                    }
+                  },
+                  {
+                    $project: {
+                      _id: 1,
+                      Name: 1,
+                      UserName: 1,
+                      ProfilePic: 1,
+                      Email: 1
+                    }
+                  }
+                ],
+                as: "user"
+              }
+            },
+            { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+            // Lookup comment likes
+      {
+        $lookup: {
+          from: "StreamCommentLikes",
+                let: { commentId: "$_id" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: { 
+                        $and: [
+                          { $eq: ["$CommentId", "$$commentId"] },
+                          { $ne: ["$IsDeleted", true] },
+                          { $ne: ["$IsDeleted", 1] }
+                        ]
+                      }
+                    }
+                  }
+                ],
+                as: "commentLikes"
+              }
+            },
+            // ✅ Lookup replies for this comment (limit to first 2 for performance)
+            {
+              $lookup: {
+                from: "StreamComments",
+                let: { 
+                  commentId: "$_id",
+                  capsuleId: "$$capsuleId"  // Pass capsuleId from parent lookup
+                },
+                pipeline: [
+                  {
+                    $match: {
+                      $and: [
+                        // ParentId and IsDeleted filter
+                        {
+                          $expr: { 
+                            $and: [
+                              { $eq: ["$ParentId", "$$commentId"] },
+                              { $ne: ["$IsDeleted", true] },
+                              { $ne: ["$IsDeleted", 1] }
+                            ]
+                          }
+                        },
+                        // ✅ PRIVACY FILTER for replies (same as comments)
+                        {
+                          $or: [
+                            { PrivacySetting: { $exists: false } },
+                            { PrivacySetting: 'PublicWithName' },
+                            { PrivacySetting: 'PublicWithoutName' },
+                            { PrivacySetting: 'OnlyForOwner', UserId: new mongoose.Types.ObjectId(loginUserId) },
+                            { PrivacySetting: 'OnlyForOwner', OwnerId: new mongoose.Types.ObjectId(loginUserId) },
+                            { PrivacySetting: 'InvitedFriends', $expr: { $in: ["$$capsuleId", memberCapsuleIds] } }
+                          ]
+                        }
+                      ]
+                    }
+                  },
+                  { $sort: { CreatedOn: 1 } }, // Replies sorted oldest first
+                  { $limit: 2 }, // ⚡ Only first 2 replies per comment for faster load
+                  // Lookup user data for reply author (only essential fields)
+                  {
+                    $lookup: {
+                      from: "users",
+                      let: { userId: "$UserId" },
+                      pipeline: [
+                        {
+                          $match: {
+                            $expr: { $eq: ["$_id", "$$userId"] }
+                          }
+                        },
+                        {
+                          $project: {
+                            _id: 1,
+                            Name: 1,
+                            UserName: 1,
+                            ProfilePic: 1,
+                            Email: 1
+                          }
+                        }
+                      ],
+                      as: "user"
+                    }
+                  },
+                  { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+                  // Lookup reply likes (simplified - just count)
+                  {
+                    $lookup: {
+                      from: "StreamCommentLikes",
+                      let: { replyId: "$_id" },
+                      pipeline: [
+                        {
+                          $match: {
+                            $expr: { 
+                              $and: [
+                                { $eq: ["$CommentId", "$$replyId"] },
+                                { $ne: ["$IsDeleted", true] },
+                                { $ne: ["$IsDeleted", 1] }
+                              ]
+                            }
+                          }
+                        },
+                        { $count: "count" }
+                      ],
+                      as: "replyLikeCount"
+                    }
+                  },
+                  // Project reply fields
+                  {
+                    $project: {
+                      _id: 1,
+                      UserId: 1,
+                      ParentId: 1,
+                      Comment: 1,
+                      CreatedOn: 1,
+                      PrivacySetting: 1,
+                      user: 1,
+                      CommentLikeCount: { $ifNull: [{ $arrayElemAt: ["$replyLikeCount.count", 0] }, 0] }
+                    }
+                  }
+                ],
+                as: "replies"
+              }
+            },
+            // ✅ Count TOTAL replies (not just fetched 2)
+            {
+              $lookup: {
+                from: "StreamComments",
+                let: { commentId: "$_id" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: { 
+                        $and: [
+                          { $eq: ["$ParentId", "$$commentId"] },
+                          { $ne: ["$IsDeleted", true] },
+                          { $ne: ["$IsDeleted", 1] }
+                        ]
+                      }
+                    }
+                  },
+                  { $count: "total" }
+                ],
+                as: "replyCountArr"
+              }
+            },
+            // Add counts
+      {
+        $addFields: {
+                CommentLikeCount: { $size: "$commentLikes" },
+                replyCount: { $ifNull: [{ $arrayElemAt: ["$replyCountArr.total", 0] }, 0] }
+              }
+            },
+            // Project comment fields
+            {
+              $project: {
+                _id: 1,
+                UserId: 1,
+                Comment: 1,
+                CreatedOn: 1,
+                PrivacySetting: 1,
+                user: 1,
+                CommentLikeCount: 1,
+                replies: 1, // ✅ Include full replies array
+                replyCount: 1
+              }
+            }
+          ],
+          as: "comments"
+        }
+      },
+      
+      // Add interaction counts
+      {
+        $addFields: {
           likeCount: {
             $size: {
               $filter: {
-                input: "$streamLikesArr",
+                input: "$likes",
                 cond: { $eq: ["$$this.IsDeleted", false] }
-              }
             }
           }
         },
-      },
-      // Calculate commentCount AFTER filtering (in separate stage to reference filtered comments)
-      {
-        $addFields: {
           commentCount: { $size: "$comments" }
         }
       },
@@ -11094,20 +11360,17 @@ var getUserMixedFeedPosts = async function (req, res) {
           hexcode_blendedImage_temp: 1,
           // Capsule info
           capsuleId: 1,
+          capsuleOwnerId: 1, // ✅ For OwnerId in like/comment API
+          postOwnerId: 1, // ✅ For PostOwnerId in like/comment API
           capsuleTitle: 1,
           capsuleOwnerName: 1,
           capsuleOwnerEmail: 1,
           capsuleOwnerProfilePic: 1,
+          // ✅ Post creator (uploader) info - ONLY name and pic
           capsuleCreatorName: 1,
-          capsuleCreatorEmail: 1,
           capsuleCreatorProfilePic: 1,
           // Page info
           pageId: 1,
-          pageTitle: 1,
-          pageType: 1,
-          // Chapter info
-          chapterId: 1,
-          chapterTitle: 1,
           // Interactions
           likes: 1,
           comments: 1,
@@ -11116,17 +11379,22 @@ var getUserMixedFeedPosts = async function (req, res) {
           // Note: commentsRaw and allComments are automatically excluded in inclusion projection
         },
       },
-      // Re-sort after group
-      { $sort: { UploadedOn: -1, _id: -1 } },
-      
-      // Apply pagination AFTER grouping to limit unique posts
-      { $skip: skip },
-      { $limit: limit },
+      // Re-sort by creation date (already done earlier, but ensure final order)
+      { $sort: { CreatedOn: -1, _id: -1 } },
     ];
 
-    const t3 = Date.now();
-    const posts = await SyncedPost.aggregate(pipeline).exec();
-    perfLog.step3_main_aggregation = Date.now() - t3;
+      console.log('🔄 Starting main aggregation pipeline...');
+      console.log(`📊 Pipeline has ${pipeline.length} stages`);
+      
+      const t3 = Date.now();
+    
+    const posts = await SyncedPost.aggregate(pipeline, {
+      allowDiskUse: true,
+      maxTimeMS: 30000 // 30 second timeout
+    }).exec();
+    
+      perfLog.step3_main_aggregation = Date.now() - t3;
+      console.log(`✅ Main aggregation completed: ${posts.length} posts [${perfLog.step3_main_aggregation}ms]`);
 
     // Debug: Show which posts have comments
     console.log("\n📊 ========== POSTS SUMMARY ==========");
@@ -11141,9 +11409,28 @@ var getUserMixedFeedPosts = async function (req, res) {
     });
     console.log("========================================\n");
 
-    // Add user's interaction status for each post
+    // Add user's interaction status AND friend activity metadata for each post
     if (req.session.user && req.session.user._id) {
       const userId = req.session.user._id;
+      const userIdStr = String(userId);
+      
+      // ✅ Fetch friend names for activity display
+      const Friend = require('./../models/friendsModel.js');
+      const User = require('./../models/userModel.js');
+      
+      // Get friend names in parallel with interaction checking
+      const friendIdToNameMap = {};
+      if (friendIds.length > 0) {
+        const friendUsers = await User.find(
+          { _id: { $in: friendIds } },
+          { _id: 1, Name: 1 }
+        ).lean().exec();
+        
+        friendUsers.forEach(function(user) {
+          friendIdToNameMap[String(user._id)] = user.Name;
+        });
+      }
+      
       posts.forEach(function (post) {
         // Check if user liked this post
         post.isLikedByMe = post.likes && post.likes.some(function (like) {
@@ -11154,6 +11441,51 @@ var getUserMixedFeedPosts = async function (req, res) {
         post.isCommentedByMe = post.comments && post.comments.some(function (comment) {
           return String(comment.UserId) === String(userId);
         });
+        
+        // ✅ NEW: Add friend activity metadata with names!
+        // Find which friends interacted with this post
+        const friendsWhoLiked = [];
+        const friendsWhoCommented = [];
+        
+        if (post.likes && post.likes.length > 0) {
+          post.likes.forEach(function(like) {
+            const likeUserIdStr = String(like.UserId);
+            // Check if this like is from a friend (not the user themselves)
+            if (likeUserIdStr !== userIdStr && friendIds.some(fid => String(fid) === likeUserIdStr)) {
+              const friendName = friendIdToNameMap[likeUserIdStr] || 'Unknown Friend';
+              friendsWhoLiked.push({ id: likeUserIdStr, name: friendName });
+            }
+          });
+        }
+        
+        if (post.comments && post.comments.length > 0) {
+          post.comments.forEach(function(comment) {
+            const commentUserIdStr = String(comment.UserId);
+            // Check if this comment is from a friend (not the user themselves)
+            if (commentUserIdStr !== userIdStr && friendIds.some(fid => String(fid) === commentUserIdStr)) {
+              const friendName = friendIdToNameMap[commentUserIdStr] || 'Unknown Friend';
+              // Avoid duplicates
+              if (!friendsWhoCommented.some(f => f.id === commentUserIdStr)) {
+                friendsWhoCommented.push({ id: commentUserIdStr, name: friendName });
+              }
+            }
+          });
+        }
+        
+        // Add friend activity summary
+        post.friendActivity = {
+          friendsWhoLiked: friendsWhoLiked.slice(0, 3), // Max 3 friends with names
+          friendsWhoCommented: friendsWhoCommented.slice(0, 3), // Max 3 friends with names
+          totalFriendsInteracted: [...new Set([
+            ...friendsWhoLiked.map(f => f.id), 
+            ...friendsWhoCommented.map(f => f.id)
+          ])].length
+        };
+        
+        // ✅ NOTE: We keep user data for PublicWithoutName comments
+        // Frontend will decide whether to show name or "Anonymous" based on:
+        // - If comment.UserId === loggedInUserId → Show real name/pic (author sees themselves)
+        // - If comment.UserId !== loggedInUserId → Show "Anonymous" (others see anonymous)
         
         // Initialize dislikes (StreamLikes doesn't have dislikes, only likes)
         post.dislikes = [];
@@ -11168,16 +11500,14 @@ var getUserMixedFeedPosts = async function (req, res) {
         post.isCommentedByMe = false;
         post.dislikes = [];
         post.dislikeCount = 0;
+        post.friendActivity = { friendsWhoLiked: [], friendsWhoCommented: [], totalFriendsInteracted: 0 };
       });
     }
 
-    // Get total count for pagination (count unique posts after grouping, before skip/limit)
-    // ⚠️ TODO: Optimize this with $facet to do count + posts in single aggregation
+    // ⚡ SIMPLIFIED COUNT: Just count matching SyncedPosts (fast, approximate)
+    // Note: This is approximate since we paginate before deduplication
     const t4 = Date.now();
-    const countPipeline = pipeline.slice(0, -2); // Remove skip and limit only (keep final sort)
-    countPipeline.push({ $count: "total" });
-    const countResult = await SyncedPost.aggregate(countPipeline).exec();
-    const totalCount = countResult.length > 0 ? countResult[0].total : 0;
+    const totalCount = await SyncedPost.countDocuments(syncedPostConditions).exec();
     perfLog.step4_count_aggregation = Date.now() - t4;
 
     // Calculate hexcode_blendedImage and clean BlendSettings
@@ -11256,11 +11586,14 @@ var getUserMixedFeedPosts = async function (req, res) {
     console.log(`✅ getUserMixedFeedPosts completed | Posts: ${cleanedPosts.length}/${totalCount}`);
   } catch (error) {
     console.error("❌ Error in getUserMixedFeedPosts:", error);
-    res.json({
+    console.error("❌ Error stack:", error.stack);
+    return res.status(500).json({
       code: 500,
       msg: "Error fetching mixed feed posts",
       error: error.message,
+      errorDetails: error.toString(),
       response: [],
+      count: 0
     });
   }
 };
@@ -11738,6 +12071,191 @@ var getCapsuleBuyers = async function (req, res) {
   }
 };
 exports.getCapsuleBuyers = getCapsuleBuyers;
+
+/**
+ * ⚡ NEW API: Get more replies for a specific comment
+ * This is called when user clicks "View more replies" on a comment
+ * @route GET /capsules/getCommentReplies
+ * @param {ObjectId} commentId - The parent comment ID
+ * @param {Number} skip - Number of replies to skip (for pagination)
+ * @param {Number} limit - Number of replies to fetch (default: 10)
+ */
+var getCommentReplies = async function (req, res) {
+  try {
+    // ✅ CRITICAL: Check if user is logged in
+    if (!req.session || !req.session.user || !req.session.user._id) {
+      console.error('❌ getCommentReplies - No user session found');
+      return res.status(401).json({
+        code: 401,
+        msg: "Unauthorized - User not logged in",
+        response: [],
+        count: 0
+      });
+    }
+
+    const commentId = req.query.commentId || req.body.commentId;
+    const skip = parseInt(req.query.skip || req.body.skip || 0);
+    const limit = parseInt(req.query.limit || req.body.limit || 10);
+
+    if (!commentId) {
+      return res.status(400).json({
+        code: 400,
+        msg: "commentId is required",
+        response: [],
+        count: 0
+      });
+    }
+
+    console.log('🔄 getCommentReplies - Fetching replies for comment:', commentId);
+    console.log('📊 Params:', { skip, limit });
+
+    const StreamComments = require('./../models/StreamCommentsModel.js');
+    const StreamCommentLikes = require('./../models/StreamCommentLikesModel.js');
+    const User = require('./../models/userModel.js');
+    const StreamMember = require('./../models/StreamMembersModel.js');
+    const loginUserId = req.session.user._id;
+
+    // ⚡ Pre-fetch user's stream memberships (for InvitedFriends privacy)
+    const userMemberships = await StreamMember.find({
+      Members: new mongoose.Types.ObjectId(loginUserId),  // ✅ Members is an array
+      IsDeleted: false,
+      Status: true
+    }).select('StreamId').lean();
+    
+    const memberCapsuleIds = userMemberships.map(m => new mongoose.Types.ObjectId(m.StreamId));
+
+    // Fetch replies with user data and like counts + PRIVACY FILTER
+    const replies = await StreamComments.aggregate([
+      {
+        $match: {
+          $and: [
+            // ParentId match
+            { ParentId: new mongoose.Types.ObjectId(commentId) },
+            // IsDeleted filter
+            {
+              $or: [
+                { IsDeleted: false },
+                { IsDeleted: 0 }
+              ]
+            },
+            // ✅ PRIVACY FILTER (same as main feed)
+            {
+              $or: [
+                { PrivacySetting: { $exists: false } },
+                { PrivacySetting: 'PublicWithName' },
+                { PrivacySetting: 'PublicWithoutName' },
+                { PrivacySetting: 'OnlyForOwner', UserId: new mongoose.Types.ObjectId(loginUserId) },
+                { PrivacySetting: 'OnlyForOwner', OwnerId: new mongoose.Types.ObjectId(loginUserId) }
+                // Note: InvitedFriends requires capsuleId - need to add support for this
+              ]
+            }
+          ]
+        }
+      },
+      { $sort: { CreatedOn: 1 } }, // Oldest first
+      { $skip: skip },
+      { $limit: limit },
+      // Lookup user data for reply author (only essential fields)
+      {
+        $lookup: {
+          from: "users",
+          let: { userId: "$UserId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", "$$userId"] }
+              }
+            },
+            {
+              $project: {
+                _id: 1,
+                Name: 1,
+                UserName: 1,
+                ProfilePic: 1,
+                Email: 1
+              }
+            }
+          ],
+          as: "user"
+        }
+      },
+      { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
+      // Lookup reply likes
+      {
+        $lookup: {
+          from: "StreamCommentLikes",
+          let: { replyId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { 
+                  $and: [
+                    { $eq: ["$CommentId", "$$replyId"] },
+                    { $ne: ["$IsDeleted", true] },
+                    { $ne: ["$IsDeleted", 1] }
+                  ]
+                }
+              }
+            }
+          ],
+          as: "replyLikes"
+        }
+      },
+      // Project reply fields
+      {
+        $project: {
+          _id: 1,
+          UserId: 1,
+          ParentId: 1,
+          Comment: 1,
+          CreatedOn: 1,
+          PrivacySetting: 1,
+          user: 1,
+          CommentLikeCount: { $size: "$replyLikes" }
+        }
+      }
+    ]);
+
+    // Get total reply count
+    const totalCount = await StreamComments.countDocuments({
+      ParentId: new mongoose.Types.ObjectId(commentId),
+      $or: [
+        { IsDeleted: false },
+        { IsDeleted: 0 }
+      ]
+    });
+
+    // ✅ NOTE: We keep user data for PublicWithoutName replies
+    // Frontend will decide whether to show name or "Anonymous" based on:
+    // - If reply.UserId === loggedInUserId → Show real name/pic (author sees themselves)
+    // - If reply.UserId !== loggedInUserId → Show "Anonymous" (others see anonymous)
+
+    res.json({
+      code: 200,
+      msg: "Success",
+      response: replies,
+      count: totalCount,
+      pagination: {
+        skip: skip,
+        limit: limit,
+        hasMore: skip + limit < totalCount,
+      },
+    });
+
+    console.log(`✅ getCommentReplies completed - Fetched ${replies.length}/${totalCount} replies`);
+  } catch (error) {
+    console.error("❌ Error in getCommentReplies:", error);
+    console.error("❌ Error stack:", error.stack);
+    return res.status(500).json({
+      code: 500,
+      msg: "Error fetching comment replies",
+      error: error.message,
+      response: [],
+      count: 0
+    });
+  }
+};
+exports.getCommentReplies = getCommentReplies;
 
 exports.approveCapsuleForSales = approveCapsuleForSales;
 
