@@ -333,18 +333,70 @@ _________________________________________________________________________
 
 var getPageLibrary = async function (req, res) {
 	try {
+		// Safe session access for admin, subadmin, and regular users
+		var myself = null;
+
+		if (req.session && req.session.user) {
+			myself = req.session.user;
+		} else if (req.session && req.session.admin) {
+			myself = req.session.admin;
+		} else if (req.session && req.session.subadmin) {
+			myself = req.session.subadmin;
+		}
+
+		if (!myself) {
+			return res.json({
+				status: 401,
+				message: "User session not found",
+				results: null,
+			});
+		}
+
+		// Fetch user from database to get actual Role field
+		const currentUser = await User.findById(myself._id)
+			.select('_id Name Email Role Permissions')
+			.lean()
+			.exec();
+
+		if (!currentUser) {
+			return res.json({
+				status: 401,
+				message: "User not found in database",
+				results: null,
+			});
+		}
+
+		const userRole = currentUser.Role || 'user';
 		const limit = req.body.perPage ? req.body.perPage : 0;
 		const offset = req.body.pageNo ? ((req.body.pageNo - 1) * limit) : 0;
-		
-		const conditions = {
-			$or: [
-				{ CreaterId: req.session.user._id, Origin: "published" }, 
-				{ OwnerId: req.session.user._id, Origin: "shared" }
-			],
-			IsDeleted: 0,
-			PageType: { $in: ["gallery", "content"] },
-			IsDasheditpage: false,
-		};
+
+		console.log('🔍 Page getPageLibrary - Role:', userRole);
+
+		var conditions;
+
+		if (userRole === 'admin') {
+			// For ADMIN: Only launched pages (created + shared)
+			conditions = {
+				$or: [
+					{ CreaterId: currentUser._id, Origin: "published", IsLaunched: true },
+					{ OwnerId: currentUser._id, Origin: "shared", IsLaunched: true }
+				],
+				IsDeleted: 0,
+				PageType: { $in: ["gallery", "content"] },
+				IsDasheditpage: false,
+			};
+		} else {
+			// For USER/SUBADMIN: Original logic
+			conditions = {
+				$or: [
+					{ CreaterId: currentUser._id, Origin: "published" }, 
+					{ OwnerId: currentUser._id, Origin: "shared" }
+				],
+				IsDeleted: 0,
+				PageType: { $in: ["gallery", "content"] },
+				IsDasheditpage: false,
+			};
+		}
 
 		if (req.body.chapterCheck) {
 			conditions.ChapterId = req.body.chapterId ? req.body.chapterId : 0;
@@ -429,20 +481,67 @@ var getPageLibrary = async function (req, res) {
 _________________________________________________________________________
 */
 
-var createdByMe = function (req, res) {
-	var limit = req.body.perPage ? req.body.perPage : 0;
-	var offset = req.body.pageNo ? ((req.body.pageNo - 1) * limit) : 0;
-	var conditions = {
-		//ChapterId : req.headers.chapter_id ? req.headers.chapter_id : 0, 
-		//Origin : "created",
-		//$or : [{Origin : "created"},{Origin : "duplicated"},{Origin : "addedFromLibrary"}],
-		CreaterId: req.session.user._id,
-		//OwnerId : req.session.user._id,
-		//$or : [{Origin : 'created'},{Origin : 'duplicated'},{Origin : 'addedFromLibrary'}],
-		Origin: "published",
-		IsDeleted: 0,
-		PageType: { $in: ["gallery", "content"] }
-	};
+var createdByMe = async function (req, res) {
+	try {
+		// Safe session access for admin, subadmin, and regular users
+		var myself = null;
+
+		if (req.session && req.session.user) {
+			myself = req.session.user;
+		} else if (req.session && req.session.admin) {
+			myself = req.session.admin;
+		} else if (req.session && req.session.subadmin) {
+			myself = req.session.subadmin;
+		}
+
+		if (!myself) {
+			return res.json({
+				status: 401,
+				message: "User session not found",
+				results: null,
+			});
+		}
+
+		// Fetch user from database to get actual Role field
+		const currentUser = await User.findById(myself._id)
+			.select('_id Name Email Role Permissions')
+			.lean()
+			.exec();
+
+		if (!currentUser) {
+			return res.json({
+				status: 401,
+				message: "User not found in database",
+				results: null,
+			});
+		}
+
+		const userRole = currentUser.Role || 'user';
+		var limit = req.body.perPage ? req.body.perPage : 0;
+		var offset = req.body.pageNo ? ((req.body.pageNo - 1) * limit) : 0;
+
+		console.log('🔍 Page createdByMe - Role:', userRole);
+
+		var conditions;
+
+		if (userRole === 'admin') {
+			// For ADMIN: Only launched pages where admin is creator
+			conditions = {
+				CreaterId: currentUser._id,
+				Origin: "published",
+				IsLaunched: true,  // ✅ Admin sees launched only
+				IsDeleted: 0,
+				PageType: { $in: ["gallery", "content"] }
+			};
+		} else {
+			// For USER/SUBADMIN: Original logic
+			conditions = {
+				CreaterId: currentUser._id,
+				Origin: "published",
+				IsDeleted: 0,
+				PageType: { $in: ["gallery", "content"] }
+			};
+		}
 
 	if (req.body.chapterCheck) {
 		conditions.ChapterId = req.body.chapterId ? req.body.chapterId : 0;
@@ -489,38 +588,31 @@ var createdByMe = function (req, res) {
 	}
 	var fields = {};
 
-	Page.find(conditions, fields).skip(offset).limit(limit).populate('ChapterId').sort(sortObj).exec(function (err, results) {
-		if (!err) {
-			Page.find(conditions, fields).count().exec(function (errr, resultsLength) {
-				if (!errr) {
-					var response = {
-						count: resultsLength,
-						status: 200,
-						message: "Pages listing",
-						results: results
-					}
-					res.json(response);
-				}
-				else {
-					console.log(err);
-					var response = {
-						status: 501,
-						message: "Something went wrong."
-					}
-					res.json(response);
-				}
-			})
-		}
-		else {
-			console.log(err);
-			var response = {
-				status: 501,
-				message: "Something went wrong."
-			}
-			res.json(response);
-		}
-	});
-}
+		const results = await Page.find(conditions, fields)
+			.skip(offset)
+			.limit(limit)
+			.populate('ChapterId')
+			.sort(sortObj)
+			.exec();
+
+		const resultsLength = await Page.countDocuments(conditions).exec();
+
+		var response = {
+			count: resultsLength,
+			status: 200,
+			message: "Pages listing",
+			results: results
+		};
+		res.json(response);
+	} catch (err) {
+		console.log(err);
+		var response = {
+			status: 501,
+			message: "Something went wrong."
+		};
+		res.json(response);
+	}
+};
 
 /*________________________________________________________________________
    * @Date:      		31 August 2015
@@ -534,17 +626,67 @@ var createdByMe = function (req, res) {
 _________________________________________________________________________
 */
 
-var sharedWithMe = function (req, res) {
-	var limit = req.body.perPage ? req.body.perPage : 0;
-	var offset = req.body.pageNo ? ((req.body.pageNo - 1) * limit) : 0;
-	var conditions = {
-		//ChapterId : req.headers.chapter_id ? req.headers.chapter_id : 0, 
-		//CreaterId : req.session.user._id, 
-		Origin: 'shared',
-		CreaterId: { $ne: req.session.user._id },
-		OwnerId: req.session.user._id,
-		IsDeleted: 0
-	};
+var sharedWithMe = async function (req, res) {
+	try {
+		// Safe session access for admin, subadmin, and regular users
+		var myself = null;
+
+		if (req.session && req.session.user) {
+			myself = req.session.user;
+		} else if (req.session && req.session.admin) {
+			myself = req.session.admin;
+		} else if (req.session && req.session.subadmin) {
+			myself = req.session.subadmin;
+		}
+
+		if (!myself) {
+			return res.json({
+				status: 401,
+				message: "User session not found",
+				results: null,
+			});
+		}
+
+		// Fetch user from database to get actual Role field
+		const currentUser = await User.findById(myself._id)
+			.select('_id Name Email Role Permissions')
+			.lean()
+			.exec();
+
+		if (!currentUser) {
+			return res.json({
+				status: 401,
+				message: "User not found in database",
+				results: null,
+			});
+		}
+
+		const userRole = currentUser.Role || 'user';
+		var limit = req.body.perPage ? req.body.perPage : 0;
+		var offset = req.body.pageNo ? ((req.body.pageNo - 1) * limit) : 0;
+
+		console.log('🔍 Page sharedWithMe - Role:', userRole);
+
+		var conditions;
+
+		if (userRole === 'admin') {
+			// For ADMIN: Only launched pages shared to admin
+			conditions = {
+				Origin: 'shared',
+				CreaterId: { $ne: currentUser._id },
+				OwnerId: currentUser._id,
+				IsLaunched: true,  // ✅ Shared must be launched for admin
+				IsDeleted: 0
+			};
+		} else {
+			// For USER/SUBADMIN: Original logic
+			conditions = {
+				Origin: 'shared',
+				CreaterId: { $ne: currentUser._id },
+				OwnerId: currentUser._id,
+				IsDeleted: 0
+			};
+		}
 
 	if (req.body.chapterCheck) {
 		conditions.ChapterId = req.body.chapterId ? req.body.chapterId : 0;
@@ -604,38 +746,31 @@ var sharedWithMe = function (req, res) {
 		ViewportMobileSections: 0
 	};
 
-	Page.find(conditions, fields).skip(offset).limit(limit).populate('ChapterId').sort(sortObj).exec(function (err, results) {
-		if (!err) {
-			Page.find(conditions, fields).count().exec(function (errr, resultsLength) {
-				if (!errr) {
-					var response = {
-						count: resultsLength,
-						status: 200,
-						message: "Pages listing",
-						results: results
-					}
-					res.json(response);
-				}
-				else {
-					console.log(err);
-					var response = {
-						status: 501,
-						message: "Something went wrong."
-					}
-					res.json(response);
-				}
-			})
-		}
-		else {
-			console.log(err);
-			var response = {
-				status: 501,
-				message: "Something went wrong."
-			}
-			res.json(response);
-		}
-	});
-}
+		const results = await Page.find(conditions, fields)
+			.skip(offset)
+			.limit(limit)
+			.populate('ChapterId')
+			.sort(sortObj)
+			.exec();
+
+		const resultsLength = await Page.countDocuments(conditions).exec();
+
+		var response = {
+			count: resultsLength,
+			status: 200,
+			message: "Pages listing",
+			results: results
+		};
+		res.json(response);
+	} catch (err) {
+		console.log(err);
+		var response = {
+			status: 501,
+			message: "Something went wrong."
+		};
+		res.json(response);
+	}
+};
 
 
 /*________________________________________________________________________

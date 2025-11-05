@@ -836,6 +836,7 @@ var findAll = async function (req, res) {
         { Origin: "addedFromLibrary" },
       ],
       IsPublished: false,
+      IsLaunched: false,  // ✅ Only unpublished and unlaunched capsules
       Status: true,
       IsDeleted: false,
     };
@@ -946,8 +947,18 @@ var findAllPaginated = async function (req, res) {
   try {
     console.log('🔍 findAllPaginated called');
     
-    // Get user from session
-    if (!req.session || !req.session.user) {
+    // Safe session access for admin, subadmin, and regular users
+    var myself = null;
+
+    if (req.session && req.session.user) {
+      myself = req.session.user;
+    } else if (req.session && req.session.admin) {
+      myself = req.session.admin;
+    } else if (req.session && req.session.subadmin) {
+      myself = req.session.subadmin;
+    }
+
+    if (!myself) {
       var response = {
         status: 401,
         message: "User session not found",
@@ -956,8 +967,8 @@ var findAllPaginated = async function (req, res) {
       return res.json(response);
     }
 
-    // Fetch user from database to get current Role and permissions
-    const currentUser = await User.findById(req.session.user._id)
+    // Fetch user from database to get actual Role field
+    const currentUser = await User.findById(myself._id)
       .select('_id Name Email Role Permissions')
       .lean()
       .exec();
@@ -971,44 +982,78 @@ var findAllPaginated = async function (req, res) {
       return res.json(response);
     }
 
-    const myself = currentUser;
-    console.log('👤 Current user:', { id: myself._id, name: myself.Name, role: myself.Role });
+    const userRole = currentUser.Role || 'user';  // Get Role from database
+    console.log('👤 Current user:', { id: currentUser._id, name: currentUser.Name, role: userRole });
 
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-    // Get ALL capsules user has access to (created, shared, purchased, journal)
-    var conditions = {
-      $or: [
-        {
-          CreaterId: myself._id,
-          Origin: "created"
-        },
-        {
-          CreaterId: myself._id,
-          Origin: "duplicated"
-        },
-        {
-          CreaterId: myself._id,
-          Origin: "addedFromLibrary"
-        },
-        {
-          CreaterId: { $ne: myself._id },
-          OwnerId: myself._id,
-          Origin: "shared"
-        },
-        {
-          OwnerId: myself._id,
-          Origin: "published"
-        },
-        {
-          CreaterId: myself._id,
-          Origin: "journal"
-        }
-      ],
-      Status: true,
-      IsDeleted: false,
-    };
+    // Build conditions based on user role from database
+    var conditions;
+    
+    if (userRole === 'admin') {
+      // For ADMIN: Only published created capsules + published shared capsules
+      conditions = {
+        $or: [
+          {
+            CreaterId: currentUser._id,
+            Origin: "created",
+            IsPublished: true  // ✅ Only published for admin
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "duplicated",
+            IsPublished: true
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "addedFromLibrary",
+            IsPublished: true
+          },
+          {
+            CreaterId: { $ne: currentUser._id },
+            OwnerId: currentUser._id,
+            Origin: "shared",
+            IsPublished: true  // ✅ Only published shared capsules for admin
+          }
+        ],
+        Status: true,
+        IsDeleted: false,
+      };
+    } else {
+      // For USER/SUBADMIN: All capsules (created, shared, purchased, journal)
+      conditions = {
+        $or: [
+          {
+            CreaterId: currentUser._id,
+            Origin: "created"
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "duplicated"
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "addedFromLibrary"
+          },
+          {
+            CreaterId: { $ne: currentUser._id },
+            OwnerId: currentUser._id,
+            Origin: "shared"
+          },
+          {
+            OwnerId: currentUser._id,
+            Origin: "published"
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "journal"
+          }
+        ],
+        Status: true,
+        IsDeleted: false,
+      };
+    }
 
     var sortObj = {
       ModifiedOn: -1,
@@ -1175,8 +1220,18 @@ _________________________________________________________________________
 
 var createdByMe = async function (req, res) {
   try {
-    // Get user from session
-    if (!req.session || !req.session.user) {
+    // Safe session access for admin, subadmin, and regular users
+    var myself = null;
+
+    if (req.session && req.session.user) {
+      myself = req.session.user;
+    } else if (req.session && req.session.admin) {
+      myself = req.session.admin;
+    } else if (req.session && req.session.subadmin) {
+      myself = req.session.subadmin;
+    }
+
+    if (!myself) {
       var response = {
         status: 401,
         message: "User session not found",
@@ -1185,8 +1240,8 @@ var createdByMe = async function (req, res) {
       return res.json(response);
     }
 
-    // Fetch user from database to get current Role and permissions
-    const currentUser = await User.findById(req.session.user._id)
+    // Fetch user from database to get actual Role field
+    const currentUser = await User.findById(myself._id)
       .select('_id Name Email Role Permissions')
       .lean()
       .exec();
@@ -1200,30 +1255,60 @@ var createdByMe = async function (req, res) {
       return res.json(response);
     }
 
+    const userRole = currentUser.Role || 'user';  // Get Role from database
+    
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-    console.log('🔍 createdByMe - Current user ID:', currentUser._id);
+    console.log('🔍 createdByMe - Current user:', { id: currentUser._id, role: userRole });
 
-    // Include both published AND unpublished capsules created by the user
-    var conditions = {
-      $or: [
-        {
-          CreaterId: currentUser._id,
-          Origin: "created"
-        },
-        {
-          CreaterId: currentUser._id,
-          Origin: "duplicated"
-        },
-        {
-          CreaterId: currentUser._id,
-          Origin: "addedFromLibrary"
-        }
-      ],
-      Status: true,
-      IsDeleted: false,
-    };
+    // Build conditions based on user role from database
+    var conditions;
+    
+    if (userRole === 'admin') {
+      // For ADMIN: Only published capsules where admin is creator
+      conditions = {
+        $or: [
+          {
+            CreaterId: currentUser._id,
+            Origin: "created",
+            IsPublished: true  // ✅ Only published for admin
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "duplicated",
+            IsPublished: true
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "addedFromLibrary",
+            IsPublished: true
+          }
+        ],
+        Status: true,
+        IsDeleted: false,
+      };
+    } else {
+      // For USER/SUBADMIN: Both published AND unpublished capsules
+      conditions = {
+        $or: [
+          {
+            CreaterId: currentUser._id,
+            Origin: "created"
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "duplicated"
+          },
+          {
+            CreaterId: currentUser._id,
+            Origin: "addedFromLibrary"
+          }
+        ],
+        Status: true,
+        IsDeleted: false,
+      };
+    }
 
     console.log('📋 createdByMe conditions:', JSON.stringify(conditions, null, 2));
 
@@ -1243,12 +1328,12 @@ var createdByMe = async function (req, res) {
     
     console.log(`✅ createdByMe found ${resultsLength} total capsules, returning ${results.length} results`);
 
-    // Populate CreaterId for createdByMe results (all users are in User collection)
+    // Populate CreaterId from different schemas based on role
     const populatedResults = await Promise.all(
       results.map(async (capsule) => {
         if (capsule.CreaterId) {
           try {
-            // Fetch creator from User collection (includes users, subadmins, and admins)
+            // Try User collection first
             const user = await User.findById(capsule.CreaterId)
               .select("Name ProfilePic Role")
               .exec();
@@ -1260,15 +1345,46 @@ var createdByMe = async function (req, res) {
                 ProfilePic: user.ProfilePic,
                 Role: user.Role
               };
-            } else {
-              // If not found, set default values
-              capsule.CreaterId = {
-                _id: capsule.CreaterId,
-                Name: "Unknown User",
-                ProfilePic: "/assets/users/default.png",
-                Role: "user"
-              };
+              return capsule;
             }
+
+            // Try Admin collection
+            const admin = await Admin.findById(capsule.CreaterId)
+              .select("name ProfilePic")
+              .exec();
+            
+            if (admin) {
+              capsule.CreaterId = {
+                _id: admin._id,
+                Name: admin.name,
+                ProfilePic: admin.ProfilePic,
+                Role: 'admin'
+              };
+              return capsule;
+            }
+
+            // Try SubAdmin collection
+            const subAdmin = await SubAdmin.findById(capsule.CreaterId)
+              .select("name ProfilePic")
+              .exec();
+            
+            if (subAdmin) {
+              capsule.CreaterId = {
+                _id: subAdmin._id,
+                Name: subAdmin.name,
+                ProfilePic: subAdmin.ProfilePic,
+                Role: 'subadmin'
+              };
+              return capsule;
+            }
+
+            // If not found, set default values
+            capsule.CreaterId = {
+              _id: capsule.CreaterId,
+              Name: "Unknown User",
+              ProfilePic: "/assets/users/default.png",
+              Role: "user"
+            };
           } catch (error) {
             capsule.CreaterId = {
               _id: capsule.CreaterId,
@@ -1610,8 +1726,18 @@ _________________________________________________________________________
 
 var sharedWithMe = async function (req, res) {
   try {
-    // Get user from session
-    if (!req.session || !req.session.user) {
+    // Safe session access for admin, subadmin, and regular users
+    var myself = null;
+
+    if (req.session && req.session.user) {
+      myself = req.session.user;
+    } else if (req.session && req.session.admin) {
+      myself = req.session.admin;
+    } else if (req.session && req.session.subadmin) {
+      myself = req.session.subadmin;
+    }
+
+    if (!myself) {
       var response = {
         status: 401,
         message: "User session not found",
@@ -1620,8 +1746,8 @@ var sharedWithMe = async function (req, res) {
       return res.json(response);
     }
 
-    // Fetch user from database to get current Role and permissions
-    const currentUser = await User.findById(req.session.user._id)
+    // Fetch user from database to get actual Role field
+    const currentUser = await User.findById(myself._id)
       .select('_id Name Email Role Permissions')
       .lean()
       .exec();
@@ -1635,16 +1761,36 @@ var sharedWithMe = async function (req, res) {
       return res.json(response);
     }
 
+    const userRole = currentUser.Role || 'user';  // Get Role from database
+    
     var limit = req.body.perPage ? req.body.perPage : 0;
     var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
 
-    var conditions = {
-      CreaterId: { $ne: currentUser._id },
-      OwnerId: currentUser._id,
-      Origin: "shared",
-      Status: true,
-      IsDeleted: false,
-    };
+    console.log('🔍 sharedWithMe - Current user:', { id: currentUser._id, role: userRole });
+
+    // Build conditions based on user role from database
+    var conditions;
+    
+    if (userRole === 'admin') {
+      // For ADMIN: Only published capsules shared TO admin
+      conditions = {
+        CreaterId: { $ne: currentUser._id },
+        OwnerId: currentUser._id,
+        Origin: "shared",
+        IsPublished: true,  // ✅ Only published for admin
+        Status: true,
+        IsDeleted: false,
+      };
+    } else {
+      // For USER/SUBADMIN: All shared capsules (published and unpublished)
+      conditions = {
+        CreaterId: { $ne: currentUser._id },
+        OwnerId: currentUser._id,
+        Origin: "shared",
+        Status: true,
+        IsDeleted: false,
+      };
+    }
 
     var sortObj = {
       ModifiedOn: -1,
@@ -10448,19 +10594,33 @@ var getUserMixedFeedPosts = async function (req, res) {
     const selectedKeyword = req.body.selectedKeyword || null;
     const loginUserId = req.session.user._id;
 
-    // STEP 1: Get user's friends
     const Friend = require('./../models/friendsModel.js');
     const SyncedPost = require('./../models/syncedpostModel.js');
     const StreamLikes = require('./../models/StreamLikes.js');
     const StreamComments = require('./../models/StreamCommentsModel.js');
     const StreamCommentLikes = require('./../models/StreamCommentLikesModel.js');
     
-    const friends = await Friend.find({
-      UserID: String(loginUserId),
-      IsDeleted: false,
-      Status: true,
-      'Friend.IsRegistered': true
-    }).lean();
+    console.log('🚀 getUserMixedFeedPosts - Start');
+    const startTime = Date.now();
+    const perfLog = {}; // Performance tracking
+
+    // ✅ OPTIMIZATION 1: Parallelize initial queries
+    const t1 = Date.now();
+    const [friends, userCapsules] = await Promise.all([
+      // STEP 1: Get user's friends
+      Friend.find({
+        UserID: String(loginUserId),
+        IsDeleted: false,
+        Status: true,
+        'Friend.IsRegistered': true
+      }).lean(),
+      
+      // STEP 2: Get user's owned capsules (for filtering user's own posts)
+      Capsule.find({
+        OwnerId: new mongoose.Types.ObjectId(loginUserId),
+        IsDeleted: { $ne: true },
+      }).lean()
+    ]);
 
     const friendIds = friends
       .map(f => {
@@ -10472,38 +10632,35 @@ var getUserMixedFeedPosts = async function (req, res) {
       })
       .filter(id => id !== null);
 
-    console.log(`📊 getUserMixedFeedPosts: Found ${friends.length} friends, ${friendIds.length} valid friend IDs`);
-
-    // STEP 2: Get user's owned capsules (for filtering user's own posts)
-    const userCapsules = await Capsule.find({
-      OwnerId: new mongoose.Types.ObjectId(loginUserId),
-      IsDeleted: { $ne: true },
-    }).lean();
-
     const userCapsuleIds = userCapsules.map((c) => c._id);
-    console.log(`📊 User owns ${userCapsuleIds.length} capsules`);
+    perfLog.step1_friends_capsules = Date.now() - t1;
+    console.log(`📊 Found ${friends.length} friends (${friendIds.length} valid IDs), ${userCapsuleIds.length} capsules [${perfLog.step1_friends_capsules}ms]`);
 
-    // STEP 3: Get PostIds where friends have interacted (from any stream)
+    // ✅ OPTIMIZATION 2: Parallelize interaction queries
     let friendInteractedPostIds = [];
     
     if (friendIds.length > 0) {
-      // From StreamLikes
-      const streamLikes = await StreamLikes.find({
-        UserId: { $in: friendIds },
-        IsDeleted: false
-      }, { SocialPostId: 1 }).lean();
-      
-      // From StreamComments
-      const streamComments = await StreamComments.find({
-        UserId: { $in: friendIds },
-        IsDeleted: 0
-      }, { SocialPostId: 1 }).lean();
-      
-      // From StreamCommentLikes (friends who liked comments)
-      const streamCommentLikes = await StreamCommentLikes.find({
-        LikedById: { $in: friendIds },
-        IsDeleted: false
-      }).populate('CommentId', 'SocialPostId').lean();
+      // STEP 3: Get PostIds where friends have interacted (from any stream)
+      const t2 = Date.now();
+      const [streamLikes, streamComments, streamCommentLikes] = await Promise.all([
+        // From StreamLikes
+        StreamLikes.find({
+          UserId: { $in: friendIds },
+          IsDeleted: false
+        }, { SocialPostId: 1 }).lean(),
+        
+        // From StreamComments
+        StreamComments.find({
+          UserId: { $in: friendIds },
+          IsDeleted: 0
+        }, { SocialPostId: 1 }).lean(),
+        
+        // From StreamCommentLikes (friends who liked comments)
+        StreamCommentLikes.find({
+          LikedById: { $in: friendIds },
+          IsDeleted: false
+        }).populate('CommentId', 'SocialPostId').lean()
+      ]);
       
       // Combine all PostIds
       const postIdsSet = new Set();
@@ -10530,7 +10687,8 @@ var getUserMixedFeedPosts = async function (req, res) {
         }
       }).filter(id => id !== null);
       
-      console.log(`📊 Found ${friendInteractedPostIds.length} posts where friends interacted`);
+      perfLog.step2_interactions = Date.now() - t2;
+      console.log(`📊 Found ${friendInteractedPostIds.length} posts where friends interacted [${perfLog.step2_interactions}ms]`);
     }
 
     // STEP 4: Query SyncedPost for BOTH sources
@@ -10966,7 +11124,9 @@ var getUserMixedFeedPosts = async function (req, res) {
       { $limit: limit },
     ];
 
+    const t3 = Date.now();
     const posts = await SyncedPost.aggregate(pipeline).exec();
+    perfLog.step3_main_aggregation = Date.now() - t3;
 
     // Debug: Show which posts have comments
     console.log("\n📊 ========== POSTS SUMMARY ==========");
@@ -11012,12 +11172,16 @@ var getUserMixedFeedPosts = async function (req, res) {
     }
 
     // Get total count for pagination (count unique posts after grouping, before skip/limit)
+    // ⚠️ TODO: Optimize this with $facet to do count + posts in single aggregation
+    const t4 = Date.now();
     const countPipeline = pipeline.slice(0, -2); // Remove skip and limit only (keep final sort)
     countPipeline.push({ $count: "total" });
     const countResult = await SyncedPost.aggregate(countPipeline).exec();
     const totalCount = countResult.length > 0 ? countResult[0].total : 0;
+    perfLog.step4_count_aggregation = Date.now() - t4;
 
     // Calculate hexcode_blendedImage and clean BlendSettings
+    const t5 = Date.now();
     const crypto = require('crypto');
     const fs = require('fs');
     const cleanedPosts = posts.map(post => {
@@ -11076,6 +11240,20 @@ var getUserMixedFeedPosts = async function (req, res) {
         selectedKeyword: selectedKeyword,
       },
     });
+
+    perfLog.step5_post_processing = Date.now() - t5;
+    
+    // ✅ Performance logging with breakdown
+    const elapsed = Date.now() - startTime;
+    console.log(`\n⏱️  PERFORMANCE BREAKDOWN:`);
+    console.log(`   1. Friends + Capsules: ${perfLog.step1_friends_capsules}ms`);
+    console.log(`   2. Interactions: ${perfLog.step2_interactions || 0}ms`);
+    console.log(`   3. Main Aggregation: ${perfLog.step3_main_aggregation}ms ⚠️`);
+    console.log(`   4. Count Aggregation: ${perfLog.step4_count_aggregation}ms ⚠️`);
+    console.log(`   5. Post Processing: ${perfLog.step5_post_processing}ms`);
+    console.log(`   ─────────────────────────────────────`);
+    console.log(`   TOTAL: ${elapsed}ms\n`);
+    console.log(`✅ getUserMixedFeedPosts completed | Posts: ${cleanedPosts.length}/${totalCount}`);
   } catch (error) {
     console.error("❌ Error in getUserMixedFeedPosts:", error);
     res.json({

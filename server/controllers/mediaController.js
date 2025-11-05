@@ -4121,14 +4121,41 @@ const filteredData = async function (req, res) {
 
     if (req.body.mediaType) {
       if (req.body.mediaType == "Image") {
-        fields["$or"] = [
-          { MediaType: "Image" },
-          { MediaType: "Link", LinkType: "image" },
-        ];
+        // Check if user wants to filter by linkType for granular control
+        if (req.body.linkType !== undefined && req.body.linkType !== null) {
+          // Granular filtering by linkType
+          if (req.body.linkType === "image") {
+            // Only Link images (Type 1: Unsplash, external images)
+            fields["MediaType"] = "Link";
+            fields["LinkType"] = "image";
+          } else if (req.body.linkType === "direct" || req.body.linkType === "") {
+            // Only direct uploaded images (Type 2: S3 uploads)
+            fields["MediaType"] = "Image";
+          } else {
+            // Fallback: both types
+            fields["$or"] = [
+              { MediaType: "Image" },
+              { MediaType: "Link", LinkType: "image" },
+            ];
+          }
+        } else {
+          // Default: Return BOTH types of images
+          fields["$or"] = [
+            { MediaType: "Image" },
+            { MediaType: "Link", LinkType: "image" },
+          ];
+        }
       } else if (req.body.mediaType == "Link") {
         fields["MediaType"] = req.body.mediaType;
-        fields["LinkType"] = { $ne: "image" };
+        // Check if linkType filter is provided
+        if (req.body.linkType) {
+          fields["LinkType"] = req.body.linkType;
+        } else {
+          // Default: Exclude image links (old behavior)
+          fields["LinkType"] = { $ne: "image" };
+        }
       } else {
+        // Other media types: Video, Audio, etc.
         fields["MediaType"] = req.body.mediaType;
       }
     }
@@ -4183,6 +4210,10 @@ const filteredData = async function (req, res) {
     }
 
     fields["AddedWhere"] = { $ne: "contentPage" };
+    
+    // ✅ IMPORTANT: Exclude posts - only return media uploaded by admin/users
+    // Posts have PostedBy field set, media records do not
+    fields["PostedBy"] = { $exists: false };
 
     console.log("Fields---------", fields);
     console.log(`📂 filteredData using collection: ${media.collection.name}`);
