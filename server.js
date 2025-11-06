@@ -111,21 +111,30 @@ const dbURI_local =
 
 console.log(`Attempting to connect to MongoDB: ${dbURI_local}`);
 
-// Modern Mongoose connection options
-mongoose.connect(dbURI_local, {
-  // Note: useNewUrlParser and useUnifiedTopology are no longer needed in Mongoose 6+
-  // They are now the default behavior
-}).catch((err) => {
-  console.error(`Failed to connect to MongoDB:`, err);
-  // Don't exit the process on Vercel - let it continue
-  if (process.env.VERCEL !== '1') {
-    process.exit(1);
-  }
-});
+// Configure Mongoose to wait longer for connection
+mongoose.set('bufferCommands', false); // Disable buffering
+mongoose.set('bufferTimeoutMS', 30000); // 30 seconds buffer timeout
 
-mongoose.connection.on("connected", () => {
-  console.log(`Mongoose connected to ${dbURI_local}`);
-});
+// Modern Mongoose connection options
+const connectToMongoDB = async () => {
+  try {
+    await mongoose.connect(dbURI_local, {
+      serverSelectionTimeoutMS: 30000, // 30 seconds to select a server
+      socketTimeoutMS: 60000, // 60 seconds socket timeout
+      maxPoolSize: 10, // Maintain up to 10 socket connections
+      minPoolSize: 2, // Maintain at least 2 socket connections
+    });
+    console.log(`✅ Mongoose connected to ${dbURI_local}`);
+    return true;
+  } catch (err) {
+    console.error(`❌ Failed to connect to MongoDB:`, err);
+    // Don't exit the process on Vercel - let it continue
+    if (process.env.VERCEL !== '1') {
+      process.exit(1);
+    }
+    return false;
+  }
+};
 
 mongoose.connection.on("error", (err) => {
   console.error(`Mongoose connection error:`, err);
@@ -548,12 +557,30 @@ app.get("/health", (req, res) => {
 if (process.env.VERCEL !== '1') {
   const httpPort = process.env.PORT || 3002;
   
-  app.listen(httpPort, () => {
-    console.log(`Server running on port ${httpPort}`);
-    console.log(`Local development at http://localhost:${httpPort}`);
+  // Connect to MongoDB first, then start the server
+  connectToMongoDB().then((connected) => {
+    if (connected) {
+      app.listen(httpPort, () => {
+        console.log(`✅ Server running on port ${httpPort}`);
+        console.log(`✅ Local development at http://localhost:${httpPort}`);
+        console.log(`✅ MongoDB connection ready`);
+      });
+    } else {
+      console.error(`❌ Server cannot start - MongoDB connection failed`);
+      process.exit(1);
+    }
+  }).catch((err) => {
+    console.error(`❌ Server startup error:`, err);
+    process.exit(1);
   });
 } else {
   console.log(`Running on Vercel - no server needed`);
+  // For Vercel, connect to MongoDB immediately
+  connectToMongoDB().then(() => {
+    console.log(`✅ MongoDB connected for Vercel serverless`);
+  }).catch((err) => {
+    console.error(`❌ MongoDB connection failed for Vercel:`, err);
+  });
   // Export app for Vercel
   module.exports = app;
 }

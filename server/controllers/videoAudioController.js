@@ -856,7 +856,9 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
     
     const response = {
       success: true,
+      code: '200', // Add code field for frontend compatibility
       message: `${fileType} uploaded successfully`,
+      msg: `${fileType} uploaded successfully`, // Add msg field for consistency
       data: dataToUpload,
       s3Info: {
         s3Key: uploadResult.s3Key,
@@ -885,7 +887,9 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
     console.error("Error saving media to DB:", error);
     res.json({
       success: false,
+      code: '500', // Add code field for frontend compatibility
       error: error.message,
+      msg: error.message, // Add msg field for consistency
       fileName: fileName
     });
   }
@@ -950,7 +954,12 @@ async function saveFile(req, res, fileType) {
   form.parse(req, async function (err, fields, files) {
     if (err) {
       console.error("Form parsing error:", err);
-      return res.json({ success: false, error: "File upload failed" });
+      return res.json({ 
+        success: false, 
+        code: '500',
+        error: "File upload failed",
+        msg: "File upload failed"
+      });
     }
 
     // Debug: Log all files and fields
@@ -966,7 +975,12 @@ async function saveFile(req, res, fileType) {
     const fileKeys = Object.keys(files);
     if (fileKeys.length === 0) {
       console.error("No files uploaded");
-      return res.json({ success: false, error: "No files uploaded" });
+      return res.json({ 
+        success: false, 
+        code: '400',
+        error: "No files uploaded",
+        msg: "No files uploaded"
+      });
     }
 
     // Get the file (prefer 'file' field, fallback to first available)
@@ -1026,20 +1040,36 @@ async function saveFile(req, res, fileType) {
     var temp = originalFileName.split(".");
     if (temp.length < 2) {
       console.error("File has no extension:", originalFileName);
-      return res.json({ success: false, error: "File must have a valid extension" });
+      return res.json({ 
+        success: false, 
+        code: '400',
+        error: "File must have a valid extension",
+        msg: "File must have a valid extension"
+      });
     }
     
     var ext = temp.pop();
     if (!ext || ext.length === 0) {
       console.error("Invalid file extension:", ext);
-      return res.json({ success: false, error: "Invalid file extension" });
+      return res.json({ 
+        success: false, 
+        code: '400',
+        error: "Invalid file extension",
+        msg: "Invalid file extension"
+      });
     }
 
     // Validate file extension for video/audio
     const validExtensions = ['mp4', 'avi', 'mov', 'wmv', 'flv', 'mkv', 'm4v', 'webm', 'mp3', 'wav', 'ogg'];
     if (!validExtensions.includes(ext.toLowerCase())) {
       console.error("Unsupported file extension:", ext);
-      return res.json({ success: false, error: `Unsupported file extension: ${ext}. Supported: ${validExtensions.join(', ')}` });
+      const errorMsg = `Unsupported file extension: ${ext}. Supported: ${validExtensions.join(', ')}`;
+      return res.json({ 
+        success: false, 
+        code: '400',
+        error: errorMsg,
+        msg: errorMsg
+      });
     }
 
     var incNum = 0;
@@ -1098,8 +1128,10 @@ async function saveFile(req, res, fileType) {
     } catch (error) {
       console.error("Error in saveFile:", error);
       res.json({ 
-        success: false, 
+        success: false,
+        code: '500', // Add code field for frontend compatibility
         error: error.message,
+        msg: error.message, // Add msg field for consistency
         fileType: fileType 
       });
     }

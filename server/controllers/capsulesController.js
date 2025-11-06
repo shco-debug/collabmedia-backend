@@ -731,8 +731,9 @@ var find = async function (req, res) {
               ProfilePic: admin.ProfilePic,
             };
           } else {
-            // Try to find in SubAdmin collection
-            const subAdmin = await SubAdmin.findById(capsule.CreaterId)
+            // Try to find in SubAdmin collection (using consistent casing)
+            const SubAdminModel = require("./../models/subAdminModel.js");
+            const subAdmin = await SubAdminModel.findById(capsule.CreaterId)
               .select("name ProfilePic")
               .exec();
             if (subAdmin) {
@@ -13311,10 +13312,796 @@ var unsubscribe_changeSettings = async function (req, res) {
   }
 };
 
+/*________________________________________________________________________
+   * @Date:      		2025-01-07
+   * @Method :   		getStreamPostsOptimized
+   * @Purpose:   		Fetch posts from a SPECIFIC stream using SyncedPost collection
+   *                  Same structure as getUserMixedFeedPosts but filtered to one stream
+   *                  No friend activity - only stream's posts
+   * @Param:     		capsule_id (header), limit, skip, type, selectedKeyword
+   * @Return:    	 	Stream posts with same format as feed page
+   * @Access Category:	"Single Stream View"
+   * @Collections:     SyncedPost, StreamLikes, StreamComments, StreamCommentLikes
+_________________________________________________________________________
+*/
+var getStreamPostsOptimized = async function (req, res) {
+  try {
+    // Get capsule ID from header or body
+    const capsuleId = req.headers.capsule_id || req.body.capsuleId;
+    
+    if (!capsuleId) {
+      return res.json({
+        code: '400',
+        msg: 'capsule_id is required',
+        response: [],
+        count: 0
+      });
+    }
+
+    // Check if user is logged in
+    if (!req.session || !req.session.user || !req.session.user._id) {
+      console.error('❌ getStreamPostsOptimized - No user session found');
+      return res.status(401).json({
+        code: 401,
+        msg: "Unauthorized - User not logged in",
+        response: [],
+        count: 0
+      });
+    }
+
+    const limit = req.body.limit || 20;
+    const skip = req.body.skip || 0;
+    const type = req.body.type || null;
+    const selectedKeyword = req.body.selectedKeyword || null;
+    const loginUserId = req.session.user._id;
+
+    const SyncedPost = require('./../models/syncedpostModel.js');
+    const StreamLikes = require('./../models/StreamLikes.js');
+    const StreamComments = require('./../models/StreamCommentsModel.js');
+    const StreamCommentLikes = require('./../models/StreamCommentLikesModel.js');
+    const StreamMember = require('./../models/StreamMembersModel.js');
+    
+    console.log('🚀 getStreamPostsOptimized - Start');
+    console.log('👤 User ID:', loginUserId);
+    console.log('🎯 Capsule ID:', capsuleId);
+    console.log('📊 Params:', { limit, skip, type, selectedKeyword });
+    const startTime = Date.now();
+
+    // Get user's stream memberships (for InvitedFriends privacy)
+    const userMemberships = await StreamMember.find({
+      Members: new mongoose.Types.ObjectId(loginUserId),
+      IsDeleted: false,
+      Status: true
+    }).select('StreamId').lean().maxTimeMS(10000);
+    
+    const memberCapsuleIds = userMemberships.map(m => new mongoose.Types.ObjectId(m.StreamId));
+    console.log(`📊 User is member of ${memberCapsuleIds.length} streams`);
+
+    // Query SyncedPost for THIS specific capsule only
+    const syncedPostConditions = {
+      CapsuleId: new mongoose.Types.ObjectId(capsuleId),
+      IsDeleted: false,
+      Status: true,
+      'EmailEngineDataSets.Delivered': false
+    };
+    
+    console.log('📋 SyncedPost query conditions:', JSON.stringify(syncedPostConditions, null, 2));
+
+    // Count total matching posts
+    const t_count = Date.now();
+    const totalCount = await SyncedPost.countDocuments(syncedPostConditions).maxTimeMS(5000);
+    console.log(`📊 Found ${totalCount} posts in stream [${Date.now() - t_count}ms]`);
+    
+    if (totalCount === 0) {
+      return res.json({
+        code: '200',
+        msg: "Success - No posts found in this stream",
+        response: [],
+        count: 0,
+        pagination: { skip: skip, limit: limit, hasMore: false },
+        filters: { type: type, selectedKeyword: selectedKeyword },
+      });
+    }
+
+    // Build aggregation pipeline (same as getUserMixedFeedPosts)
+    const pipeline = [
+      { $match: syncedPostConditions },
+      
+      // Sort and paginate BEFORE unwinding
+      { $sort: { CreatedOn: -1, _id: -1 } },
+      { $skip: skip },
+      { $limit: limit * 10 },
+      
+      // Unwind EmailEngineDataSets
+      { $unwind: { path: "$EmailEngineDataSets", preserveNullAndEmptyArrays: false } },
+      
+      // Deduplicate by PostId
+      {
+        $group: {
+          _id: "$PostId",
+          doc_id: { $first: "$_id" },
+          CapsuleId: { $first: "$CapsuleId" },
+          PageId: { $first: "$PageId" },
+          PostId: { $first: "$PostId" },
+          PostStatement: { $first: "$PostStatement" },
+          PostOwnerId: { $first: "$PostOwnerId" },
+          SyncedBy: { $first: "$SyncedBy" },
+          ReceiverEmails: { $first: "$ReceiverEmails" },
+          CreatedOn: { $first: "$CreatedOn" },
+          Delivered: { $first: "$EmailEngineDataSets.Delivered" },
+          VisualUrls: { $first: "$EmailEngineDataSets.VisualUrls" },
+          SoundFileUrl: { $first: "$EmailEngineDataSets.SoundFileUrl" },
+          TextAboveVisual: { $first: "$EmailEngineDataSets.TextAboveVisual" },
+          TextBelowVisual: { $first: "$EmailEngineDataSets.TextBelowVisual" },
+          DateOfDelivery: { $first: "$EmailEngineDataSets.DateOfDelivery" },
+          BlendMode: { $first: "$EmailEngineDataSets.BlendMode" },
+          EmailTemplate: { $first: "$EmailTemplate" },
+          Subject: { $first: "$EmailSubject" },
+          IsOnetimeStream: { $first: "$IsOnetimeStream" },
+          IsOnlyPostImage: { $first: "$IsOnlyPostImage" },
+          hexcode_blendedImage_temp: { $first: "$EmailEngineDataSets.hexcode_blendedImage" },
+          UploaderID: { $first: "$UploaderID" },
+        },
+      },
+      
+      // Limit again after grouping
+      { $limit: limit },
+      
+      // Project to restore field structure
+      {
+        $project: {
+          _id: "$doc_id",
+          CapsuleId: 1,
+          PageId: 1,
+          PostId: 1,
+          PostStatement: 1,
+          PostOwnerId: 1,
+          SyncedBy: 1,
+          ReceiverEmails: 1,
+          CreatedOn: 1,
+          Delivered: 1,
+          VisualUrls: 1,
+          SoundFileUrl: 1,
+          TextAboveVisual: 1,
+          TextBelowVisual: 1,
+          DateOfDelivery: 1,
+          BlendMode: 1,
+          EmailTemplate: 1,
+          Subject: 1,
+          IsOnetimeStream: 1,
+          IsOnlyPostImage: 1,
+          hexcode_blendedImage_temp: 1,
+          UploaderID: 1,
+        },
+      },
+      
+      // Lookup actual Media document
+      {
+        $lookup: {
+          from: "media",
+          let: { postId: "$PostId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", { $toObjectId: "$$postId" }] }
+              }
+            }
+          ],
+          as: "mediaDoc"
+        }
+      },
+      { $unwind: { path: "$mediaDoc", preserveNullAndEmptyArrays: true } },
+      
+      // Add media fields to root
+      {
+        $addFields: {
+          MediaType: "$mediaDoc.MediaType",
+          LinkType: "$mediaDoc.LinkType",
+          Content: "$mediaDoc.Content",
+          Location: "$mediaDoc.Location",
+          UploadedBy: "$mediaDoc.UploadedBy",
+          UploadedOn: { $ifNull: ["$mediaDoc.UploadedOn", "$CreatedOn"] },
+          UploaderID: "$mediaDoc.UploaderID",
+          GroupTags: "$mediaDoc.GroupTags",
+          BlendSettings: "$mediaDoc.BlendSettings",
+          thumbnail: "$mediaDoc.thumbnail",
+          Locator: "$mediaDoc.Locator",
+          AutoId: "$mediaDoc.AutoId",
+          ContentType: "$mediaDoc.ContentType",
+        }
+      },
+      
+      // Apply media type filter
+      ...(type && type !== "all"
+        ? [
+            {
+              $match: {
+                $or: [
+                  { MediaType: type },
+                  ...(type === "Image"
+                    ? [
+                        { MediaType: "Link", LinkType: "image" },
+                        { MediaType: "1MJPost" },
+                        { MediaType: "2MJPost" },
+                        { MediaType: "1UnsplashPost" },
+                        { MediaType: "2UnsplashPost" },
+                      ]
+                    : []),
+                  ...(type === "Video"
+                    ? [
+                        { MediaType: "Link", LinkType: { $ne: "image" } },
+                        { MediaType: "Video" },
+                        { MediaType: "Audio" },
+                      ]
+                    : []),
+                ],
+              },
+            },
+          ]
+        : []),
+
+      // Apply keyword filter
+      ...(selectedKeyword
+        ? [
+            {
+              $match: {
+                $or: [
+                  { "GroupTags.GroupTagID": selectedKeyword },
+                  { GroupTags: selectedKeyword },
+                ],
+              },
+            },
+          ]
+        : []),
+      
+      // Lookup Capsule + Owner + Creator
+      {
+        $lookup: {
+          from: "Capsules",
+          let: { capsuleId: "$CapsuleId" },
+          pipeline: [
+            { $match: { $expr: { $eq: ["$_id", "$$capsuleId"] } } },
+            { $limit: 1 },
+            {
+              $lookup: {
+                from: "users",
+                localField: "OwnerId",
+                foreignField: "_id",
+                as: "owner"
+              }
+            },
+            { $unwind: { path: "$owner", preserveNullAndEmptyArrays: true } },
+            {
+              $lookup: {
+                from: "users",
+                let: { creatorId: "$CreaterId" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: { $eq: ["$_id", { $toObjectId: "$$creatorId" }] }
+                    }
+                  },
+                  { $project: { Name: 1, ProfilePic: 1 } }
+                ],
+                as: "creator"
+              }
+            },
+            { $unwind: { path: "$creator", preserveNullAndEmptyArrays: true } },
+            {
+              $project: {
+                _id: 1,
+                Title: 1,
+                OwnerId: 1,
+                CreaterId: 1,
+                CoverArt: 1,
+                MetaData: 1,
+                LaunchSettings: 1,
+                CreatedOn: 1,
+                ModifiedOn: 1,
+                ownerName: "$owner.Name",
+                ownerEmail: "$owner.Email",
+                ownerProfilePic: "$owner.ProfilePic",
+                creatorName: "$creator.Name",
+                creatorProfilePic: "$creator.ProfilePic"
+              }
+            }
+          ],
+          as: "capsuleData"
+        }
+      },
+      { $unwind: { path: "$capsuleData", preserveNullAndEmptyArrays: true } },
+      
+      // Lookup post uploader details
+      {
+        $lookup: {
+          from: "users",
+          let: { uploaderId: "$UploaderID" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { 
+                  $eq: [
+                    { $toString: "$_id" },
+                    "$$uploaderId"
+                  ] 
+                }
+              }
+            },
+            {
+              $project: {
+                Name: 1,
+                ProfilePic: 1
+              }
+            }
+          ],
+          as: "uploaderData"
+        }
+      },
+      { $unwind: { path: "$uploaderData", preserveNullAndEmptyArrays: true } },
+      
+      // Add capsule and page info
+      {
+        $addFields: {
+          capsuleId: "$CapsuleId",
+          capsuleOwnerId: "$capsuleData.OwnerId",
+          postOwnerId: "$PostOwnerId",
+          capsuleTitle: "$capsuleData.Title",
+          capsuleOwnerName: "$capsuleData.ownerName",
+          capsuleOwnerEmail: "$capsuleData.ownerEmail",
+          capsuleOwnerProfilePic: "$capsuleData.ownerProfilePic",
+          capsuleCoverArt: "$capsuleData.CoverArt",
+          capsuleMetaData: "$capsuleData.MetaData",
+          capsuleLaunchSettings: "$capsuleData.LaunchSettings",
+          capsuleCreatedOn: "$capsuleData.CreatedOn",
+          capsuleModifiedOn: "$capsuleData.ModifiedOn",
+          capsuleCreatorName: "$capsuleData.creatorName",
+          capsuleCreatorProfilePic: "$capsuleData.creatorProfilePic",
+          capsuleCreatorId: "$capsuleData.CreaterId",
+          pageId: "$PageId",
+        }
+      },
+      
+      // Sort by upload date
+      { $sort: { UploadedOn: -1, _id: -1 } },
+      
+      // Group by PostId to deduplicate
+      {
+        $group: {
+          _id: "$PostId",
+          firstDoc: { $first: "$$ROOT" }
+        }
+      },
+      
+      // Restore document structure
+      {
+        $replaceRoot: { newRoot: "$firstDoc" }
+      },
+      
+      // Lookup StreamLikes
+      {
+        $lookup: {
+          from: "StreamLikes",
+          localField: "PostId",
+          foreignField: "SocialPostId",
+          as: "likes",
+        },
+      },
+      
+      // Filter deleted likes
+      {
+        $addFields: {
+          likes: {
+            $filter: {
+              input: "$likes",
+              as: "like",
+              cond: { 
+                $and: [
+                  { $ne: ["$$like.IsDeleted", true] },
+                  { $ne: ["$$like.IsDeleted", 1] }
+                ]
+              }
+            }
+          }
+        }
+      },
+      
+      // Lookup comments with privacy filtering (SAME AS FEED PAGE)
+      {
+        $lookup: {
+          from: "StreamComments",
+          let: { 
+            postId: "$PostId",
+            capsuleId: "$capsuleId"
+          },
+          pipeline: [
+            {
+              $match: {
+                $and: [
+                  {
+                    $expr: { 
+                      $and: [
+                        { $eq: ["$SocialPostId", "$$postId"] },
+                        { $ne: ["$IsDeleted", true] },
+                        { $ne: ["$IsDeleted", 1] }
+                      ]
+                    }
+                  },
+                  // Top-level comments only
+                  {
+                    $or: [
+                      { ParentId: { $exists: false } },
+                      { ParentId: null },
+                      { ParentId: "" }
+                    ]
+                  }
+                ]
+              }
+            },
+            // Apply privacy filtering
+            {
+              $match: {
+                $or: [
+                  { PrivacySetting: "PublicWithName" },
+                  { PrivacySetting: "PublicWithoutName" },
+                  {
+                    $and: [
+                      { PrivacySetting: "InvitedFriends" },
+                      { $expr: { $in: ["$$capsuleId", memberCapsuleIds] } }
+                    ]
+                  },
+                  {
+                    $and: [
+                      { PrivacySetting: "OnlyForOwner" },
+                      { $expr: { $eq: [{ $toString: "$UserId" }, String(loginUserId)] } }
+                    ]
+                  },
+                  { PrivacySetting: { $exists: false } }
+                ]
+              }
+            },
+            {
+              $lookup: {
+                from: "users",
+                let: { userId: { $toObjectId: "$UserId" } },
+                pipeline: [
+                  { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
+                  { $project: { Name: 1, ProfilePic: 1, Email: 1, UserName: 1 } }
+                ],
+                as: "user"
+              }
+            },
+            {
+              $lookup: {
+                from: "StreamCommentLikes",
+                let: { commentId: "$_id" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ["$CommentId", "$$commentId"] },
+                          { $ne: ["$IsDeleted", true] },
+                          { $ne: ["$IsDeleted", 1] }
+                        ]
+                      }
+                    }
+                  }
+                ],
+                as: "commentLikes"
+              }
+            },
+            // Lookup replies with privacy filtering
+            {
+              $lookup: {
+                from: "StreamComments",
+                let: { commentId: "$_id" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ["$ParentId", { $toString: "$$commentId" }] },
+                          { $ne: ["$IsDeleted", true] },
+                          { $ne: ["$IsDeleted", 1] }
+                        ]
+                      }
+                    }
+                  },
+                  // Apply same privacy filtering to replies
+                  {
+                    $match: {
+                      $or: [
+                        { PrivacySetting: "PublicWithName" },
+                        { PrivacySetting: "PublicWithoutName" },
+                        {
+                          $and: [
+                            { PrivacySetting: "InvitedFriends" },
+                            { $expr: { $in: ["$$capsuleId", memberCapsuleIds] } }
+                          ]
+                        },
+                        {
+                          $and: [
+                            { PrivacySetting: "OnlyForOwner" },
+                            { $expr: { $eq: [{ $toString: "$UserId" }, String(loginUserId)] } }
+                          ]
+                        },
+                        { PrivacySetting: { $exists: false } }
+                      ]
+                    }
+                  },
+                  { $limit: 2 },
+                  {
+                    $lookup: {
+                      from: "users",
+                      let: { userId: { $toObjectId: "$UserId" } },
+                      pipeline: [
+                        { $match: { $expr: { $eq: ["$_id", "$$userId"] } } },
+                        { $project: { Name: 1, ProfilePic: 1, Email: 1, UserName: 1 } }
+                      ],
+                      as: "user"
+                    }
+                  },
+                  {
+                    $lookup: {
+                      from: "StreamCommentLikes",
+                      let: { commentId: "$_id" },
+                      pipeline: [
+                        {
+                          $match: {
+                            $expr: {
+                              $and: [
+                                { $eq: ["$CommentId", "$$commentId"] },
+                                { $ne: ["$IsDeleted", true] },
+                                { $ne: ["$IsDeleted", 1] }
+                              ]
+                            }
+                          }
+                        }
+                      ],
+                      as: "commentLikes"
+                    }
+                  }
+                ],
+                as: "replies"
+              }
+            },
+            // Count total replies
+            {
+              $lookup: {
+                from: "StreamComments",
+                let: { commentId: "$_id" },
+                pipeline: [
+                  {
+                    $match: {
+                      $expr: {
+                        $and: [
+                          { $eq: ["$ParentId", { $toString: "$$commentId" }] },
+                          { $ne: ["$IsDeleted", true] },
+                          { $ne: ["$IsDeleted", 1] }
+                        ]
+                      }
+                    }
+                  },
+                  { $count: "total" }
+                ],
+                as: "replyCountDoc"
+              }
+            },
+            {
+              $project: {
+                _id: 1,
+                UserId: 1,
+                Comment: 1,
+                PrivacySetting: 1,
+                CreatedOn: 1,
+                user: { $arrayElemAt: ["$user", 0] },
+                CommentLikeCount: { $size: "$commentLikes" },
+                replies: 1,
+                replyCount: { $ifNull: [{ $arrayElemAt: ["$replyCountDoc.total", 0] }, 0] }
+              }
+            },
+            { $sort: { CreatedOn: -1 } }
+          ],
+          as: "comments"
+        }
+      },
+      
+      // Calculate counts
+      {
+        $addFields: {
+          likeCount: { $size: "$likes" },
+          commentCount: { $size: "$comments" },
+          isLikedByMe: {
+            $in: [
+              String(loginUserId),
+              {
+                $map: {
+                  input: "$likes",
+                  as: "like",
+                  in: { $toString: "$$like.UserId" }
+                }
+              }
+            ]
+          }
+        }
+      },
+      
+      // Final projection
+      {
+        $project: {
+          mediaDoc: 0,
+          capsuleData: 0,
+          uploaderData: 0,
+          likes: 0
+        }
+      }
+    ];
+
+    console.log(`⚡ Running aggregation pipeline...`);
+    const t_agg = Date.now();
+    const posts = await SyncedPost.aggregate(pipeline).allowDiskUse(true);
+    console.log(`✅ Aggregation complete: ${posts.length} posts [${Date.now() - t_agg}ms]`);
+
+    // Clean up posts
+    const cleanedPosts = posts.map(post => {
+      const hexcode_blendedImage = post.hexcode_blendedImage_temp || post.hexcode_blendedImage;
+      
+      if (hexcode_blendedImage) {
+        post.hexcode_blendedImage = hexcode_blendedImage;
+      }
+      
+      if (post.BlendSettings && post.BlendSettings.allBlendConfigurations) {
+        const { allBlendConfigurations, ...cleanedBlendSettings } = post.BlendSettings;
+        post.BlendSettings = cleanedBlendSettings;
+      }
+      return post;
+    });
+
+    const totalTime = Date.now() - startTime;
+    console.log(`✅ Total time: ${totalTime}ms`);
+
+    res.json({
+      code: '200',
+      msg: "Success",
+      response: cleanedPosts,
+      count: totalCount,
+      pagination: {
+        skip: skip,
+        limit: limit,
+        hasMore: skip + limit < totalCount,
+      },
+      filters: {
+        type: type,
+        selectedKeyword: selectedKeyword,
+      },
+    });
+  } catch (error) {
+    console.error('❌ Error in getStreamPostsOptimized:', error);
+    res.json({
+      code: '500',
+      msg: "Error fetching stream posts",
+      error: error.message,
+      response: [],
+    });
+  }
+};
+
+/*________________________________________________________________________
+   * @Date:      		2025-01-07
+   * @Method :   		getCapsuleDetails
+   * @Purpose:   		Get single capsule details with populated creator info
+   * @Param:     		capsuleId
+   * @Return:    	 	Capsule with CreaterId and OwnerId populated
+   * @Access Category:	"Capsule Details"
+_________________________________________________________________________
+*/
+var getCapsuleDetails = async function (req, res) {
+  try {
+    const capsuleId = req.body.capsuleId || req.params.id;
+    
+    if (!capsuleId) {
+      return res.json({
+        code: '400',
+        message: 'capsuleId is required',
+        data: null
+      });
+    }
+
+    const User = require('./../models/userModel.js');
+    const Admin = require('./../models/adminModel.js');
+    const SubAdmin = require('./../models/subAdminModel.js');
+
+    // Find the capsule
+    let capsule = await Capsule.findById(capsuleId).exec();
+    
+    if (!capsule) {
+      return res.json({
+        code: '404',
+        message: 'Capsule not found',
+        data: null
+      });
+    }
+
+    // Convert to plain object
+    capsule = capsule.toObject();
+
+    // Populate CreaterId with user details
+    if (capsule.CreaterId) {
+      try {
+        const user = await User.findById(capsule.CreaterId)
+          .select('Name ProfilePic Email UserName')
+          .exec();
+        
+        if (user) {
+          capsule.CreaterId = {
+            _id: user._id,
+            Name: user.Name,
+            ProfilePic: user.ProfilePic,
+            Email: user.Email,
+            UserName: user.UserName
+          };
+        } else {
+          const admin = await Admin.findById(capsule.CreaterId)
+            .select('name ProfilePic email')
+            .exec();
+          
+          if (admin) {
+            capsule.CreaterId = {
+              _id: admin._id,
+              Name: admin.name,
+              ProfilePic: admin.ProfilePic,
+              Email: admin.email
+            };
+          }
+        }
+      } catch (error) {
+        console.error('Error populating CreaterId:', error);
+      }
+    }
+
+    // Populate OwnerId with user details
+    if (capsule.OwnerId) {
+      try {
+        const owner = await User.findById(capsule.OwnerId)
+          .select('Name ProfilePic Email UserName')
+          .exec();
+        
+        if (owner) {
+          capsule.OwnerId = {
+            _id: owner._id,
+            Name: owner.Name,
+            ProfilePic: owner.ProfilePic,
+            Email: owner.Email,
+            UserName: owner.UserName
+          };
+        }
+      } catch (error) {
+        console.error('Error populating OwnerId:', error);
+      }
+    }
+
+    res.json({
+      code: '200',
+      message: 'Success',
+      data: capsule
+    });
+  } catch (error) {
+    console.error('Error in getCapsuleDetails:', error);
+    res.json({
+      code: '500',
+      message: 'Error fetching capsule details',
+      error: error.message,
+      data: null
+    });
+  }
+};
+
 // Export the new stream settings functions
 exports.updateCartForMonth_ActiveCapsule = updateCartForMonth_ActiveCapsule;
 exports.updateCartForFrequency_ActiveCapsule = updateCartForFrequency_ActiveCapsule;
 exports.toggleStream = toggleStream;
 exports.checkPostStreams = checkPostStreams;
 exports.unsubscribe_changeSettings = unsubscribe_changeSettings;
+exports.getStreamPostsOptimized = getStreamPostsOptimized;
+exports.getCapsuleDetails = getCapsuleDetails;
 
