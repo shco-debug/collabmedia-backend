@@ -449,6 +449,16 @@ module.exports = function(router){
 		Capsule.getCapsulePosts(req, res);
 	});
 	
+	// Get stream posts using SyncedPost collection (optimized, same as feed page)
+	router.post('/getStreamPostsOptimized', function(req, res) {
+		Capsule.getStreamPostsOptimized(req, res);
+	});
+	
+	// Get single capsule details with populated creator/owner info
+	router.post('/getCapsuleDetails', function(req, res) {
+		Capsule.getCapsuleDetails(req, res);
+	});
+	
 	// Get all users who purchased a specific capsule
 	router.post('/getCapsuleBuyers', function(req, res) {
 		Capsule.getCapsuleBuyers(req, res);

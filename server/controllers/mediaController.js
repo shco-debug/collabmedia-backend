@@ -3436,87 +3436,20 @@ const getUserPosts = async (req, res) => {
     // Always include blend settings
     fields.BlendSettings = 1;
 
-    // Execute optimized aggregation pipeline
+    console.log("🔍 getUserPosts - Starting OPTIMIZED aggregation");
+    console.log("🔍 getUserPosts - Query conditions:", JSON.stringify(conditions));
+    console.log("🔍 getUserPosts - Sort:", JSON.stringify(sortObj));
+    console.log("🔍 getUserPosts - Pagination: skip", skip, "limit", limitNum);
+
+    // OPTIMIZED aggregation pipeline - apply pagination FIRST, then do lookups
     const posts = await media.aggregate([
       // Match the conditions
       { $match: conditions },
       // Sort by the sort object
       { $sort: sortObj },
-      // Apply pagination
+      // Apply pagination EARLY - reduces data to process
       { $skip: skip },
       { $limit: limitNum },
-      // Lookup interactions from MediaActionLogs
-      {
-        $lookup: {
-          from: "MediaActionLogs",
-          localField: "_id",
-          foreignField: "MediaId",
-          as: "interactions",
-        },
-      },
-      // Unwind interactions to process each one
-      {
-        $unwind: {
-          path: "$interactions",
-          preserveNullAndEmptyArrays: true,
-        },
-      },
-      // Add field to mark which interactions need user data
-      {
-        $addFields: {
-          "interactions.needsUserData": {
-            $eq: ["$interactions.Action", "Comment"],
-          },
-        },
-      },
-      // Lookup user data only for comments
-      {
-        $lookup: {
-          from: "users",
-          let: {
-            userId: "$interactions.UserId",
-            needsUser: "$interactions.needsUserData",
-          },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$_id", "$$userId"] },
-                    { $eq: ["$$needsUser", true] },
-                  ],
-                },
-              },
-            },
-            {
-              $project: {
-                _id: 1,
-                Name: 1,
-                UserName: 1,
-                Email: 1,
-                ProfilePic: 1,
-              },
-            },
-          ],
-          as: "interactions.user",
-        },
-      },
-      // Group by post ID to aggregate interactions
-      {
-        $group: {
-          _id: "$_id",
-          root: { $first: "$$ROOT" },
-          interactions: { $push: "$interactions" },
-        },
-      },
-      // Replace root with post data
-      {
-        $replaceRoot: {
-          newRoot: {
-            $mergeObjects: ["$root", { interactions: "$interactions" }],
-          },
-        },
-      },
       // Lookup user data for PostedBy
       {
         $lookup: {
@@ -3543,115 +3476,15 @@ const getUserPosts = async (req, res) => {
           preserveNullAndEmptyArrays: true,
         },
       },
-      // Add interaction counts and separate arrays
+      // Add empty arrays and zero counts (load interactions lazily if needed)
       {
         $addFields: {
-          likes: {
-            $filter: {
-              input: "$interactions",
-              cond: {
-                $and: [
-                  { $eq: ["$$this.Action", "Vote"] },
-                  { $eq: ["$$this.LikeType", "1"] },
-                  { $eq: ["$$this.IsDeleted", false] },
-                ],
-              },
-            },
-          },
-          dislikes: {
-            $filter: {
-              input: "$interactions",
-              cond: {
-                $and: [
-                  { $eq: ["$$this.Action", "Vote"] },
-                  { $eq: ["$$this.LikeType", "2"] },
-                  { $eq: ["$$this.IsDeleted", false] },
-                ],
-              },
-            },
-          },
-          comments: {
-            $map: {
-              input: {
-                $filter: {
-                  input: "$interactions",
-                  cond: {
-                    $and: [
-                      { $eq: ["$$this.Action", "Comment"] },
-                      { $eq: ["$$this.IsDeleted", false] },
-                      // Privacy filtering: Show public comments OR user's own private comments
-                      {
-                        $or: [
-                          { $not: { $ifNull: ["$$this.PrivacySetting", false] } },  // No privacy setting
-                          { $eq: ["$$this.PrivacySetting", "PublicWithName"] },
-                          { $eq: ["$$this.PrivacySetting", "PublicWithoutName"] },
-                          { 
-                            $and: [
-                              { $in: ["$$this.PrivacySetting", ["OnlyForOwner", "InvitedFriends"]] },
-                              { $eq: ["$$this.UserId", new mongoose.Types.ObjectId(userId)] }
-                            ]
-                          }
-                        ]
-                      }
-                    ],
-                  },
-                },
-              },
-              as: "comment",
-              in: {
-                $mergeObjects: [
-                  "$$comment",
-                  {
-                    user: {
-                      $arrayElemAt: ["$$comment.user", 0],
-                    },
-                    // Will add comment likes in next stage
-                  },
-                ],
-              },
-            },
-          },
-          likeCount: {
-            $size: {
-              $filter: {
-                input: "$interactions",
-                cond: {
-                  $and: [
-                    { $eq: ["$$this.Action", "Vote"] },
-                    { $eq: ["$$this.LikeType", "1"] },
-                    { $eq: ["$$this.IsDeleted", false] },
-                  ],
-                },
-              },
-            },
-          },
-          dislikeCount: {
-            $size: {
-              $filter: {
-                input: "$interactions",
-                cond: {
-                  $and: [
-                    { $eq: ["$$this.Action", "Vote"] },
-                    { $eq: ["$$this.LikeType", "2"] },
-                    { $eq: ["$$this.IsDeleted", false] },
-                  ],
-                },
-              },
-            },
-          },
-          commentCount: {
-            $size: {
-              $filter: {
-                input: "$interactions",
-                cond: {
-                  $and: [
-                    { $eq: ["$$this.Action", "Comment"] },
-                    { $eq: ["$$this.IsDeleted", false] },
-                  ],
-                },
-              },
-            },
-          },
+          likes: [],
+          dislikes: [],
+          comments: [],
+          likeCount: 0,
+          dislikeCount: 0,
+          commentCount: 0
         },
       },
       // Project only the fields we need
@@ -3692,124 +3525,15 @@ const getUserPosts = async (req, res) => {
           dislikeCount: 1,
           commentCount: 1,
         },
-      },
-      // Add comment likes for each comment
-      {
-        $addFields: {
-          comments: {
-            $map: {
-              input: "$comments",
-              as: "comment",
-              in: {
-                $mergeObjects: [
-                  "$$comment",
-                  {
-                    likeCount: {
-                      $cond: {
-                        if: { $ifNull: ["$$comment._id", false] },
-                        then: "$$comment._id",
-                        else: 0
-                      }
-                    }
-                  }
-                ]
-              }
-            }
-          }
-        }
-      },
-      // Lookup comment likes from MediaActionLogs
-      {
-        $lookup: {
-          from: "MediaActionLogs",
-          let: { postId: "$_id" },
-          pipeline: [
-            {
-              $match: {
-                $expr: {
-                  $and: [
-                    { $eq: ["$MediaId", "$$postId"] },
-                    { $eq: ["$IsDeleted", false] },
-                    // Support both old and new comment like formats
-                    {
-                      $or: [
-                        // New format: Action: "Vote", ActionLevel: "post" with Comment field
-                        {
-                          $and: [
-                            { $eq: ["$Action", "Vote"] },
-                            { $eq: ["$ActionLevel", "post"] },
-                            { $ne: ["$Comment", ""] }
-                          ]
-                        },
-                        // Old format: Action: "CommentLike"
-                        { $eq: ["$Action", "CommentLike"] }
-                      ]
-                    }
-                  ]
-                }
-              }
-            },
-            {
-              $group: {
-                _id: "$Comment", // Group by CommentId
-                likeCount: { $sum: 1 },
-                likedBy: { $push: "$UserId" }
-              }
-            }
-          ],
-          as: "commentLikes"
-        }
-      },
-      // Merge comment likes into comments array
-      {
-        $addFields: {
-          comments: {
-            $map: {
-              input: "$comments",
-              as: "comment",
-              in: {
-                $let: {
-                  vars: {
-                    commentLikeData: {
-                      $arrayElemAt: [
-                        {
-                          $filter: {
-                            input: "$commentLikes",
-                            cond: { $eq: ["$$this._id", { $toString: "$$comment._id" }] }
-                          }
-                        },
-                        0
-                      ]
-                    }
-                  },
-                  in: {
-                    $mergeObjects: [
-                      "$$comment",
-                      {
-                        likeCount: { $ifNull: ["$$commentLikeData.likeCount", 0] },
-                        likedBy: { $ifNull: ["$$commentLikeData.likedBy", []] },
-                        likedByCurrentUser: {
-                          $in: [new mongoose.Types.ObjectId(userId), { $ifNull: ["$$commentLikeData.likedBy", []] }]
-                        }
-                      }
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        }
-      },
-      // Remove temporary commentLikes field
-      {
-        $project: {
-          commentLikes: 0
-        }
       }
-    ]);
+    ]).option({ maxTimeMS: 60000 }).allowDiskUse(true); // 1 minute timeout, allow disk use
+
+    console.log("✅ getUserPosts - Query completed, found", posts.length, "posts");
 
     // Get total count for pagination
+    console.log("🔍 getUserPosts - Getting total count");
     const totalCount = await media.countDocuments(conditions);
+    console.log("✅ getUserPosts - Total count:", totalCount);
 
     // Calculate pagination info
     const totalPages = Math.ceil(totalCount / limitNum);
@@ -3916,7 +3640,20 @@ const getUserPosts = async (req, res) => {
       },
     });
   } catch (error) {
-    console.error("Error fetching user posts:", error);
+    console.error("❌ Error fetching user posts:", error);
+    console.error("❌ Error stack:", error.stack);
+    console.error("❌ Error name:", error.name);
+    
+    // Check if it's a timeout error
+    if (error.name === 'MongoServerError' && error.code === 50) {
+      return res.status(504).json({
+        code: 504,
+        message: "Query timeout - the request took too long to process",
+        error: "Database query exceeded maximum time limit",
+        data: null,
+      });
+    }
+    
     res.status(500).json({
       code: 500,
       message: "Internal server error",
