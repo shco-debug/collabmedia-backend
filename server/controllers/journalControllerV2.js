@@ -14823,28 +14823,18 @@ var addCommentOnSocialPost = async function (req, res) {
     try {
       // Save comment using async/await
       const savedComment = await StreamComments(dataToSave).save();
-      
-      // Fetch updated comments list
-      var conditions = {
-        SocialPageId: new ObjectId(dataToSave.SocialPageId),
-        ParentId: { $exists: false },
-        //SocialPostId: ObjectId(dataToSave.SocialPostId),
+
+      // Fetch the freshly saved comment with populated user data
+      let populatedComment = await StreamComments.findOne({
+        _id: savedComment._id,
         IsDeleted: 0,
-        $or: [
-          { PrivacySetting: { $exists: false } },
-          { PrivacySetting: "PublicWithName" },
-          //{ PrivacySetting : 'OnlyForOwner', UserId : loginUserId },
-          {
-            PrivacySetting: { $in: ["OnlyForOwner", "InvitedFriends"] },
-            UserId: loginUserId,
-          },
-          { PrivacySetting: "InvitedFriends", UserId: { $in: memberIds } },
-        ],
-      };
-      var comments = await StreamComments.find(conditions)
-        .sort({ CreatedOn: -1 })
-        .populate("UserId", "_id Name Email ProfilePic");
-      comments = Array.isArray(comments) ? comments : [];
+      })
+        .populate("UserId", "_id Name Email ProfilePic")
+        .lean();
+
+      if (!populatedComment) {
+        populatedComment = savedComment.toObject ? savedComment.toObject() : savedComment;
+      }
 
       // Send notification
       if (postOwnerId && postOwnerId != loginUserId) {
@@ -14854,7 +14844,7 @@ var addCommentOnSocialPost = async function (req, res) {
       return res.json({
         status: "success",
         message: "comment saved successfully.",
-        results: comments,
+        results: [populatedComment],
       });
     } catch (err) {
       console.error('Error saving comment:', err);
@@ -22520,7 +22510,7 @@ var unsubscribeEmails = async function (req, res) {
     var options = {
       multi: false,
     };
-    await User.update(conditions, setObj, options);
+    await User.updateOne(conditions, setObj, options);
   } else if (location == "Stream" && id && StreamEmailCase) {
     var conditions = {
       _id: UserData._id,
@@ -22539,7 +22529,7 @@ var unsubscribeEmails = async function (req, res) {
     var options = {
       multi: false,
     };
-    await User.update(conditions, setObj, options);
+    await User.updateOne(conditions, setObj, options);
   }
 
   return res.json({ code: 200, message: "Done." });
@@ -23029,7 +23019,7 @@ var updateAutoPlayerSeenLog = async function (req, res) {
     var options = {
       multi: false,
     };
-    await User.update(conditions, setObj, options);
+    await User.updateOne(conditions, setObj, options);
   }
   await getAutoPlayerSeenLog(req, res);
 };
@@ -23049,7 +23039,7 @@ var updatePostActionAnnouncementSeenLog = async function (req, res) {
     var options = {
       multi: false,
     };
-    await User.update(conditions, setObj, options);
+    await User.updateOne(conditions, setObj, options);
   }
   await getAutoPlayerSeenLog(req, res);
 };
@@ -23068,7 +23058,7 @@ var updateAddDetailsSeen = async function (req, res) {
     var options = {
       multi: false,
     };
-    await User.update(conditions, setObj, options);
+    await User.updateOne(conditions, setObj, options);
     req.session.user.IsAddDetailsSeen = true;
   }
   res.json({ code: 200, usersession: req.session.user });
@@ -23088,7 +23078,7 @@ var updateWelcomeSeen = async function (req, res) {
     var options = {
       multi: false,
     };
-    await User.update(conditions, setObj, options);
+    await User.updateOne(conditions, setObj, options);
     req.session.user.IsWelcomeSeen = true;
   }
   res.json({ code: 200, usersession: req.session.user });
@@ -23108,7 +23098,7 @@ var updateHowItWorksSeen = async function (req, res) {
     var options = {
       multi: false,
     };
-    await User.update(conditions, setObj, options);
+    await User.updateOne(conditions, setObj, options);
     req.session.user.IsHowItWorksSeen = true;
   }
   res.json({ code: 200, usersession: req.session.user });
@@ -23128,7 +23118,7 @@ var updatePostLaunchVideoSeen = async function (req, res) {
     var options = {
       multi: false,
     };
-    await User.update(conditions, setObj, options);
+    await User.updateOne(conditions, setObj, options);
     req.session.user.IsPostLaunchVideoSeen = true;
   }
   res.json({ code: 200, usersession: req.session.user });
@@ -23153,7 +23143,8 @@ var getQuestAudioStats = async function (req, res) {
 var getUnsubscribeIdByEmail = function (req, res) {
   var email = req.query.email ? req.query.email : "";
   res.send(
-    "https://www.scrpt.com/unsubscribe/" +
+    process.HOST_URL +
+      "/unsubscribe/" +
       CommonAlgo.commonModule.strToCustomHash(email)
   );
 };

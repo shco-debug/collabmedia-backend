@@ -182,7 +182,6 @@ var debugSession = function (req, res) {
     session: sessionData
   });
 };
-
 var inspectPageContent = async function (req, res) {
   try {
     const pageId = req.query.page_id || req.body.page_id || req.headers.page_id;
@@ -2183,7 +2182,6 @@ var allPublished = function (req, res) {
     }
   );
 };
-
 var allDashboardCapsules = function (req, res) {
   var limit = req.body.perPage ? req.body.perPage : 0;
   var offset = req.body.pageNo ? (req.body.pageNo - 1) * limit : 0;
@@ -3560,7 +3558,6 @@ var share = async function (req, res) {
     res.json(response);
   }
 };
-
 /*________________________________________________________________________
    * @Date:      		07 September 2015
    * @Method :   		uploadCover
@@ -4209,7 +4206,6 @@ var remove = function (req, res) {
     }
   });
 };
-
 //this is upgraded version - now the same function will work for Owner (will delete the instance) and Members (will unfollow the member).
 var remove_V2 = function (req, res) {
   //check isMyCapsule( req.headers.capsule_id ) - Middle-ware Authorization check
@@ -5645,47 +5641,6 @@ var invite = function (req, res) {
 _________________________________________________________________________
 */
 
-var preview = function (req, res) {
-  var query = {};
-  var fields = {};
-  query._id = req.header.capsule_id;
-
-  Capsule.findOne(query, fields, function (err, result) {
-    var query = {};
-    var fields = {};
-    query._id = req.header.capsule_id;
-
-    Page.find(data, function (err, result) {
-      if (!err) {
-        var response = {
-          status: 200,
-          message: "Capsule added successfully.",
-          result: result,
-        };
-        res.json(response);
-      } else {
-        var response = {
-          status: 501,
-          message: "Something went wrong.",
-        };
-        res.json(response);
-      }
-    });
-  });
-};
-
-/*________________________________________________________________________
-   * @Date:      		07 September 2015
-   * @Method :   		shareCapsule
-   * Created By: 		smartData Enterprises Ltd
-   * Modified On:		-
-   * @Purpose:   	
-   * @Param:     		2
-   * @Return:    	 	yes
-   * @Access Category:	"UR + CR"
-_________________________________________________________________________
-*/
-
 var share = function (req, res) {
   //check isMyCapsule( req.headers.capsule_id ) - Middle-ware Authorization check
   var init_conditions = {};
@@ -5938,7 +5893,6 @@ var share = function (req, res) {
                                             var margedArrOfAllQAPageIds = [];
                                             var UNIQUE__margedArrOfAllQAPageIds =
                                               [];
-
                                             var sourcePageId__DestinationPageId__Arr =
                                               [];
 
@@ -6461,7 +6415,6 @@ var share = function (req, res) {
                   result: result,
                 };
                 res.json(response);
-
                 var condition = {};
                 condition.name = "Share__Capsule";
 
@@ -7123,7 +7076,6 @@ var removeInvitee = function (req, res) {
     }
   );
 };
-
 // //upload menu icon for capsule by arun sahani
 
 var uploadMenuIcon = async function (req, res) {
@@ -7392,7 +7344,6 @@ var delMenuIcon = function (req, res) {
     }
   });
 };
-
 var delCoverArt = function (req, res) {
   var conditions = {},
     fields = {};
@@ -7918,7 +7869,6 @@ var allPublicCapsules = function (req, res) {
       res.json(response);
     });
 };
-
 /*________________________________________________________________________
    * @Date:      		07 September 2015
    * @Method :   		galleryCapsulesList
@@ -7930,7 +7880,6 @@ var allPublicCapsules = function (req, res) {
    * @Access Category:	"UR"
 _________________________________________________________________________
 */
-
 // Get all posts from a capsule (chapters -> pages -> media)
 var getCapsulePosts = async function (req, res) {
   try {
@@ -8695,7 +8644,6 @@ var approveCapsuleForSales = function (req, res) {
     res.json(response);
   }
 };
-
 var getCartCapsule = function (req, res) {
   var conditions = {
     _id: { $in: req.body.capsuleIds },
@@ -8722,7 +8670,6 @@ var getCartCapsule = function (req, res) {
     }
   });
 };
-
 var updateCartCapsule = async function (req, res) {
   try {
     // Debug logging for authentication
@@ -9421,7 +9368,6 @@ var getCapsuleOwners = function (req, res) {
     }
   });
 };
-
 var updateCartForMyself = function (req, res) {
   // Safe session access for admin, subadmin, and regular users
   var myself = null;
@@ -9786,7 +9732,7 @@ var updateCartForMyself = function (req, res) {
                           };
                           res.json(response);
                         } else {
-                          //console.log(util.inspect(recordLatest2, { showHidden: true, depth: null }));
+                          //console.log(util.inspect(recordLatest2, {showHidden: true, depth: null}));
                           var response = {
                             status: 200,
                             message: "Cart has been retrieved successfully.",
@@ -10478,7 +10424,7 @@ var getUserPurchasedCapsulesPosts = async function (req, res) {
       const userId = req.session.user._id;
       posts.forEach(function (post) {
         post.isLikedByMe = post.likes.some(function (like) {
-          return String(like.UserId) === String(userId);
+          return String(like.LikedById) === String(userId);
         });
         post.isDislikedByMe = post.dislikes.some(function (dislike) {
           return String(dislike.UserId) === String(userId);
@@ -10613,17 +10559,17 @@ var getUserMixedFeedPosts = async function (req, res) {
     const StreamCommentLikes = require('./../models/StreamCommentLikesModel.js');
     const User = require('./../models/userModel.js');
     const StreamMember = require('./../models/StreamMembersModel.js');
+    const loginUserObjectId = new mongoose.Types.ObjectId(loginUserId);
+    const streamCommentLikesCollection =
+      (StreamCommentLikes.collection && (StreamCommentLikes.collection.collectionName || StreamCommentLikes.collection.name)) ||
+      'streamcommentlikes';
     
-    console.log('🚀 getUserMixedFeedPosts - Start');
-    console.log('👤 User ID:', loginUserId);
-    console.log('📊 Params:', { limit, skip, type, selectedKeyword });
+    console.log('🚀 getUserMixedFeedPosts - Start', { userId: loginUserId, limit, skip, type, selectedKeyword });
     const startTime = Date.now();
     const perfLog = {}; // Performance tracking
 
     // ✅ OPTIMIZATION 1: Parallelize initial queries
     const t1 = Date.now();
-    console.log('🔍 Fetching friends, capsules, and memberships...');
-    
     const [friends, userCapsules, userMemberships] = await Promise.all([
       // STEP 1: Get user's friends
       Friend.find({
@@ -10663,7 +10609,7 @@ var getUserMixedFeedPosts = async function (req, res) {
     const memberCapsuleIds = userMemberships.map(m => new mongoose.Types.ObjectId(m.StreamId));
     
     perfLog.step1_friends_capsules = Date.now() - t1;
-    console.log(`📊 Found ${friends.length} friends (${friendIds.length} valid IDs), ${userCapsuleIds.length} capsules, ${memberCapsuleIds.length} memberships [${perfLog.step1_friends_capsules}ms]`);
+    console.log(`📊 getUserMixedFeedPosts: friends=${friends.length}/${friendIds.length} capsules=${userCapsuleIds.length} memberships=${memberCapsuleIds.length} [${perfLog.step1_friends_capsules}ms]`);
 
     // ✅ OPTIMIZATION 2: Parallelize interaction queries
     let friendInteractedPostIds = [];
@@ -10717,7 +10663,7 @@ var getUserMixedFeedPosts = async function (req, res) {
       }).filter(id => id !== null);
       
       perfLog.step2_interactions = Date.now() - t2;
-      console.log(`📊 Found ${friendInteractedPostIds.length} posts where friends interacted [${perfLog.step2_interactions}ms]`);
+      console.log(`📊 getUserMixedFeedPosts: friendInteractedPosts=${friendInteractedPostIds.length} [${perfLog.step2_interactions}ms]`);
     }
 
     // STEP 4: Query SyncedPost for BOTH sources
@@ -10730,20 +10676,20 @@ var getUserMixedFeedPosts = async function (req, res) {
     // Always add user's own capsules condition (even if empty array)
     if (userCapsuleIds.length > 0) {
       orConditions.push({
-          CapsuleId: { $in: userCapsuleIds },
-          IsDeleted: false,
-          Status: true,
-          'EmailEngineDataSets.Delivered': false
-      });
+        CapsuleId: { $in: userCapsuleIds },
+        IsDeleted: false,
+        Status: true,
+        'EmailEngineDataSets.Delivered': false
+      })
     }
-    
+
     // Add friend-interacted posts condition only if there are any
     if (friendInteractedPostIds.length > 0) {
       orConditions.push({
-              PostId: { $in: friendInteractedPostIds },
-              IsDeleted: false,
-              Status: true
-      });
+        PostId: { $in: friendInteractedPostIds },
+        IsDeleted: false,
+        Status: true
+      })
     }
     
     // ⚡ CRITICAL: If no conditions, return empty result immediately
@@ -10766,12 +10712,10 @@ var getUserMixedFeedPosts = async function (req, res) {
       $or: orConditions
     };
     
-    console.log('📋 SyncedPost query conditions:', JSON.stringify(syncedPostConditions, null, 2));
-
     // ⚡ CRITICAL: First check if any documents match before running expensive aggregation
     const t_count = Date.now();
     const matchCount = await SyncedPost.countDocuments(syncedPostConditions).maxTimeMS(5000);
-    console.log(`📊 Found ${matchCount} matching SyncedPost documents [${Date.now() - t_count}ms]`);
+    console.log(`📊 getUserMixedFeedPosts: matchedSyncedPosts=${matchCount} [${Date.now() - t_count}ms]`);
     
     if (matchCount === 0) {
       console.log('❌ No SyncedPost documents found, returning empty result');
@@ -11039,7 +10983,7 @@ var getUserMixedFeedPosts = async function (req, res) {
       {
         $lookup: {
           from: "StreamLikes",
-          localField: "PostId",
+          localField: "_id",
           foreignField: "SocialPostId",
           as: "likes",
         },
@@ -11062,7 +11006,6 @@ var getUserMixedFeedPosts = async function (req, res) {
           }
         }
       },
-      
       // ⚡ Lookup comments with PRIVACY FILTERING
       {
         $lookup: {
@@ -11153,10 +11096,10 @@ var getUserMixedFeedPosts = async function (req, res) {
               }
             },
             { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
-            // Lookup comment likes
-      {
-        $lookup: {
-          from: "StreamCommentLikes",
+            // Lookup comment likes (with user details)
+            {
+              $lookup: {
+                from: streamCommentLikesCollection,
                 let: { commentId: "$_id" },
                 pipeline: [
                   {
@@ -11167,6 +11110,31 @@ var getUserMixedFeedPosts = async function (req, res) {
                           { $ne: ["$IsDeleted", true] },
                           { $ne: ["$IsDeleted", 1] }
                         ]
+                      }
+                    }
+                  },
+                  {
+                    $lookup: {
+                      from: "users",
+                      localField: "LikedById",
+                      foreignField: "_id",
+                      as: "likedByUser"
+                    }
+                  },
+                  { $unwind: { path: "$likedByUser", preserveNullAndEmptyArrays: true } },
+                  {
+                    $project: {
+                      _id: 1,
+                      CommentId: 1,
+                      SocialPageId: 1,
+                      LikedById: 1,
+                      CreatedOn: 1,
+                      likedByUser: {
+                        _id: "$likedByUser._id",
+                        Name: "$likedByUser.Name",
+                        UserName: "$likedByUser.UserName",
+                        ProfilePic: "$likedByUser.ProfilePic",
+                        Email: "$likedByUser.Email"
                       }
                     }
                   }
@@ -11202,8 +11170,8 @@ var getUserMixedFeedPosts = async function (req, res) {
                             { PrivacySetting: { $exists: false } },
                             { PrivacySetting: 'PublicWithName' },
                             { PrivacySetting: 'PublicWithoutName' },
-                            { PrivacySetting: 'OnlyForOwner', UserId: new mongoose.Types.ObjectId(loginUserId) },
-                            { PrivacySetting: 'OnlyForOwner', OwnerId: new mongoose.Types.ObjectId(loginUserId) },
+                            { PrivacySetting: 'OnlyForOwner', UserId: loginUserObjectId },
+                            { PrivacySetting: 'OnlyForOwner', OwnerId: loginUserObjectId },
                             { PrivacySetting: 'InvitedFriends', $expr: { $in: ["$$capsuleId", memberCapsuleIds] } }
                           ]
                         }
@@ -11237,10 +11205,10 @@ var getUserMixedFeedPosts = async function (req, res) {
                     }
                   },
                   { $unwind: { path: "$user", preserveNullAndEmptyArrays: true } },
-                  // Lookup reply likes (simplified - just count)
+                  // Lookup reply likes (with user details)
                   {
                     $lookup: {
-                      from: "StreamCommentLikes",
+                      from: streamCommentLikesCollection,
                       let: { replyId: "$_id" },
                       pipeline: [
                         {
@@ -11254,9 +11222,62 @@ var getUserMixedFeedPosts = async function (req, res) {
                             }
                           }
                         },
-                        { $count: "count" }
+                        {
+                          $lookup: {
+                            from: "users",
+                            localField: "LikedById",
+                            foreignField: "_id",
+                            as: "likedByUser"
+                          }
+                        },
+                        { $unwind: { path: "$likedByUser", preserveNullAndEmptyArrays: true } },
+                        {
+                          $project: {
+                            _id: 1,
+                            CommentId: 1,
+                            SocialPageId: 1,
+                            LikedById: 1,
+                            CreatedOn: 1,
+                            likedByUser: {
+                              _id: "$likedByUser._id",
+                              Name: "$likedByUser.Name",
+                              UserName: "$likedByUser.UserName",
+                              ProfilePic: "$likedByUser.ProfilePic",
+                              Email: "$likedByUser.Email"
+                            }
+                          }
+                        }
                       ],
-                      as: "replyLikeCount"
+                      as: "replyLikes"
+                    }
+                  },
+                  {
+                    $addFields: {
+                      replyLikes: {
+                        $filter: {
+                          input: "$replyLikes",
+                          cond: { $ne: ["$$this", null] }
+                        }
+                      },
+                      CommentLikeCount: { $size: "$replyLikes" },
+                      likedByCurrentUser: {
+                        $gt: [
+                          {
+                            $size: {
+                              $filter: {
+                                input: "$replyLikes",
+                                cond: {
+                                  $and: [
+                                    { $ne: ["$$this", null] },
+                                    { $eq: ["$$this.LikedById", loginUserObjectId] }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      }
                     }
                   },
                   // Project reply fields
@@ -11269,7 +11290,22 @@ var getUserMixedFeedPosts = async function (req, res) {
                       CreatedOn: 1,
                       PrivacySetting: 1,
                       user: 1,
-                      CommentLikeCount: { $ifNull: [{ $arrayElemAt: ["$replyLikeCount.count", 0] }, 0] }
+                      CommentLikeCount: 1,
+                      likedByCurrentUser: { $ifNull: ["$likedByCurrentUser", false] },
+                      likes: {
+                        $map: {
+                          input: "$replyLikes",
+                          as: "like",
+                          in: {
+                            _id: "$$like._id",
+                            CommentId: "$$like.CommentId",
+                            SocialPageId: "$$like.SocialPageId",
+                            LikedById: "$$like.LikedById",
+                            CreatedOn: "$$like.CreatedOn",
+                            likedByUser: "$$like.likedByUser"
+                          }
+                        }
+                      }
                     }
                   }
                 ],
@@ -11301,8 +11337,56 @@ var getUserMixedFeedPosts = async function (req, res) {
             // Add counts
       {
         $addFields: {
-                CommentLikeCount: { $size: "$commentLikes" },
+                commentLikesFiltered: {
+                  $filter: {
+                    input: "$commentLikes",
+                    cond: {
+                      $and: [
+                        { $ne: ["$$this.IsDeleted", true] },
+                        { $ne: ["$$this.IsDeleted", 1] }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              $addFields: {
+                CommentLikeCount: { $size: "$commentLikesFiltered" },
                 replyCount: { $ifNull: [{ $arrayElemAt: ["$replyCountArr.total", 0] }, 0] }
+              }
+            },
+            {
+              $addFields: {
+                likedByCurrentUser: {
+                  $gt: [
+                    {
+                      $size: {
+                        $filter: {
+                          input: "$commentLikesFiltered",
+                          cond: {
+                            $eq: ["$$this.LikedById", loginUserObjectId]
+                          }
+                        }
+                      }
+                    },
+                    0
+                  ]
+                },
+                likes: {
+                  $map: {
+                    input: "$commentLikesFiltered",
+                    as: "like",
+                    in: {
+                      _id: "$$like._id",
+                      CommentId: "$$like.CommentId",
+                      SocialPageId: "$$like.SocialPageId",
+                      LikedById: "$$like.LikedById",
+                      CreatedOn: "$$like.CreatedOn",
+                      likedByUser: "$$like.likedByUser"
+                    }
+                  }
+                }
               }
             },
             // Project comment fields
@@ -11316,7 +11400,9 @@ var getUserMixedFeedPosts = async function (req, res) {
                 user: 1,
                 CommentLikeCount: 1,
                 replies: 1, // ✅ Include full replies array
-                replyCount: 1
+                replyCount: 1,
+                likedByCurrentUser: 1,
+                likes: 1
               }
             }
           ],
@@ -11340,6 +11426,58 @@ var getUserMixedFeedPosts = async function (req, res) {
       },
       // Project final structure matching getUserPurchasedCapsulesPosts
       {
+        $lookup: {
+          from: "users",
+          localField: "likes.LikedById",
+          foreignField: "_id",
+          as: "likesUsers"
+        }
+      },
+      {
+        $addFields: {
+          likes: {
+            $map: {
+              input: "$likes",
+              as: "like",
+              in: {
+                $mergeObjects: [
+                  "$$like",
+                  {
+                    likedByUser: {
+                      $let: {
+                        vars: {
+                          matchedUser: {
+                            $first: {
+                              $filter: {
+                                input: "$likesUsers",
+                                as: "userDoc",
+                                cond: { $eq: ["$$userDoc._id", "$$like.LikedById"] }
+                              }
+                            }
+                          }
+                        },
+                        in: {
+                          _id: "$$matchedUser._id",
+                          Name: "$$matchedUser.Name",
+                          UserName: "$$matchedUser.UserName",
+                          ProfilePic: "$$matchedUser.ProfilePic",
+                          Email: "$$matchedUser.Email"
+                        }
+                      }
+                    }
+                  }
+                ]
+              }
+            }
+          }
+        }
+      },
+      {
+        $project: {
+          likesUsers: 0
+        }
+      },
+      {
         $project: {
           _id: "$PostId",
           MediaType: 1,
@@ -11359,34 +11497,26 @@ var getUserMixedFeedPosts = async function (req, res) {
           VisualUrls: 1,
           BlendMode: 1,
           hexcode_blendedImage_temp: 1,
-          // Capsule info
           capsuleId: 1,
-          capsuleOwnerId: 1, // ✅ For OwnerId in like/comment API
-          postOwnerId: 1, // ✅ For PostOwnerId in like/comment API
+          capsuleOwnerId: 1,
+          postOwnerId: 1,
           capsuleTitle: 1,
           capsuleOwnerName: 1,
           capsuleOwnerEmail: 1,
           capsuleOwnerProfilePic: 1,
-          // ✅ Post creator (uploader) info - ONLY name and pic
           capsuleCreatorName: 1,
           capsuleCreatorProfilePic: 1,
-          // Page info
           pageId: 1,
-          // Interactions
           likes: 1,
           comments: 1,
           likeCount: 1,
-          commentCount: 1,
-          // Note: commentsRaw and allComments are automatically excluded in inclusion projection
-        },
+          commentCount: 1
+        }
       },
       // Re-sort by creation date (already done earlier, but ensure final order)
       { $sort: { CreatedOn: -1, _id: -1 } },
     ];
 
-      console.log('🔄 Starting main aggregation pipeline...');
-      console.log(`📊 Pipeline has ${pipeline.length} stages`);
-      
       const t3 = Date.now();
     
     const posts = await SyncedPost.aggregate(pipeline, {
@@ -11395,20 +11525,22 @@ var getUserMixedFeedPosts = async function (req, res) {
     }).exec();
     
       perfLog.step3_main_aggregation = Date.now() - t3;
-      console.log(`✅ Main aggregation completed: ${posts.length} posts [${perfLog.step3_main_aggregation}ms]`);
+      console.log(`✅ Aggregation completed [posts=${posts.length}, duration=${perfLog.step3_main_aggregation}ms]`);
 
-    // Debug: Show which posts have comments
-    console.log("\n📊 ========== POSTS SUMMARY ==========");
-    posts.forEach((post, index) => {
-      const hasComments = post.comments && post.comments.length > 0;
-      const hasLikes = post.likes && post.likes.length > 0;
-      console.log(`Post #${index + 1}: ${post._id}`);
-      console.log(`  ✉️  Comments: ${post.commentCount} | Likes: ${post.likeCount}`);
-      if (hasComments) {
-        console.log(`  💬 First comment: "${post.comments[0].Comment?.substring(0, 40)}..."`);
-      }
+    // Targeted diagnostics for comment likes
+    posts.forEach((post) => {
+      if (!Array.isArray(post.comments) || post.comments.length === 0) return;
+      post.comments.slice(0, 10).forEach((comment) => {
+        console.log('🧪 CommentLikeDebug', {
+          postId: post._id,
+          commentId: comment._id,
+          commentLikeCount: comment.CommentLikeCount,
+          likedByCurrentUser: comment.likedByCurrentUser,
+          likesArrayLength: Array.isArray(comment.likes) ? comment.likes.length : 0,
+          likeIds: Array.isArray(comment.likes) ? comment.likes.map(like => like._id) : []
+        });
+      });
     });
-    console.log("========================================\n");
 
     // Add user's interaction status AND friend activity metadata for each post
     if (req.session.user && req.session.user._id) {
@@ -11435,7 +11567,7 @@ var getUserMixedFeedPosts = async function (req, res) {
       posts.forEach(function (post) {
         // Check if user liked this post
         post.isLikedByMe = post.likes && post.likes.some(function (like) {
-          return String(like.UserId) === String(userId);
+          return String(like.LikedById) === String(userId);
         });
         
         // Check if user commented on this post
@@ -11450,7 +11582,7 @@ var getUserMixedFeedPosts = async function (req, res) {
         
         if (post.likes && post.likes.length > 0) {
           post.likes.forEach(function(like) {
-            const likeUserIdStr = String(like.UserId);
+            const likeUserIdStr = String(like.LikedById);
             // Check if this like is from a friend (not the user themselves)
             if (likeUserIdStr !== userIdStr && friendIds.some(fid => String(fid) === likeUserIdStr)) {
               const friendName = friendIdToNameMap[likeUserIdStr] || 'Unknown Friend';
@@ -11598,7 +11730,6 @@ var getUserMixedFeedPosts = async function (req, res) {
     });
   }
 };
-
 var getMySales = function (req, res) {
   var offset = req.body.offset ? req.body.offset : 0;
   var limit = req.body.limit ? req.body.limit : 10;
@@ -11869,6 +12000,62 @@ var getCapsuleMembers = async function (req, res) {
   }
 };
 
+const getStreamPriceMap = async function (req, res) {
+  try {
+    const limit = req.body.limit || 100;
+    const offset = req.body.offset || 0;
+
+    const conditions = {
+      "LaunchSettings.Audience": "BUYERS",
+      IsPublished: true,
+      IsAllowedForSales: true,
+      Status: true,
+      IsDeleted: false
+    };
+
+    const sortObj = {
+      ModifiedOn: -1
+    };
+
+    const fields = {
+      Price: 1,
+      _id: 1
+    };
+
+    const results = await Capsule.find(conditions, fields)
+      .sort(sortObj)
+      .skip(offset)
+      .limit(limit)
+      .lean()
+      .exec();
+
+    const totalCount = await Capsule.countDocuments(conditions).exec();
+
+    const priceMap = {};
+    for (let i = 0; i < results.length; i++) {
+      const key = String(results[i]._id) + '_price';
+      priceMap[key] = results[i].Price || 0;
+    }
+
+    const response = {
+      count: totalCount,
+      status: 200,
+      message: "Capsules price map retrieved successfully",
+      results: priceMap
+    };
+
+    res.json(response);
+  } catch (error) {
+    console.error("Error in getStreamPriceMap:", error);
+    const response = {
+      status: 501,
+      message: "Something went wrong.",
+      error: error.message
+    };
+    res.json(response);
+  }
+};
+
 //Capsules In the making Apis
 exports.find = find;
 exports.findAll = findAll;
@@ -11906,7 +12093,6 @@ exports.removeInvitee = removeInvitee;
 
 //Capsule library Apis
 exports.addFromLibrary = addFromLibrary;
-exports.preview = preview;
 exports.share = share;
 exports.uploadMenuIcon = uploadMenuIcon;
 exports.delMenuIcon = delMenuIcon;
@@ -12257,6 +12443,7 @@ var getCommentReplies = async function (req, res) {
   }
 };
 exports.getCommentReplies = getCommentReplies;
+exports.getStreamPriceMap = getStreamPriceMap;
 
 exports.approveCapsuleForSales = approveCapsuleForSales;
 
@@ -12266,7 +12453,6 @@ exports.createQuestionPage = createQuestionPage;
 exports.addComponentToPage = addComponentToPage;
 exports.inspectPageContent = inspectPageContent;
 exports.debugSession = debugSession;
-
 //Buy Now From Public Gallery - Shoping Cart Apis
 exports.getCartCapsule = getCartCapsule;
 exports.getCart = getCart;
@@ -12282,7 +12468,6 @@ exports.updateCartForSurpriseGift = updateCartForSurpriseGift;
 exports.updateCartForMonth = updateCartForMonth;
 exports.updateCartForFrequency = updateCartForFrequency;
 //Buy Now From Public Gallery - Shoping Cart Apis
-
 exports.getMyPurchases = getMyPurchases;
 exports.getUserPurchasedCapsulesPosts = getUserPurchasedCapsulesPosts;
 exports.getUserMixedFeedPosts = getUserMixedFeedPosts;
@@ -13018,7 +13203,6 @@ var updateCartForFrequency_ActiveCapsule = async function (req, res) {
     });
   }
 };
-
 /**
  * Get scheduled posts for a capsule (for debugging/verification)
  * GET /capsules/getScheduledPosts
@@ -13385,8 +13569,6 @@ var getStreamPostsOptimized = async function (req, res) {
       'EmailEngineDataSets.Delivered': false
     };
     
-    console.log('📋 SyncedPost query conditions:', JSON.stringify(syncedPostConditions, null, 2));
-
     // Count total matching posts
     const t_count = Date.now();
     const totalCount = await SyncedPost.countDocuments(syncedPostConditions).maxTimeMS(5000);
@@ -13681,7 +13863,7 @@ var getStreamPostsOptimized = async function (req, res) {
       {
         $lookup: {
           from: "StreamLikes",
-          localField: "PostId",
+          localField: "_id",
           foreignField: "SocialPostId",
           as: "likes",
         },
@@ -13918,7 +14100,7 @@ var getStreamPostsOptimized = async function (req, res) {
                 $map: {
                   input: "$likes",
                   as: "like",
-                  in: { $toString: "$$like.UserId" }
+                  in: { $toString: "$$like.LikedById" }
                 }
               }
             ]
@@ -14104,4 +14286,3 @@ exports.checkPostStreams = checkPostStreams;
 exports.unsubscribe_changeSettings = unsubscribe_changeSettings;
 exports.getStreamPostsOptimized = getStreamPostsOptimized;
 exports.getCapsuleDetails = getCapsuleDetails;
-

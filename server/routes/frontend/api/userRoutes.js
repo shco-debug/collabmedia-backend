@@ -198,6 +198,10 @@ module.exports = function(router){
 	router.post('/saveOwnerBirthdate', function (req, res) {
         user.saveOwnerBirthdate(req, res);
     });
+
+	router.post('/subscribeToPlatform', function (req, res) {
+		user.subscribeToPlatform(req, res);
+	});
 	router.post('/confirmOwnerBirthday', function (req, res) {
         user.confirmOwnerBirthday(req, res);
     });

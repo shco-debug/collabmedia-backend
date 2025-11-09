@@ -5,6 +5,8 @@ var counters = require("../models/countersModel.js");
 
 // Required imports for video/audio processing
 const media = require('../models/mediaModel.js');
+const mongoose = require("mongoose");
+const Page = require('../models/pageModel.js');
 const { crop_image, resize_image } = require('./mediaController.js');
 const { uploadVideoToS3Folder, uploadVideoThumbnailsToS3, uploadAudioToS3Folder } = require('../utilities/awsS3Utils.js');
 const { 
@@ -14,6 +16,7 @@ const {
   optimizeForWeb,
   createHighQualityVersion 
 } = require('../utilities/videoConversionUtils.js');
+const crypto = require("crypto");
 
 // Configuration for process.urls if not defined
 if (!process.urls) {
@@ -28,8 +31,163 @@ if (!process.urls) {
   };
 }
 
+function deriveS3InfoFromUrl(url) {
+  if (!url) {
+    return {
+      bucket: process.env.AWS_BUCKET_NAME || null,
+      region: process.env.AWS_REGION || null,
+      key: null
+    };
+  }
 
-async function video__getNsaveThumbnail_S3(s3VideoUrl, MediaId) {
+  try {
+    const parsed = new URL(url);
+    const hostParts = parsed.hostname.split('.');
+    const bucket = hostParts[0] || process.env.AWS_BUCKET_NAME || null;
+    const region = hostParts.length >= 3 ? hostParts[2] : process.env.AWS_REGION || null;
+    const key = decodeURIComponent(parsed.pathname.replace(/^\/+/g, ''));
+
+    return { bucket, region, key };
+  } catch (error) {
+    console.warn("Failed to derive S3 info from URL:", error.message);
+    return {
+      bucket: process.env.AWS_BUCKET_NAME || null,
+      region: process.env.AWS_REGION || null,
+      key: null
+    };
+  }
+}
+
+function cloneAndSanitizeLocations(locations = []) {
+  if (!Array.isArray(locations)) {
+    return [];
+  }
+
+  return locations.map((location) => {
+    const cloned = { ...(location || {}) };
+    delete cloned._id;
+    delete cloned.id;
+    return cloned;
+  });
+}
+
+function parseNumericValue(value) {
+  if (typeof value === 'number' && !isNaN(value)) {
+    return value;
+  }
+
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function ensureAspectRatio(width, height) {
+  if (!width || !height || height === 0) {
+    return null;
+  }
+
+  const ratio = width / height;
+  return Number.isFinite(ratio) ? parseFloat(ratio.toFixed(4)) : null;
+}
+
+function ensureVideoDimensions(dimensions) {
+  if (!dimensions || typeof dimensions !== 'object') {
+    return null;
+  }
+
+  const width = parseNumericValue(dimensions.width);
+  const height = parseNumericValue(dimensions.height);
+
+  if (!width || !height) {
+    return null;
+  }
+
+  return {
+    width,
+    height,
+    aspectRatio: ensureAspectRatio(width, height)
+  };
+}
+
+function ensureDuration(value) {
+  const duration = parseNumericValue(value);
+  return typeof duration === 'number' ? duration : null;
+}
+
+function ensureFileSize(value, fallback) {
+  const size = parseNumericValue(value);
+  if (typeof size === 'number') {
+    return size;
+  }
+  return fallback;
+}
+
+function ensureContentType(existingType, fallback) {
+  if (existingType && typeof existingType === 'string') {
+    return existingType;
+  }
+  return fallback;
+}
+
+function ensureS3Key(existingKey, derivedKey) {
+  if (existingKey && typeof existingKey === 'string') {
+    return existingKey;
+  }
+  return derivedKey || null;
+}
+
+function ensureBucket(existingBucket, derivedBucket) {
+  if (existingBucket && typeof existingBucket === 'string') {
+    return existingBucket;
+  }
+  return derivedBucket || process.env.AWS_BUCKET_NAME || 'scrpt';
+}
+
+function ensureRegion(existingRegion, derivedRegion) {
+  if (existingRegion && typeof existingRegion === 'string') {
+    return existingRegion;
+  }
+  return derivedRegion || process.env.AWS_REGION || 'us-east-1';
+}
+
+function ensureVideoUrl(location, fallbackUrl) {
+  if (location && location.URL) {
+    return location.URL;
+  }
+  return fallbackUrl || null;
+}
+
+function cloneMetaData(metaData) {
+  if (!metaData || typeof metaData !== 'object') {
+    return {};
+  }
+
+  return JSON.parse(JSON.stringify(metaData));
+}
+
+function calculateFileHash(filePath, algorithm = 'md5') {
+  return new Promise((resolve, reject) => {
+    try {
+      const hash = crypto.createHash(algorithm);
+      const stream = fs.createReadStream(filePath);
+
+      stream.on('error', (streamError) => {
+        console.error(`Error reading file for hash (${algorithm}):`, streamError);
+        reject(streamError);
+      });
+
+      stream.on('data', (chunk) => hash.update(chunk));
+      stream.on('end', () => {
+        const digest = hash.digest('hex');
+        resolve(digest);
+      });
+    } catch (error) {
+      reject(error);
+    }
+  });
+}
+
+
+async function video__getNsaveThumbnail_S3(s3VideoUrl, MediaId, options = {}) {
   try {
     console.log("=== GENERATE VIDEO THUMBNAIL (S3) ===");
     console.log("S3 Video URL:", s3VideoUrl);
@@ -40,6 +198,17 @@ async function video__getNsaveThumbnail_S3(s3VideoUrl, MediaId) {
     const { promisify } = require('util');
     const execAsync = promisify(exec);
     const axios = require('axios');
+
+    const fallbackDimensions = options && options.fallbackDimensions ? options.fallbackDimensions : null;
+    const isValidDimension = (value) => typeof value === 'number' && !isNaN(value) && value > 0;
+    let videoDimensions = null;
+
+    if (fallbackDimensions && isValidDimension(fallbackDimensions.width) && isValidDimension(fallbackDimensions.height)) {
+      videoDimensions = {
+        width: fallbackDimensions.width,
+        height: fallbackDimensions.height
+      };
+    }
 
     // Extract filename from S3 URL for thumbnail naming
     const urlParts = s3VideoUrl.split('/');
@@ -81,6 +250,22 @@ async function video__getNsaveThumbnail_S3(s3VideoUrl, MediaId) {
         videoDuration = hours * 3600 + minutes * 60 + seconds;
         console.log("🎬 Extracted duration from FFmpeg:", videoDuration, "seconds");
       }
+
+      if (!videoDimensions) {
+        const resolutionMatch = stderr.match(/,\s*(\d{2,5})x(\d{2,5})/);
+        if (resolutionMatch) {
+          const parsedWidth = parseInt(resolutionMatch[1], 10);
+          const parsedHeight = parseInt(resolutionMatch[2], 10);
+
+          if (isValidDimension(parsedWidth) && isValidDimension(parsedHeight)) {
+            videoDimensions = {
+              width: parsedWidth,
+              height: parsedHeight
+            };
+            console.log("🎬 Extracted resolution from FFmpeg:", videoDimensions);
+          }
+        }
+      }
     }
 
     // Check if thumbnail was created
@@ -113,6 +298,16 @@ async function video__getNsaveThumbnail_S3(s3VideoUrl, MediaId) {
       thumbnail: aspectfitThumbnail ? aspectfitThumbnail.thumbnailUrl : outputThumbnail
     };
 
+    if (videoDimensions && isValidDimension(videoDimensions.width) && isValidDimension(videoDimensions.height)) {
+      const aspectRatio = videoDimensions.height === 0 ? null : parseFloat((videoDimensions.width / videoDimensions.height).toFixed(4));
+      thumbnailUpdate['MetaData.VideoDimensions'] = {
+        width: videoDimensions.width,
+        height: videoDimensions.height,
+        aspectRatio: Number.isFinite(aspectRatio) ? aspectRatio : null
+      };
+      console.log("🎬 Updating MetaData with video dimensions:", thumbnailUpdate['MetaData.VideoDimensions']);
+    }
+
     // If we extracted duration, update it in the Location array
     if (videoDuration !== null) {
       thumbnailUpdate['Location.0.Duration'] = videoDuration;
@@ -140,6 +335,11 @@ async function video__getNsaveThumbnail_S3(s3VideoUrl, MediaId) {
       } else {
         console.log("⚠️ VERIFICATION: Duration field NOT found in Location array");
       }
+      if (updatedMedia.MetaData && updatedMedia.MetaData.VideoDimensions) {
+        console.log("✅ VERIFICATION: Video dimensions stored in MetaData:", updatedMedia.MetaData.VideoDimensions);
+      } else {
+        console.log("⚠️ VERIFICATION: Video dimensions NOT found in MetaData");
+      }
     } else {
       console.log("❌ VERIFICATION: Thumbnail field NOT found in database");
     }
@@ -155,7 +355,12 @@ async function video__getNsaveThumbnail_S3(s3VideoUrl, MediaId) {
     return {
       success: true,
       baseFileName: baseFileName,
-      thumbnails: thumbnailResult.thumbnails
+      thumbnails: thumbnailResult.thumbnails,
+      dimensions: thumbnailUpdate['MetaData.VideoDimensions'] || (videoDimensions ? {
+        width: videoDimensions.width,
+        height: videoDimensions.height,
+        aspectRatio: videoDimensions.height === 0 ? null : parseFloat((videoDimensions.width / videoDimensions.height).toFixed(4))
+      } : null)
     };
 
   } catch (error) {
@@ -667,6 +872,8 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
     console.log("fileType:", fileType);
     console.log("uploadResult:", uploadResult);
 
+    const isDuplicateMedia = !!(uploadResult && uploadResult.isDuplicate);
+
     if (!req.session.user) {
       throw new Error("User not authenticated");
     }
@@ -741,6 +948,13 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
     const title = getFieldValue(fields.title);
     const prompt = getFieldValue(fields.prompt);
     const privacySetting = getFieldValue(fields.postPrivacySetting) || "PublicWithName";
+    const rawStreamId = getFieldValue(fields.streamId || fields.StreamId || fields.streamID);
+    const rawPageId = getFieldValue(fields.pageId || fields.PageId || fields.pageID);
+    const streamId = typeof rawStreamId === 'string' ? rawStreamId.trim() : '';
+    const pageId = typeof rawPageId === 'string' ? rawPageId.trim() : '';
+    const streamObjectId = streamId && mongoose.Types.ObjectId.isValid(streamId)
+      ? new mongoose.Types.ObjectId(streamId)
+      : null;
     const isPrivate = privacySetting === "OnlyForOwner" ? 1 : 0;
 
     const dataToUpload = {
@@ -757,6 +971,9 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
       Status: 2,
       MetaMetaTags: null,
       MetaTags: null,
+      MetaData: uploadResult && uploadResult.isDuplicate && uploadResult.existingMetaData
+        ? { ...uploadResult.existingMetaData }
+        : {},
       AddedWhere: "board",
       IsDeleted: 0,
       TagType: "",
@@ -783,9 +1000,16 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
       UpdatedOn: new Date()
     };
 
-    // Extract duration from video if not available from conversion
-    let videoDuration = conversionResult?.duration || null;
-    
+    if (streamObjectId) {
+      dataToUpload.StreamId = streamObjectId;
+    }
+
+    // Extract metadata for duration and dimensions
+    let videoDuration = conversionResult?.duration || uploadResult?.duplicateDuration || null;
+    let videoDimensions = isDuplicateMedia && uploadResult?.existingVideoDimensions
+      ? ensureVideoDimensions(uploadResult.existingVideoDimensions)
+      : null;
+
     // Check if duration was provided from the frontend
     if (!videoDuration && fields.duration) {
       const frontendDuration = parseFloat(getFieldValue(fields.duration));
@@ -794,79 +1018,177 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
         console.log("Using duration from frontend:", videoDuration, "seconds");
       }
     }
-    
-    // If duration is still null and this is a video, try to extract it directly
-    if (!videoDuration && fileType === "Video" && uploadResult.videoUrl) {
+
+    // Fetch metadata from the uploaded video when available
+    if (!isDuplicateMedia && fileType === "Video" && uploadResult.videoUrl) {
       try {
-        console.log("Extracting duration from uploaded video...");
-        const metadata = await getVideoMetadata(uploadResult.videoUrl);
-        if (metadata.success && metadata.duration) {
-          videoDuration = metadata.duration;
-          console.log("Duration extracted:", videoDuration);
+        console.log("Extracting metadata from uploaded video for duration and dimensions...");
+        const metadataResult = await getVideoMetadata(uploadResult.videoUrl);
+
+        if (metadataResult.success) {
+          if (!videoDuration && metadataResult.duration) {
+            videoDuration = metadataResult.duration;
+            console.log("Duration extracted:", videoDuration);
+          }
+
+          if (metadataResult.video && metadataResult.video.width && metadataResult.video.height) {
+            videoDimensions = {
+              width: metadataResult.video.width,
+              height: metadataResult.video.height
+            };
+            console.log("Video dimensions extracted:", videoDimensions);
+          }
+        } else if (metadataResult.error) {
+          console.warn("Video metadata extraction reported failure:", metadataResult.error);
         }
       } catch (error) {
-        console.warn("Failed to extract duration:", error.message);
+        console.warn("Failed to extract video metadata:", error.message);
       }
     }
-    
-    // Add S3 URL to Location array
-    dataToUpload.Location.push({
-      Size: uploadResult.fileSize,
-      URL: uploadResult.videoUrl || uploadResult.audioUrl,
-      Type: "original",
-      Index: 0,
-      S3Key: uploadResult.s3Key,
-      Duration: videoDuration // Include duration from video processing
-    });
 
-    // Add converted video if available
-    if (conversionResult && conversionResult.success && conversionResult.converted) {
-      dataToUpload.Location.push({
-        Size: conversionResult.convertedSize,
-        URL: conversionResult.s3Info.url,
-        Type: "converted",
-        Index: 1,
-        S3Key: conversionResult.s3Info.s3Key,
-        Format: conversionResult.convertedFormat,
-        CompressionRatio: conversionResult.compressionRatio,
-        Duration: videoDuration || conversionResult.duration || null // Include duration for converted video
+    if (isDuplicateMedia && Array.isArray(uploadResult.existingLocations) && uploadResult.existingLocations.length > 0) {
+      dataToUpload.Location = uploadResult.existingLocations.map((location, idx) => {
+        const sanitized = { ...(location || {}) };
+        delete sanitized._id;
+        delete sanitized.id;
+        if (sanitized.Index === undefined && typeof location?.Index !== 'number') {
+          sanitized.Index = idx;
+        }
+        if (sanitized.Duration !== undefined) {
+          sanitized.Duration = ensureDuration(sanitized.Duration);
+        }
+        return sanitized;
       });
+
+      if (!videoDuration) {
+        const existingOriginalLocation = dataToUpload.Location.find((loc) => loc && loc.Type === "original")
+          || dataToUpload.Location[0];
+        if (existingOriginalLocation) {
+          const derivedDuration = ensureDuration(existingOriginalLocation.Duration);
+          if (derivedDuration !== null) {
+            videoDuration = derivedDuration;
+            existingOriginalLocation.Duration = derivedDuration;
+          }
+        }
+      }
+    } else {
+      // Add S3 URL to Location array
+      dataToUpload.Location.push({
+        Size: uploadResult.fileSize,
+        URL: uploadResult.videoUrl || uploadResult.audioUrl,
+        Type: "original",
+        Index: 0,
+        S3Key: uploadResult.s3Key,
+        Duration: videoDuration // Include duration from video processing
+      });
+
+      // Add converted video if available
+      if (conversionResult && conversionResult.success && conversionResult.converted) {
+        dataToUpload.Location.push({
+          Size: conversionResult.convertedSize,
+          URL: conversionResult.s3Info.url,
+          Type: "converted",
+          Index: 1,
+          S3Key: conversionResult.s3Info.s3Key,
+          Format: conversionResult.convertedFormat,
+          CompressionRatio: conversionResult.compressionRatio,
+          Duration: videoDuration || conversionResult.duration || null // Include duration for converted video
+        });
+      }
+    }
+
+    if (videoDimensions && videoDimensions.width && videoDimensions.height) {
+      const aspectRatio = videoDimensions.height === 0 ? null : parseFloat((videoDimensions.width / videoDimensions.height).toFixed(4));
+      dataToUpload.MetaData = dataToUpload.MetaData || {};
+      dataToUpload.MetaData.VideoDimensions = {
+        width: videoDimensions.width,
+        height: videoDimensions.height,
+        aspectRatio: Number.isFinite(aspectRatio) ? aspectRatio : null
+      };
+      console.log("Pre-saving MetaData.VideoDimensions:", dataToUpload.MetaData.VideoDimensions);
+    }
+
+    if (uploadResult && uploadResult.videoHash) {
+      dataToUpload.MetaData = dataToUpload.MetaData || {};
+      dataToUpload.MetaData.VideoHash = uploadResult.videoHash;
+      console.log("Stored video hash in MetaData.VideoHash:", dataToUpload.MetaData.VideoHash);
     }
 
     console.log("Saving to database:", dataToUpload);
 
     const model = await media(dataToUpload).save();
-        dataToUpload._id = model._id;
+    dataToUpload._id = model._id;
 
     console.log("Database save successful, ID:", dataToUpload._id);
 
     // Generate thumbnail for videos
-      if (fileType === "Video") {
+      if (fileType === "Video" && !isDuplicateMedia) {
         try {
           console.log("Starting thumbnail generation for video...");
-          const thumbnailResult = await video__getNsaveThumbnail_S3(uploadResult.videoUrl, dataToUpload._id);
+          const thumbnailResult = await video__getNsaveThumbnail_S3(uploadResult.videoUrl, dataToUpload._id, {
+            fallbackDimensions: videoDimensions
+          });
           console.log("Thumbnail generation result:", thumbnailResult);
+
+          if (thumbnailResult && thumbnailResult.dimensions && thumbnailResult.success) {
+            dataToUpload.MetaData = dataToUpload.MetaData || {};
+            dataToUpload.MetaData.VideoDimensions = thumbnailResult.dimensions;
+            console.log("Updated MetaData.VideoDimensions from thumbnail result:", dataToUpload.MetaData.VideoDimensions);
+          }
         } catch (thumbnailError) {
           console.error("Thumbnail generation failed:", thumbnailError);
           // Continue with the upload even if thumbnail generation fails
         }
+      } else if (fileType === "Video" && isDuplicateMedia) {
+        console.log("Skipping thumbnail generation for duplicate video asset.");
       }
 
     console.log("=== UPLOAD COMPLETE ===");
     
+    if (pageId) {
+      try {
+        if (!mongoose.Types.ObjectId.isValid(pageId)) {
+          throw new Error("Invalid pageId format");
+        }
+
+        const updateResult = await Page.updateOne(
+          { _id: new mongoose.Types.ObjectId(pageId) },
+          { $push: { Medias: dataToUpload._id } }
+        );
+
+        if ((updateResult.modifiedCount ?? updateResult.nModified ?? 0) === 0) {
+          console.warn("⚠️ Page update did not modify any documents for pageId:", pageId);
+        }
+      } catch (pageError) {
+        console.error("Error attaching media to page:", pageError.message);
+      }
+    }
+
     const response = {
       success: true,
       code: '200', // Add code field for frontend compatibility
-      message: `${fileType} uploaded successfully`,
-      msg: `${fileType} uploaded successfully`, // Add msg field for consistency
+      message: pageId
+        ? `${fileType} uploaded and added to page successfully`
+        : `${fileType} uploaded successfully`,
+      msg: pageId
+        ? `${fileType} uploaded and added to page successfully`
+        : `${fileType} uploaded successfully`, // Add msg field for consistency
       data: dataToUpload,
       s3Info: {
         s3Key: uploadResult.s3Key,
         url: uploadResult.videoUrl || uploadResult.audioUrl,
         bucket: uploadResult.bucket,
         region: uploadResult.region
-      }
+      },
+      pageId: pageId || null,
+      streamId: streamId || null,
+      pageMediaId: pageId ? dataToUpload._id : null,
     };
+
+    response.isDuplicate = uploadResult?.isDuplicate || false;
+    if (uploadResult?.existingMediaId) {
+      response.duplicateOf = uploadResult.existingMediaId;
+    }
 
     // Add conversion info if available
     if (conversionResult && conversionResult.success) {
@@ -1072,6 +1394,40 @@ async function saveFile(req, res, fileType) {
       });
     }
 
+    let videoHash = null;
+    let duplicateMediaRecord = null;
+    let isDuplicateVideo = false;
+
+    if (fileMimeType.startsWith("video/")) {
+      try {
+        videoHash = await calculateFileHash(filePath, 'md5');
+        console.log("Computed video hash (MD5):", videoHash);
+      } catch (hashError) {
+        console.error("Failed to compute video hash:", hashError);
+      }
+
+      if (videoHash) {
+        try {
+          duplicateMediaRecord = await media
+            .findOne({
+              "MetaData.VideoHash": videoHash,
+              MediaType: "Video",
+              IsDeleted: { $ne: 1 }
+            })
+            .sort({ UploadedOn: -1 })
+            .lean();
+
+          if (duplicateMediaRecord) {
+            isDuplicateVideo = true;
+            console.log("Duplicate video detected. Reusing media:", duplicateMediaRecord._id);
+          }
+        } catch (lookupError) {
+          console.error("Error checking for duplicate videos:", lookupError);
+        }
+      }
+    }
+
+
     var incNum = 0;
       
       // Get counter for unique filename
@@ -1100,23 +1456,77 @@ async function saveFile(req, res, fileType) {
       };
 
       let uploadResult;
-      if (fileMimeType.startsWith("video/")) {
-        uploadResult = await uploadVideoToS3Folder(fileObj, generatedFileName, fileMimeType);
-              } else {
-        uploadResult = await uploadAudioToS3Folder(fileObj, generatedFileName, fileMimeType);
-      }
-
-      if (!uploadResult.success) {
-        throw new Error(`S3 upload failed: ${uploadResult.error}`);
-      }
-
-      console.log("S3 upload successful:", uploadResult);
-
-      // Process video/audio with modern conversion (using S3 URLs)
       let conversionResult = null;
+
+      if (fileMimeType.startsWith("video/") && isDuplicateVideo && duplicateMediaRecord) {
+        const existingLocations = Array.isArray(duplicateMediaRecord.Location)
+          ? duplicateMediaRecord.Location
+          : [];
+        const originalLocation = existingLocations.find((loc) => loc && loc.Type === "original")
+          || existingLocations[0]
+          || {};
+        const existingVideoUrl = ensureVideoUrl(originalLocation, existingLocations[0]?.URL);
+
+        if (existingVideoUrl) {
+          const derivedS3Info = deriveS3InfoFromUrl(existingVideoUrl);
+          const duplicateMetaData = cloneMetaData(duplicateMediaRecord.MetaData);
+          const duplicateDimensions = ensureVideoDimensions(duplicateMetaData.VideoDimensions);
+          const duplicateDuration = ensureDuration(originalLocation?.Duration);
+          const duplicateFileSize = ensureFileSize(originalLocation?.Size, fileSize);
+
+          uploadResult = {
+            success: true,
+            videoUrl: existingVideoUrl,
+            fileSize: duplicateFileSize,
+            s3Key: ensureS3Key(originalLocation?.S3Key, derivedS3Info.key),
+            contentType: ensureContentType(originalLocation?.ContentType, fileMimeType),
+            bucket: ensureBucket(originalLocation?.Bucket, derivedS3Info.bucket),
+            region: ensureRegion(originalLocation?.Region, derivedS3Info.region),
+            thumbnailUrl: duplicateMediaRecord.thumbnail || null,
+            isDuplicate: true,
+            existingLocations: cloneAndSanitizeLocations(existingLocations),
+            existingVideoDimensions: duplicateDimensions,
+            duplicateDuration: duplicateDuration,
+            existingMediaId: duplicateMediaRecord._id,
+            videoHash: videoHash,
+            existingMetaData: duplicateMetaData
+          };
+
+          console.log("Reusing existing video asset. Duplicate media ID:", duplicateMediaRecord._id);
+        } else {
+          console.warn("Duplicate media detected but no reusable URL was found. Proceeding with fresh upload.");
+          isDuplicateVideo = false;
+        }
+      }
+
+      if (!uploadResult) {
+        if (fileMimeType.startsWith("video/")) {
+          uploadResult = await uploadVideoToS3Folder(fileObj, generatedFileName, fileMimeType);
+        } else {
+          uploadResult = await uploadAudioToS3Folder(fileObj, generatedFileName, fileMimeType);
+        }
+
+        if (!uploadResult.success) {
+          throw new Error(`S3 upload failed: ${uploadResult.error}`);
+        }
+
+        console.log("S3 upload successful:", uploadResult);
+        uploadResult.isDuplicate = false;
+      } else {
+        console.log("Skipping S3 upload because duplicate asset will be reused.");
+      }
+
+      if (!uploadResult.videoHash && videoHash) {
+        uploadResult.videoHash = videoHash;
+      }
+
       if (fileMimeType.startsWith("video/")) {
-        // Download from S3, convert, and upload back to S3
-        conversionResult = await processVideoWithConversion_S3(uploadResult.videoUrl, generatedFileName, ext);
+        if (uploadResult.isDuplicate) {
+          console.log("Skipping video conversion for duplicate asset.");
+        } else {
+          // Download from S3, convert, and upload back to S3
+          conversionResult = await processVideoWithConversion_S3(uploadResult.videoUrl, generatedFileName, ext);
+        }
       } else {
         // For audio, we can process locally and upload to S3
         await Audio__anyToMP3_S3(filePath, generatedFileName);
@@ -1151,3 +1561,4 @@ module.exports = {
   audioUpload,
   video__getNsaveThumbnail_S3,
 };
+
