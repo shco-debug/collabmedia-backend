@@ -30,15 +30,16 @@ const corsOptions = {
     }
     
     // Allow your production domains
-    const allowedOrigins = [
-      'https://scrpt.com',
-      'https://www.scrpt.com',
-      'https://journale.co',
-      'https://www.journale.co',
-      'https://collabmedia.com',
-      'https://www.collabmedia.com',
-      'https://www.ahaday.com'
-    ];
+const allowedOrigins = [
+  'https://scrpt.com',
+  'https://www.scrpt.com',
+  'https://journale.co',
+  'https://www.journale.co',
+  'https://collabmedia.com',
+  'https://www.collabmedia.com',
+  'https://ahaday.com',
+  'https://www.ahaday.com'
+];
     
     if (allowedOrigins.includes(origin)) {
       console.log('CORS: Allowing production origin:', origin);
