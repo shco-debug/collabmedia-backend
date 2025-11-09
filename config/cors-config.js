@@ -37,6 +37,7 @@ const corsOptions = {
       'https://www.journale.co',
       'https://collabmedia.com',
       'https://www.collabmedia.com',
+      'https://ahaday.com',
       'https://www.ahaday.com'
     ];
     
