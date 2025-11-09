@@ -112,7 +112,8 @@ const dbURI_local =
 console.log(`Attempting to connect to MongoDB: ${dbURI_local}`);
 
 // Configure Mongoose to wait longer for connection
-mongoose.set('bufferCommands', false); // Disable buffering
+// Allow buffering so initial requests queue until connection is ready
+mongoose.set('bufferCommands', true);
 mongoose.set('bufferTimeoutMS', 30000); // 30 seconds buffer timeout
 
 // Modern Mongoose connection options
