@@ -3886,6 +3886,29 @@ var buyNow = async function (req, res) {
       var tempAllCapsuleIds_OnThisOrder = [];
       var cartItemFor = [];
 
+      const subscriberInfo = {
+        isSubscriber:
+          req.session.user && req.session.user.IsSubscriber === true,
+        streamIds: Array.isArray(req.session.user?.SubscriberStreamIds)
+          ? req.session.user.SubscriberStreamIds.map((id) => String(id))
+          : [],
+      };
+      if (subscriberInfo.isSubscriber) {
+        console.log("[Subscription] Subscriber detected", {
+          userId: req.session.user?._id,
+          userEmail: req.session.user?.Email,
+          totalSavedStreams: subscriberInfo.streamIds.length,
+        });
+      } else {
+        console.log("[Subscription] User is not marked as a platform subscriber", {
+          userId: req.session.user?._id,
+          userEmail: req.session.user?.Email,
+        });
+      }
+      let hasSubscriberCoveredItems = false;
+      let hasPaidItems = false;
+      const subscriberCoveredCapsules = [];
+
       // Iterate over cart items
       console.log(
         "Debug: Starting cart items processing, count:",
@@ -3938,9 +3961,10 @@ var buyNow = async function (req, res) {
           ? cartItemsObj.Owners
           : [];
         var CartItem_capsuleId = cartItemsObj.CapsuleId._id;
-        var CartItem_capsulePrice = parseFloat(
-          cartItemsObj.CapsuleId.Price
-        ).toFixed(2);
+        var baseCapsulePrice = parseFloat(
+          cartItemsObj.CapsuleId.Price ? cartItemsObj.CapsuleId.Price : 0
+        );
+        var CartItem_capsulePrice = baseCapsulePrice.toFixed(2);
 
         var validCartItemsOwners = [];
         var tempAllUniqueIdsPerCart = [];
@@ -3958,16 +3982,52 @@ var buyNow = async function (req, res) {
         }
 
         var CartItem_totalOwners = validCartItemsOwners.length;
-        var CartItem_totalPaymentPerCapsule = parseFloat(
-          CartItem_capsulePrice * CartItem_totalOwners
-        ).toFixed(2);
-        var CartItem_totalCommissionPerCapsule = parseFloat(
-          (CartItem_totalPaymentPerCapsule *
-            (process.REVENUE_MODEL_CONFIG
-              ? process.REVENUE_MODEL_CONFIG.PerSale_Commission
-              : 35)) /
-            100
-        ).toFixed(2);
+        var isSubscriberEligible =
+          subscriberInfo.isSubscriber &&
+          subscriberInfo.streamIds.includes(String(CartItem_capsuleId));
+
+        var CartItem_totalPaymentPerCapsule = "0.00";
+        var CartItem_totalCommissionPerCapsule = "0.00";
+
+        if (isSubscriberEligible) {
+          console.log(
+            "[Subscription] Applying subscriber coverage",
+            {
+              userId: req.session.user?._id,
+              userEmail: req.session.user?.Email,
+              capsuleId: String(CartItem_capsuleId),
+            }
+          );
+          console.log(
+            "🪄 Subscriber benefit applied for capsule:",
+            String(CartItem_capsuleId)
+          );
+          hasSubscriberCoveredItems = true;
+          subscriberCoveredCapsules.push(String(CartItem_capsuleId));
+          CartItem_capsulePrice = "0.00";
+        } else {
+          if (subscriberInfo.isSubscriber) {
+            console.log("[Subscription] Capsule not covered by subscriber snapshot", {
+              capsuleId: String(CartItem_capsuleId),
+              userId: req.session.user?._id,
+              userEmail: req.session.user?.Email,
+            });
+          }
+          CartItem_totalPaymentPerCapsule = parseFloat(
+            baseCapsulePrice * CartItem_totalOwners
+          ).toFixed(2);
+          CartItem_totalCommissionPerCapsule = parseFloat(
+            (CartItem_totalPaymentPerCapsule *
+              (process.REVENUE_MODEL_CONFIG
+                ? process.REVENUE_MODEL_CONFIG.PerSale_Commission
+                : 35)) /
+              100
+          ).toFixed(2);
+
+          if (parseFloat(CartItem_totalPaymentPerCapsule) > 0) {
+            hasPaidItems = true;
+          }
+        }
 
         console.log(
           "Debug: Final validation - Owners:",
@@ -3989,9 +4049,10 @@ var buyNow = async function (req, res) {
         );
 
         if (
-          CartItem_capsulePrice <= 0 ||
-          CartItem_totalPaymentPerCapsule <= 0 ||
-          CartItem_totalCommissionPerCapsule <= 0
+          !isSubscriberEligible &&
+          (baseCapsulePrice <= 0 ||
+            CartItem_totalPaymentPerCapsule <= 0 ||
+            CartItem_totalCommissionPerCapsule <= 0)
         ) {
           console.log("Debug: Cart item invalid - skipping");
           // Invalid case - ignore
@@ -4088,6 +4149,50 @@ var buyNow = async function (req, res) {
               parseFloat(order.CartItems[loop3].PlatformCommission)
             ).toFixed(2);
           }
+        }
+
+        const subscriberCoversEntireOrder =
+          hasSubscriberCoveredItems && !hasPaidItems;
+
+        if (!subscriberInfo.isSubscriber) {
+          console.log("[Checkout] Forcing zero-payment checkout for regular user (grace period)", {
+            userId: req.session.user?._id,
+            userEmail: req.session.user?.Email,
+            cartItemCount: order.CartItems.length,
+          });
+
+          order.TotalPayment = "0.00";
+          order.TotalPlatformCommission = "0.00";
+          hasPaidItems = false;
+
+          order.CartItems = order.CartItems.map((item) => {
+            return {
+              ...item,
+              Price: "0.00",
+              TotalPayment: "0.00",
+              PlatformCommission: "0.00",
+            };
+          });
+
+          req.body.token = "free";
+          req.body.paymentMethod = req.body.paymentMethod || "grace_period_free";
+        } else if (subscriberCoversEntireOrder) {
+          console.log(
+            "🪄 Subscriber coverage applies to entire order. Capsules:",
+            subscriberCoveredCapsules
+          );
+          console.log(
+            "[Subscription] Entire order covered by subscription",
+            {
+              userId: req.session.user?._id,
+              userEmail: req.session.user?.Email,
+              coveredCapsules: subscriberCoveredCapsules,
+            }
+          );
+          order.TotalPayment = "0.00";
+          order.TotalPlatformCommission = "0.00";
+          req.body.token = req.body.token ? req.body.token : "free";
+          req.body.paymentMethod = req.body.paymentMethod || "subscriber";
         }
 
         console.log('💾 Saving order to database...');

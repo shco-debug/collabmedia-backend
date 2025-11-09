@@ -31,7 +31,10 @@ const authenticateJWT = (req, res, next) => {
     
     try {
         // Verify JWT token
-        const jwtSecret = process.env.JWT_SECRET || 'your-jwt-secret-key-change-in-production';
+        const jwtSecret =
+            process.env.JWT_SECRET ||
+            process.env.SECRET_API_KEY ||
+            'your-jwt-secret-key-change-in-production';
         const decoded = jwt.verify(token, jwtSecret);
         
         // Add user data to request object (similar to req.session.user)

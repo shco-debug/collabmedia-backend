@@ -12,6 +12,30 @@ var crypto = require('crypto');
 var request = require('request');
 var jwt = require('jsonwebtoken');
 
+let stripeClient = null;
+let stripeMode = null;
+function getStripeClient() {
+	if (!process.STRIPE_CONFIG) {
+		throw new Error("Stripe configuration not found in process.STRIPE_CONFIG");
+	}
+
+	const isProduction = process.env.NODE_ENV === 'production';
+	const mode = isProduction ? 'LIVE' : 'DEV';
+	const stripeConfigForMode = process.STRIPE_CONFIG[mode];
+
+	if (!stripeConfigForMode || !stripeConfigForMode.secret_key) {
+		throw new Error(`Stripe ${mode} secret key is missing in configuration`);
+	}
+
+	if (!stripeClient || stripeMode !== mode) {
+		stripeClient = require("stripe")(stripeConfigForMode.secret_key);
+		stripeMode = mode;
+		console.log(isProduction ? "🔴 Using Stripe LIVE mode for platform subscriptions" : "🟢 Using Stripe TEST mode for platform subscriptions");
+	}
+
+	return stripeClient;
+}
+
 var mediaController = require('./../controllers/mediaController.js');
 var EmailTemplate = require('./../models/emailTemplateModel.js');
 
@@ -433,6 +457,12 @@ const oauthLogin = async (req, res) => {
 
         // Check if user exists
         let userRecord = await user.findOne({ Email: email, IsDeleted: false }).exec();
+        let isNewUser = false;
+        const googleProfilePic =
+            picture ||
+            `https://ui-avatars.com/api/?background=0D8ABC&color=fff&name=${encodeURIComponent(
+                name || email.split('@')[0]
+            )}`;
 
         if (!userRecord) {
             // User doesn't exist - create new account
@@ -453,7 +483,8 @@ const oauthLogin = async (req, res) => {
             newUser.Name = name;
             newUser.NickName = name.split(' ')[0]; // Use first name as nickname
             newUser.Password = hashedPassword;
-            newUser.ProfilePic = picture || '';
+            newUser.ProfilePic = googleProfilePic;
+            newUser.EmailConfirmationStatus = true;
             newUser.IsDeleted = false;
             newUser.Status = 1;
             newUser.CreatedOn = Date.now();
@@ -468,6 +499,7 @@ const oauthLogin = async (req, res) => {
 
             userRecord = await newUser.save();
             console.log('✅ New OAuth user created:', userRecord._id);
+            isNewUser = true;
 
             // Update referral collection if needed
             await __updateReferralCollacton(email, userRecord._id);
@@ -496,19 +528,49 @@ const oauthLogin = async (req, res) => {
             ).exec();
         }
 
+        // Ensure email confirmation status and profile picture are set
+        if (!userRecord.EmailConfirmationStatus) {
+            await user.updateOne(
+                { _id: userRecord._id },
+                { $set: { EmailConfirmationStatus: true } }
+            ).exec();
+            userRecord.EmailConfirmationStatus = true;
+        }
+
+        if (!userRecord.ProfilePic || userRecord.ProfilePic === '/assets/users/default.png') {
+            await user.updateOne(
+                { _id: userRecord._id },
+                { $set: { ProfilePic: googleProfilePic } }
+            ).exec();
+            userRecord.ProfilePic = googleProfilePic;
+        }
+
+        if (typeof userRecord.Status === 'undefined' || userRecord.Status === null) {
+            userRecord.Status = 1;
+        }
+
         // Generate JWT token
         const tokenPayload = {
             userId: userRecord._id.toString(),
             email: userRecord.Email,
             name: userRecord.Name,
-            role: userRecord.Role || 'user'
+            role: userRecord.Role || 'user',
+            status: userRecord.Status === undefined ? true : userRecord.Status,
+            emailConfirmationStatus: userRecord.EmailConfirmationStatus === undefined ? true : userRecord.EmailConfirmationStatus,
+            allowCreate: userRecord.AllowCreate || false,
+            profilePic: userRecord.ProfilePic || '',
+            gender: userRecord.Gender || '',
+            createdOn: userRecord.CreatedOn || Date.now(),
+            modifiedOn: userRecord.ModifiedOn || Date.now(),
+            lastActiveTime: userRecord.LastActiveTime || Date.now()
         };
 
-        const jwtToken = jwt.sign(
-            tokenPayload,
-            process.env.SECRET_API_KEY || 'your-secret-key',
-            { expiresIn: '30d' }
-        );
+        const jwtSecret =
+            process.env.JWT_SECRET ||
+            process.env.SECRET_API_KEY ||
+            'your-jwt-secret-key-change-in-production';
+
+        const jwtToken = jwt.sign(tokenPayload, jwtSecret, { expiresIn: '7d' });
 
         // Create session in request
         req.session = req.session || {};
@@ -519,7 +581,9 @@ const oauthLogin = async (req, res) => {
             NickName: userRecord.NickName,
             ProfilePic: userRecord.ProfilePic,
             Gender: userRecord.Gender,
-            Role: userRecord.Role || 'user'
+            Role: userRecord.Role || 'user',
+            EmailConfirmationStatus: userRecord.EmailConfirmationStatus,
+            Status: userRecord.Status
         };
 
         // Return comprehensive user data
@@ -542,7 +606,8 @@ const oauthLogin = async (req, res) => {
                 IsEmailVerified: userRecord.IsEmailVerified || false,
                 OAuthProvider: userRecord.OAuthProvider,
                 CreatedOn: userRecord.CreatedOn,
-                LastActiveTime: userRecord.LastActiveTime
+                LastActiveTime: userRecord.LastActiveTime,
+                EmailConfirmationStatus: userRecord.EmailConfirmationStatus
             },
             userData: {
                 id: userRecord._id,
@@ -551,8 +616,10 @@ const oauthLogin = async (req, res) => {
                 nickname: userRecord.NickName,
                 avatar: userRecord.ProfilePic || picture,
                 gender: userRecord.Gender,
-                role: userRecord.Role || 'user'
-            }
+                role: userRecord.Role || 'user',
+                EmailConfirmationStatus: userRecord.EmailConfirmationStatus
+            },
+            wasNewUserCreated: isNewUser
         });
 
     } catch (error) {
@@ -845,7 +912,6 @@ const register = async (req, res) => {
                                 console.log('ℹ️ No referral link provided - skipping referral tracking');
                             }
 
-                            sendmail(newUser.Email, "register", newUser, res);
                             __updateChapterCollection(newUser.Email, numAffected._id);
                             __updatePendingFriendRequests(newUser.Email, numAffected._id);
 
@@ -2580,6 +2646,150 @@ var stripeConnect = async function (req, res) {
 }
 };
 exports.stripeConnect = stripeConnect;
+
+var subscribeToPlatform = async function (req, res) {
+	try {
+		if (!req.session || !req.session.user || !req.session.user._id) {
+			return res.status(401).json({
+				status: 401,
+				message: "User not authenticated.",
+			});
+		}
+
+		const userId = req.session.user._id;
+		const token = req.body.token || null;
+		const tokenEmail = req.body.tokenEmail || req.session.user.Email || null;
+		const amount =
+			req.body.amount !== undefined
+				? Number(req.body.amount)
+				: Number(process.PLATFORM_SUBSCRIPTION_PRICE || 0);
+		const description =
+			req.body.description || "Scrpt Platform Subscription";
+
+		const currentUser = await user
+			.findOne(
+				{ _id: new ObjectId(userId), IsDeleted: false },
+				{ IsSubscriber: 1 }
+			)
+			.exec();
+
+		if (!currentUser) {
+			return res.status(404).json({
+				status: 404,
+				message: "User not found.",
+			});
+		}
+
+		if (currentUser.IsSubscriber) {
+			return res.status(409).json({
+				status: 409,
+				message: "You are already a platform subscriber.",
+			});
+		}
+
+		const streamConditions = {
+			Status: true,
+			IsPublished: true,
+			IsLaunched: true,
+			IsDeleted: false,
+			IsAllowedForSales: true,
+			"LaunchSettings.Audience": "BUYERS",
+			"LaunchSettings.CapsuleFor": "Stream",
+		};
+
+		const availableStreams = await Capsule.find(streamConditions, {
+			_id: 1,
+		})
+			.lean()
+			.exec();
+		const streamIds = availableStreams.map((doc) => doc._id);
+
+		if (amount > 0) {
+			if (!token) {
+				return res.status(400).json({
+					status: 400,
+					message:
+						"Payment token is required to activate the subscription.",
+				});
+			}
+
+			const stripe = getStripeClient();
+			let stripeToken = token;
+
+			if (token === "trial") {
+				if (process.env.NODE_ENV === "production") {
+					return res.status(400).json({
+						status: 400,
+						message:
+							"Trial token cannot be used in production environment.",
+					});
+				}
+
+				const tokenObj = await stripe.tokens.create({
+					card: {
+						number: "4242424242424242",
+						exp_month: 12,
+						exp_year: 2035,
+						cvc: "123",
+					},
+				});
+
+				stripeToken = tokenObj.id;
+			}
+
+			const customer = await stripe.customers.create({
+				source: stripeToken,
+				description: tokenEmail || req.session.user.Email,
+			});
+
+			const amountInCents = Math.round(amount * 100);
+			if (amountInCents > 0) {
+				await stripe.charges.create({
+					amount: amountInCents,
+					currency: "usd",
+					customer: customer.id,
+					description,
+				});
+			}
+		}
+
+		const subscriberData = {
+			IsSubscriber: true,
+			SubscriberStreamIds: streamIds,
+			SubscriberSince: new Date(),
+		};
+
+		await user
+			.updateOne({ _id: new ObjectId(userId) }, { $set: subscriberData })
+			.exec();
+
+		req.session.user.IsSubscriber = true;
+		req.session.user.SubscriberStreamIds = streamIds.map((id) =>
+			id.toString()
+		);
+		req.session.user.SubscriberSince = subscriberData.SubscriberSince;
+
+		return res.json({
+			status: 200,
+			message: "Platform subscription activated successfully.",
+			data: {
+				streamIds: streamIds.map((id) => id.toString()),
+				totalStreams: streamIds.length,
+				amountCharged: amount > 0 ? amount : 0,
+			},
+		});
+	} catch (error) {
+		console.error("❌ subscribeToPlatform error:", error);
+
+		return res.status(500).json({
+			status: 500,
+			message: "Failed to activate platform subscription.",
+			error: error.message,
+		});
+	}
+};
+
+exports.subscribeToPlatform = subscribeToPlatform;
 
 var __createDefaultJournal_BackgroundCall = async function (user_id, user_email) {
     try {

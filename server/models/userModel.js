@@ -73,6 +73,12 @@ var userSchema = new mongoose.Schema({
 	IsHowItWorksSeen: {type: Boolean, default: false},
 	IsPostLaunchVideoSeen: {type: Boolean, default: false},
 	SpeechToTextMediaId: {type: mongoose.Schema.Types.ObjectId, default: null},
+	IsSubscriber: {type: Boolean, default: false},
+	SubscriberStreamIds: [{
+		type: mongoose.Schema.Types.ObjectId,
+		ref: 'Capsule'
+	}],
+	SubscriberSince: {type: Date, default: null},
 	Role: {type: String, enum: ["user", "subadmin", "admin"], default: "user"},
 	
 	// Admin/SubAdmin specific fields (only used when Role is "admin" or "subadmin")

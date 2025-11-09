@@ -1403,7 +1403,9 @@ var SynedPostEmailCron = async function () {
                             if (shareWithEmail && (userUnsubscribedStreams.indexOf(String(dataRecord.CapsuleId)) < 0)) {
                                 console.log("Attempting to send scheduled email to:", shareWithEmail);
                                 try {
-                                    await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, newHtml, subject, EmailBeaconImg);
+                                    const unsubscribeUrl = `${process.HOST_URL}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
+                                    const htmlWithUnsubscribe = newHtml.replace(/{UnsubscribeUrl}/g, unsubscribeUrl);
+                                    await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, htmlWithUnsubscribe, subject, EmailBeaconImg);
                                     console.log("Successfully sent email to:", shareWithEmail);
 
                                     await SyncedPost.updateOne(
@@ -2597,7 +2599,9 @@ var SynedPostEmailCron = async function (testMode = false) {
                             
                             console.log("Attempting to send scheduled email to:", shareWithEmail);
                             try {
-                                await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, newHtml, subject, EmailBeaconImg);
+                                const unsubscribeUrl = `${process.HOST_URL}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
+                                const htmlWithUnsubscribe = newHtml.replace(/{UnsubscribeUrl}/g, unsubscribeUrl);
+                                await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, htmlWithUnsubscribe, subject, EmailBeaconImg);
                                 console.log("Successfully sent email to:", shareWithEmail);
 
                                 await SyncedPost.updateOne(
@@ -2641,7 +2645,9 @@ var SynedPostEmailCron = async function (testMode = false) {
                                 
                                 console.log("Attempting to send scheduled email to non-registered user:", shareWithEmail);
                                 try {
-                                    await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, newHtml, subject, EmailBeaconImg);
+                                    const unsubscribeUrl = `${process.HOST_URL}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
+                                    const htmlWithUnsubscribe = newHtml.replace(/{UnsubscribeUrl}/g, unsubscribeUrl);
+                                    await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, htmlWithUnsubscribe, subject, EmailBeaconImg);
                                     console.log("Successfully sent email to non-registered user:", shareWithEmail);
                                 } catch (sendError) {
                                     console.error("Failed to send email to non-registered user", shareWithEmail, ":", sendError);

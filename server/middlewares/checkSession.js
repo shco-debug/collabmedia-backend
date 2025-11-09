@@ -30,6 +30,7 @@ module.exports = function(req, res, next){
 		var frontendApiPrefix = '/user';
 		var unprotectedRoutes = [
 				'/login',
+				'/oauth/login',
 				'/chklogin',
 				'/register',
 				'/reset_password',

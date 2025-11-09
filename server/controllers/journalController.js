@@ -10236,6 +10236,7 @@ var deleteCommentOnSocialPost = async function(req, res) {
 		if(!err) {
 			return res.json({
 				status : "success",
+				code : 200,
 				message : "comment deleted successfully.",
 				results : comments
 			});
@@ -10243,6 +10244,7 @@ var deleteCommentOnSocialPost = async function(req, res) {
 
 		return res.json({
 			status : "failed",
+			code : 400,
 			message : "Failed.",
 			results : comments
 		});

@@ -16,7 +16,12 @@ var async_lib = require("async");
 var xlsxj = require("xlsx-to-json");
 var googleapis = require("googleapis");
 var Page = require("../models/pageModel.js");
+var Capsule = require("../models/capsuleModel.js");
+var Chapter = require("../models/chapterModel.js");
 var PageStream = require("../models/pageStreamModel.js");
+var StreamComments = require("../models/StreamCommentsModel.js");
+var StreamLikes = require("../models/StreamLikes.js");
+var StreamCommentLikes = require("../models/StreamCommentLikesModel.js");
 var CommonAlgo = require("../components/commonAlgorithms.js");
 var sharp = require("sharp");
 var path = require("path");
@@ -3180,57 +3185,22 @@ const createSinglePost = async (req, res) => {
     const savedMedia = await Media(mediaData).save();
     console.log("Media record saved:", savedMedia._id);
 
-    let postData = null;
     let pageUpdateResult = null;
 
     // Only add to page if pageId is provided
     if (pageId) {
-      // Add to page
       const pageConditions = { _id: new ObjectId(pageId) };
-      const postObject = {
-        _id: new ObjectId(),
-        MediaID: savedMedia._id,
-        MediaURL: mainImageUrl,
-        Title: title || "Untitled Post",
-        Prompt: promptText,
-        Locator: locator,
-        PostedBy: new ObjectId(userId),
-        PostedOn: Date.now(),
-        ThemeID: null,
-        ThemeTitle: "No Theme",
-        MediaType: mediaType,
-        ContentType: contentType,
-        Content: content,
-        Votes: [],
-        Marks: [],
-        OwnerId: new ObjectId(userId),
-        thumbnail: mainImageUrl,
-        PostStatement: postStatement,
-        IsOnlyForOwner: false,
-        PostPrivacySetting: "OnlyForOwner",
-        IsUnsplashImage: false,
-        Themes: [],
-        TaggedUsers: [],
-        IsAddedFromStream: false,
-        StreamId: streamId ? new ObjectId(streamId) : null,
-        IsPostForUser: false,
-        IsPostForTeam: false,
-        QuestionPostId: null,
-        PostType: postType,
-      };
 
       pageUpdateResult = await Page.updateOne(pageConditions, {
-        $push: { Medias: postObject },
+        $push: { Medias: savedMedia._id },
       });
 
-      if (pageUpdateResult.nModified === 0) {
+      if ((pageUpdateResult.modifiedCount ?? pageUpdateResult.nModified ?? 0) === 0) {
         return res.status(404).json({
           code: 404,
           message: "Page not found or update failed",
         });
       }
-
-      postData = postObject;
     }
 
     // Add group tags if keywords exist
@@ -3249,7 +3219,7 @@ const createSinglePost = async (req, res) => {
         : "Independent post created successfully",
       data: {
         mediaId: savedMedia._id,
-        postId: postData ? postData._id : null,
+        postId: savedMedia._id,
         pageId: pageId || null,
         locator: locator,
         autoId: incNum,
@@ -3263,7 +3233,7 @@ const createSinglePost = async (req, res) => {
           allImages: locationArray,
         },
       },
-      postData: postData,
+      postData: pageId ? savedMedia._id : null,
       mediaData: savedMedia,
       blendResult: blendResult,
     });
@@ -3321,9 +3291,12 @@ const getUserPosts = async (req, res) => {
     const limitNum = Math.min(100, Math.max(1, parseInt(limit))); // Max 100 posts per request
     const skip = (pageNum - 1) * limitNum;
 
+    const userObjectId = new mongoose.Types.ObjectId(userId);
+    const userIdString = userObjectId.toString();
+
     // Build query conditions
     const conditions = {
-      PostedBy: new mongoose.Types.ObjectId(userId),
+      PostedBy: userObjectId,
       IsDeleted: { $ne: true },
     };
 
@@ -3441,16 +3414,11 @@ const getUserPosts = async (req, res) => {
     console.log("🔍 getUserPosts - Sort:", JSON.stringify(sortObj));
     console.log("🔍 getUserPosts - Pagination: skip", skip, "limit", limitNum);
 
-    // OPTIMIZED aggregation pipeline - apply pagination FIRST, then do lookups
-    const posts = await media.aggregate([
-      // Match the conditions
+    const aggregationPipeline = [
       { $match: conditions },
-      // Sort by the sort object
       { $sort: sortObj },
-      // Apply pagination EARLY - reduces data to process
       { $skip: skip },
       { $limit: limitNum },
-      // Lookup user data for PostedBy
       {
         $lookup: {
           from: "users",
@@ -3469,14 +3437,12 @@ const getUserPosts = async (req, res) => {
           ],
         },
       },
-      // Unwind PostedBy array
       {
         $unwind: {
           path: "$PostedBy",
           preserveNullAndEmptyArrays: true,
         },
       },
-      // Add empty arrays and zero counts (load interactions lazily if needed)
       {
         $addFields: {
           likes: [],
@@ -3484,10 +3450,9 @@ const getUserPosts = async (req, res) => {
           comments: [],
           likeCount: 0,
           dislikeCount: 0,
-          commentCount: 0
+          commentCount: 0,
         },
       },
-      // Project only the fields we need
       {
         $project: {
           _id: 1,
@@ -3509,6 +3474,7 @@ const getUserPosts = async (req, res) => {
           IsPrivate: 1,
           Statements: 1,
           Location: 1,
+          MetaData: 1,
           thumbnail: 1,
           OriginalPostId: 1,
           Lightness: 1,
@@ -3517,7 +3483,6 @@ const getUserPosts = async (req, res) => {
           IsUnsplashImage: 1,
           Photographer: 1,
           BlendSettings: 1,
-          // Interaction fields
           likes: 1,
           dislikes: 1,
           comments: 1,
@@ -3525,15 +3490,305 @@ const getUserPosts = async (req, res) => {
           dislikeCount: 1,
           commentCount: 1,
         },
-      }
-    ]).option({ maxTimeMS: 60000 }).allowDiskUse(true); // 1 minute timeout, allow disk use
+      },
+    ];
+
+    const postsPromise = media
+      .aggregate(aggregationPipeline)
+      .option({ maxTimeMS: 60000 })
+      .allowDiskUse(true);
+
+    const totalCountPromise = media.countDocuments(conditions);
+
+    const userCapsulesPromise = Capsule.find(
+      {
+        $or: [{ OwnerId: userObjectId }, { CreaterId: userObjectId }],
+        IsDeleted: false,
+        Status: true,
+      },
+      { _id: 1 }
+    )
+      .lean()
+      .exec();
+
+    const [posts, totalCount, userCapsules] = await Promise.all([
+      postsPromise,
+      totalCountPromise,
+      userCapsulesPromise,
+    ]);
 
     console.log("✅ getUserPosts - Query completed, found", posts.length, "posts");
-
-    // Get total count for pagination
-    console.log("🔍 getUserPosts - Getting total count");
-    const totalCount = await media.countDocuments(conditions);
     console.log("✅ getUserPosts - Total count:", totalCount);
+
+    const capsuleIds = Array.isArray(userCapsules)
+      ? userCapsules.map((capsule) => capsule._id).filter(Boolean)
+      : [];
+
+    const chapterQuery = {
+      IsDeleted: false,
+      $or: [
+        { OwnerId: userObjectId },
+        { CreaterId: userObjectId },
+      ],
+    };
+
+    if (capsuleIds.length) {
+      chapterQuery.CapsuleId = { $in: capsuleIds };
+    }
+
+    const userChapters = await Chapter.find(chapterQuery, {
+      _id: 1,
+      CapsuleId: 1,
+    })
+      .lean()
+      .exec();
+
+    const chapterIdSet = new Set();
+    userChapters.forEach((chapterDoc) => {
+      if (chapterDoc && chapterDoc._id) {
+        chapterIdSet.add(chapterDoc._id.toString());
+      }
+    });
+
+    const mediaIds = posts.map((post) => post._id);
+    let pagesWithMedia = [];
+
+    if (mediaIds.length) {
+      const pageQuery = {
+        IsDeleted: false,
+        Medias: { $in: mediaIds },
+      };
+
+      pagesWithMedia = await Page.find(pageQuery, {
+        _id: 1,
+        Medias: 1,
+        ChapterId: 1,
+        Title: 1,
+      })
+        .lean()
+        .exec();
+
+      if (chapterIdSet.size) {
+        pagesWithMedia = pagesWithMedia.filter((pageDoc) => {
+          if (!pageDoc || !pageDoc.ChapterId) return false;
+          const chapterIdValue =
+            typeof pageDoc.ChapterId === "string"
+              ? pageDoc.ChapterId
+              : pageDoc.ChapterId.toString();
+          return chapterIdSet.has(chapterIdValue);
+        });
+      }
+    }
+
+    const mediaIdToPageId = new Map();
+    pagesWithMedia.forEach((pageDoc) => {
+      if (!pageDoc || !pageDoc._id) {
+        return;
+      }
+
+      const pageIdStr = pageDoc._id.toString();
+      const mediaRefs = Array.isArray(pageDoc.Medias) ? pageDoc.Medias : [];
+
+      mediaRefs.forEach((mediaRef) => {
+        if (!mediaRef) return;
+        const mediaKey = mediaRef.toString();
+        if (!mediaIdToPageId.has(mediaKey)) {
+          mediaIdToPageId.set(mediaKey, pageIdStr);
+        }
+      });
+    });
+
+    const postIdStrings = posts
+      .map((post) => (post && post._id ? post._id.toString() : null))
+      .filter(Boolean);
+
+    const likesByPostId = new Map();
+    const topLevelCommentsByPostId = new Map();
+    const repliesByParentId = new Map();
+    const likesByCommentId = new Map();
+    const userInfoMap = new Map();
+    const totalCommentCountsByPostId = new Map();
+
+    if (postIdStrings.length) {
+      const postObjectIds = posts
+        .map((post) => {
+          if (!post || !post._id) return null;
+          if (post._id instanceof mongoose.Types.ObjectId) return post._id;
+          try {
+            return new mongoose.Types.ObjectId(post._id);
+          } catch (error) {
+            return null;
+          }
+        })
+        .filter(Boolean);
+
+      const [postLikesRaw, postCommentsRaw] = await Promise.all([
+        StreamLikes.find({
+          SocialPostId: { $in: postObjectIds },
+          IsDeleted: { $ne: true },
+        })
+          .sort({ CreatedOn: -1 })
+          .lean(),
+        StreamComments.find({
+          SocialPostId: { $in: postObjectIds },
+          IsDeleted: { $ne: true },
+        })
+          .sort({ CreatedOn: -1 })
+          .lean(),
+      ]);
+
+      const commentObjectIds = postCommentsRaw
+        .map((comment) => comment && comment._id)
+        .filter(Boolean);
+
+      const postCommentLikesRaw =
+        commentObjectIds.length > 0
+          ? await StreamCommentLikes.find({
+              CommentId: { $in: commentObjectIds },
+              IsDeleted: { $ne: true },
+            })
+              .sort({ CreatedOn: -1 })
+              .lean()
+          : [];
+
+      const userIdSet = new Set();
+
+      postLikesRaw.forEach((likeDoc) => {
+        const postIdStr = likeDoc.SocialPostId ? likeDoc.SocialPostId.toString() : null;
+        if (!postIdStr) return;
+        if (!likesByPostId.has(postIdStr)) {
+          likesByPostId.set(postIdStr, []);
+        }
+        likesByPostId.get(postIdStr).push(likeDoc);
+        if (likeDoc.UserId) userIdSet.add(likeDoc.UserId.toString());
+      });
+
+      postCommentsRaw.forEach((commentDoc) => {
+        const postIdStr = commentDoc.SocialPostId ? commentDoc.SocialPostId.toString() : null;
+        if (!postIdStr) return;
+
+        const commentIdStr = commentDoc._id ? commentDoc._id.toString() : null;
+        const parentIdStr =
+          commentDoc.ParentId && commentDoc.ParentId.toString ? commentDoc.ParentId.toString() : null;
+
+        if (commentDoc.UserId) userIdSet.add(commentDoc.UserId.toString());
+        if (commentDoc.OwnerId) userIdSet.add(commentDoc.OwnerId.toString());
+
+        if (parentIdStr) {
+          if (!repliesByParentId.has(parentIdStr)) {
+            repliesByParentId.set(parentIdStr, []);
+          }
+          repliesByParentId.get(parentIdStr).push(commentDoc);
+        } else {
+          if (!topLevelCommentsByPostId.has(postIdStr)) {
+            topLevelCommentsByPostId.set(postIdStr, []);
+          }
+          topLevelCommentsByPostId.get(postIdStr).push(commentDoc);
+        }
+
+        totalCommentCountsByPostId.set(
+          postIdStr,
+          (totalCommentCountsByPostId.get(postIdStr) || 0) + 1
+        );
+      });
+
+      postCommentLikesRaw.forEach((likeDoc) => {
+        const commentIdStr = likeDoc.CommentId ? likeDoc.CommentId.toString() : null;
+        if (!commentIdStr) return;
+        if (!likesByCommentId.has(commentIdStr)) {
+          likesByCommentId.set(commentIdStr, []);
+        }
+        likesByCommentId.get(commentIdStr).push(likeDoc);
+        if (likeDoc.LikedById) userIdSet.add(likeDoc.LikedById.toString());
+      });
+
+      const userObjectIds = Array.from(userIdSet).reduce((acc, idStr) => {
+        if (!idStr) return acc;
+        try {
+          acc.push(new mongoose.Types.ObjectId(idStr));
+        } catch (error) {
+          // ignore invalid ids
+        }
+        return acc;
+      }, []);
+
+      if (userObjectIds.length) {
+        const usersForComments = await user
+          .find(
+            { _id: { $in: userObjectIds } },
+            { Name: 1, UserName: 1, Email: 1, ProfilePic: 1 }
+          )
+          .lean();
+
+        usersForComments.forEach((userDoc) => {
+          if (!userDoc || !userDoc._id) return;
+          userInfoMap.set(userDoc._id.toString(), {
+            _id: userDoc._id,
+            Name: userDoc.Name || "",
+            UserName: userDoc.UserName || "",
+            Email: userDoc.Email || "",
+            ProfilePic: userDoc.ProfilePic || "",
+          });
+        });
+      }
+    }
+
+    const getUserInfo = (id) => {
+      if (!id) return null;
+      const key = id.toString();
+      return userInfoMap.get(key) || null;
+    };
+
+    const buildCommentPayload = (commentDoc, includeReplies = true) => {
+      if (!commentDoc || !commentDoc._id) return null;
+
+      const commentIdStr = commentDoc._id.toString();
+      const likesForComment = likesByCommentId.get(commentIdStr) || [];
+      const likedByCurrentUser = likesForComment.some(
+        (likeDoc) =>
+          likeDoc.LikedById &&
+          likeDoc.LikedById.toString() === userObjectId.toString()
+      );
+
+      const likedByPayload = likesForComment.map((likeDoc) => ({
+        _id: likeDoc._id,
+        CommentId: likeDoc.CommentId,
+        SocialPageId: likeDoc.SocialPageId,
+        LikedById: likeDoc.LikedById,
+        CreatedOn: likeDoc.CreatedOn,
+        user: getUserInfo(likeDoc.LikedById),
+      }));
+
+      const payload = {
+        _id: commentDoc._id,
+        UserId: commentDoc.UserId,
+        OwnerId: commentDoc.OwnerId || null,
+        Comment: commentDoc.Comment,
+        PrivacySetting: commentDoc.PrivacySetting || null,
+        CreatedOn: commentDoc.CreatedOn,
+        UpdatedOn: commentDoc.UpdatedOn,
+        IsDeleted: commentDoc.IsDeleted,
+        ParentId: commentDoc.ParentId || null,
+        user: getUserInfo(commentDoc.UserId),
+        CommentLikeCount: likesForComment.length,
+        likedByCurrentUser,
+        likedBy: likedByPayload,
+      };
+
+      if (includeReplies) {
+        const replies = repliesByParentId.get(commentIdStr) || [];
+        const replyPayloads = replies
+          .map((replyDoc) => buildCommentPayload(replyDoc, false))
+          .filter(Boolean);
+        payload.replies = replyPayloads;
+        payload.replyCount = replyPayloads.length;
+      } else {
+        payload.replies = [];
+        payload.replyCount = 0;
+      }
+
+      return payload;
+    };
 
     // Calculate pagination info
     const totalPages = Math.ceil(totalCount / limitNum);
@@ -3542,6 +3797,14 @@ const getUserPosts = async (req, res) => {
 
     // Format response data
     const formattedPosts = posts.map((post) => {
+      const postIdStr = post._id ? post._id.toString() : null;
+
+      console.log("📝 Post interactions snapshot:", {
+        postId: postIdStr,
+        likesFromMap: postIdStr ? (likesByPostId.get(postIdStr) || []).length : 0,
+        topLevelComments: postIdStr ? (topLevelCommentsByPostId.get(postIdStr) || []).length : 0,
+        totalComments: postIdStr ? totalCommentCountsByPostId.get(postIdStr) || 0 : 0,
+      });
       // Determine media type and content type for proper response formatting
       let mediaType = post.MediaType;
       let contentType = post.ContentType;
@@ -3557,6 +3820,8 @@ const getUserPosts = async (req, res) => {
         mediaType = "Audio";
         contentType = post.ContentType || "audio/mp3";
       }
+
+      const locationArray = Array.isArray(post.Location) ? post.Location : [];
 
       const formattedPost = {
         _id: post._id,
@@ -3598,16 +3863,68 @@ const getUserPosts = async (req, res) => {
         currStatement: post.CurrStatement,
         statements: post.Statements || [],
         styleKeyword: post.StyleKeyword,
-        metaData: post.MetaData,
-        images: post.Location || [],
+        metaData: post.MetaData || {},
+        location: locationArray,
+        images: [],
         blendSettings: post.BlendSettings || null,
         posts: post.Posts || null, // Add Posts data (likes and comments)
+        pageId: null,
       };
+
+      if (mediaType === "Image") {
+        formattedPost.images = locationArray;
+      }
 
       // Add thumbnail for all media types (especially important for video posts)
       if (post.thumbnail) {
         formattedPost.thumbnail = post.thumbnail;
       }
+
+      if (postIdStr && mediaIdToPageId.has(postIdStr)) {
+        formattedPost.pageId = mediaIdToPageId.get(postIdStr);
+      }
+
+      const likesForPostRaw = postIdStr ? likesByPostId.get(postIdStr) || [] : [];
+      const likesForPost = likesForPostRaw.map((likeDoc) => ({
+        _id: likeDoc._id,
+        SocialPageId: likeDoc.SocialPageId,
+        SocialPostId: likeDoc.SocialPostId,
+        UserId: likeDoc.UserId,
+        CreatedOn: likeDoc.CreatedOn,
+        user: getUserInfo(likeDoc.UserId),
+      }));
+
+      formattedPost.likes = likesForPost;
+      formattedPost.likeCount = likesForPost.length;
+
+      const topLevelCommentsDocs = postIdStr
+        ? topLevelCommentsByPostId.get(postIdStr) || []
+        : [];
+
+      const commentPayloads = topLevelCommentsDocs
+        .map((commentDoc) => buildCommentPayload(commentDoc, true))
+        .filter(Boolean);
+
+      const totalCommentCount =
+        postIdStr && totalCommentCountsByPostId.has(postIdStr)
+          ? totalCommentCountsByPostId.get(postIdStr)
+          : commentPayloads.reduce(
+              (count, comment) =>
+                count +
+                1 +
+                (Array.isArray(comment.replies) ? comment.replies.length : 0),
+              0
+            );
+
+      formattedPost.comments = commentPayloads;
+      formattedPost.commentCount = totalCommentCount;
+
+      formattedPost.posts = {
+        likes: likesForPost,
+        likeCount: likesForPost.length,
+        comments: commentPayloads,
+        commentCount: totalCommentCount,
+      };
 
       return formattedPost;
     });

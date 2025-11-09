@@ -699,14 +699,14 @@ module.exports = (app) => {
 						UserEmail : UserEmail
 					};
 					
-					StreamOpenedEmailCount = await StreamEmailTracker.find(conditions, {}).count();
+					StreamOpenedEmailCount = await StreamEmailTracker.countDocuments(conditions).exec();
 					StreamOpenedEmailCount = StreamOpenedEmailCount ? StreamOpenedEmailCount : 0;
 					
 					const StreamConversation_conditions = {
 						CapsuleId : CapsuleId ? CapsuleId : null,
 						UserId : userId ? userId : null
 					};
-					const result = await StreamConversation.findOne(StreamConversation_conditions, {});
+					let result = await StreamConversation.findOne(StreamConversation_conditions, {});
 					result = result ? result : {};
 					result.ConversationCount = result.ConversationCount ? result.ConversationCount : 0;
 					if(result.ConversationCount) {
@@ -728,45 +728,139 @@ module.exports = (app) => {
 		return finalResults;
 	}
 	
-	app.get('/unsubscribe/:id', (req, res) => {
+	app.get('/unsubscribe/:id', async (req, res) => {
 		const inputData = {
-			unsubscribeDataObject : {
-				userData : {},
-				capsuleData : []
+			unsubscribeDataObject: {
+				userData: {},
+				capsuleData: []
 			}
 		};
-		const emailHash = req.params.id || null;
-		if(!emailHash) {
-			return res.send('404 - Not Found.');
+
+		const emailHash = req.params.id ? String(req.params.id) : "";
+		const wantsJson = req.query && req.query.format === 'json';
+
+		if (!emailHash) {
+			if (wantsJson) {
+				return res.status(404).json({
+					status: 404,
+					message: "Email identifier is missing."
+				});
+			}
+			return res.status(404).send('404 - Not Found.');
 		}
-		const conditions = {
-			Email: CommonAlgo.commonModule.customHashToStr(emailHash), 
-			IsDeleted: false
-		};
-		
-		user.findOne(conditions).exec(async (err, userData) => {
-			if (!err) {
-				try {
-					userData = userData || null;
-					if(!userData) {
-						return res.send('404 - Not Found.');
-					}
-					userData.MarketingEmails = userData.MarketingEmails ? userData.MarketingEmails : false;
-					userData.PostActionsNotification = userData.PostActionsNotification ? userData.PostActionsNotification : false;
-					userData.CommentLikesNotification = userData.CommentLikesNotification ? userData.CommentLikesNotification : false;
-					inputData.unsubscribeDataObject.userData = userData;
-					//fetch user capsule details
-					inputData.unsubscribeDataObject.capsuleData = await __getActiveStreamsByUserId(userData._id, userData.Email, userData.Birthdate);
-					//console.log("LENGTH ---- ", inputData.unsubscribeDataObject.capsuleData.length);
-					res.render('unsubscribe.jade', inputData);
-				} catch(error) {
-					console.log("error -------------- ", error);
-					return res.send('404 - Not Found.');
-				}
-			} else {
-				return res.send('404 - Not Found.');
+
+		let decodedEmail = "";
+		try {
+			decodedEmail = CommonAlgo.commonModule.customHashToStr(emailHash);
+		} catch (decodeError) {
+			console.error("Failed to decode unsubscribe email hash:", decodeError);
+			if (wantsJson) {
+				return res.status(400).json({
+					status: 400,
+					message: "Invalid unsubscribe link."
+				});
 			}
-		});
+			return res.status(400).send('Invalid unsubscribe link.');
+		}
+
+		try {
+			const userConditions = {
+				Email: decodedEmail,
+				IsDeleted: false
+			};
+
+			const userData = await user.findOne(userConditions).lean();
+			if (!userData) {
+				if (wantsJson) {
+					return res.status(404).json({
+						status: 404,
+						message: "User not found for unsubscribe link."
+					});
+				}
+				return res.status(404).send('404 - Not Found.');
+			}
+
+			const normalizedUserData = { ...userData };
+
+			const resolveBoolean = (value, fallback = false) => {
+				if (typeof value === 'boolean') {
+					return value;
+				}
+				if (typeof value === 'number') {
+					return value === 1;
+				}
+				if (typeof value === 'string') {
+					const trimmed = value.trim().toLowerCase();
+					if (['true', '1', 'yes', 'on'].includes(trimmed)) {
+						return true;
+					}
+					if (['false', '0', 'no', 'off'].includes(trimmed)) {
+						return false;
+					}
+				}
+				return fallback;
+			};
+
+			const marketingPreference = resolveBoolean(
+				typeof normalizedUserData.MarketingEmail !== 'undefined'
+					? normalizedUserData.MarketingEmail
+					: normalizedUserData.MarketingEmails,
+				false
+			);
+
+			normalizedUserData.MarketingEmail = marketingPreference;
+			normalizedUserData.MarketingEmails = marketingPreference;
+
+			normalizedUserData.PostActionsNotification = resolveBoolean(
+				normalizedUserData.PostActionsNotification,
+				false
+			);
+
+			normalizedUserData.CommentLikesNotification = resolveBoolean(
+				normalizedUserData.CommentLikesNotification,
+				false
+			);
+
+			if (Array.isArray(normalizedUserData.UnsubscribedStreams)) {
+				normalizedUserData.UnsubscribedStreams = normalizedUserData.UnsubscribedStreams.map((streamId) => String(streamId));
+			} else {
+				normalizedUserData.UnsubscribedStreams = [];
+			}
+
+			inputData.unsubscribeDataObject.userData = normalizedUserData;
+
+			const capsuleData = await __getActiveStreamsByUserId(
+				String(userData._id),
+				userData.Email,
+				userData.Birthdate
+			);
+
+			inputData.unsubscribeDataObject.capsuleData = Array.isArray(capsuleData) ? capsuleData : [];
+
+			if (wantsJson) {
+				return res.json({
+					status: 200,
+					message: "Unsubscribe data fetched successfully.",
+					data: {
+						emailHash,
+						user: inputData.unsubscribeDataObject.userData,
+						streams: inputData.unsubscribeDataObject.capsuleData
+					}
+				});
+			}
+
+			return res.render('unsubscribe.jade', inputData);
+		} catch (error) {
+			console.error("Error handling unsubscribe route:", error);
+			if (wantsJson) {
+				return res.status(500).json({
+					status: 500,
+					message: "Unable to process unsubscribe request.",
+					error: error.message
+				});
+			}
+			return res.status(500).send('Unable to process unsubscribe request.');
+		}
 	});
 	
 	const router = {};

@@ -287,7 +287,7 @@ const emailTemplates = [
               </div>
               <div class="footer">
                   <p>This is an automated email. Please do not reply to this message.</p>
-                  <p>To unsubscribe from these notifications, <a href="https://www.scrpt.com/unsubscribe/{SubscriberId}">click here</a>.</p>
+                  <p>To unsubscribe from these notifications, <a href="{UnsubscribeUrl}">click here</a>.</p>
                   <p>&copy; 2024 CollabMedia. All rights reserved.</p>
               </div>
           </div>
