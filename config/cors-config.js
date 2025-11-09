@@ -30,6 +30,7 @@ const corsOptions = {
     }
     
     // Allow your production domains
+
     const allowedOrigins = [
       'https://scrpt.com',
       'https://www.scrpt.com',
@@ -40,6 +41,7 @@ const corsOptions = {
       'https://ahaday.com',
       'https://www.ahaday.com'
     ];
+
     
     if (allowedOrigins.includes(origin)) {
       console.log('CORS: Allowing production origin:', origin);
