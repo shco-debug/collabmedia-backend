@@ -11524,6 +11524,13 @@ var getUserMixedFeedPosts = async function (req, res) {
       maxTimeMS: 30000 // 30 second timeout
     }).exec();
     
+    console.log('🧪 getUserMixedFeedPosts debug', {
+      requested: { skip, limit },
+      matchCount,
+      aggregatedCount: posts.length,
+      aggregatedPostIds: posts.map(post => post._id),
+    });
+    
       perfLog.step3_main_aggregation = Date.now() - t3;
       console.log(`✅ Aggregation completed [posts=${posts.length}, duration=${perfLog.step3_main_aggregation}ms]`);
 

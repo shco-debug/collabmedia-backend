@@ -24,6 +24,13 @@ module.exports = function(req, res, next) {
             CreatedOn: req.user.createdOn,
             ModifiedOn: req.user.modifiedOn,
             LastActiveTime: req.user.lastActiveTime,
+            IsSubscriber: typeof req.user.isSubscriber !== 'undefined' ? req.user.isSubscriber : req.user.IsSubscriber || false,
+            SubscriberStreamIds: req.user.subscriberStreamIds || req.user.SubscriberStreamIds || [],
+            SubscriberSince: req.user.subscriberSince || req.user.SubscriberSince || null,
+            SubscriptionStatus: req.user.subscriptionStatus || req.user.SubscriptionStatus || null,
+            SubscriptionTrialEndsOn: req.user.subscriptionTrialEndsOn || req.user.SubscriptionTrialEndsOn || null,
+            SubscriptionLastTrialEndsOn: req.user.subscriptionLastTrialEndsOn || req.user.SubscriptionLastTrialEndsOn || null,
+            SubscriptionExpiresOn: req.user.subscriptionExpiresOn || req.user.SubscriptionExpiresOn || null,
             // Add any other fields that might be needed
             NickName: req.user.nickName || '',
             UserName: req.user.userName || '',

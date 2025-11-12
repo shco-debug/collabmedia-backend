@@ -1,7 +1,8 @@
 var formidable = require("formidable");
 var fs = require("fs");
 var counters = require("../models/countersModel.js");
-
+const os = require("os");
+const path = require("path");
 
 // Required imports for video/audio processing
 const media = require('../models/mediaModel.js');
@@ -29,6 +30,249 @@ if (!process.urls) {
     aspectfit_small__thumbnail: "aspectfit_small_thumbnail",
     __VIDEO_UPLOAD_DIR: __dirname + "/../../public/assets/Media/video"
   };
+}
+
+const DEFAULT_VIDEO_UPLOAD_DIR = path.join(__dirname, "..", "..", "public", "assets", "Media", "video");
+const TEMP_VIDEO_UPLOAD_DIR = path.join(os.tmpdir(), "scrpt-media-uploads");
+let resolvedUploadDir = null;
+
+function ensureWritableUploadDir() {
+  if (resolvedUploadDir && fs.existsSync(resolvedUploadDir)) {
+    return resolvedUploadDir;
+  }
+
+  const candidates = [
+    TEMP_VIDEO_UPLOAD_DIR,
+    process.urls?.__VIDEO_UPLOAD_DIR || DEFAULT_VIDEO_UPLOAD_DIR,
+  ];
+
+  for (const candidate of candidates) {
+    try {
+      fs.mkdirSync(candidate, { recursive: true });
+      const testFile = path.join(
+        candidate,
+        `.write-test-${Date.now()}-${Math.random().toString(16).slice(2)}`
+      );
+      fs.writeFileSync(testFile, "ok");
+      try {
+        fs.unlinkSync(testFile);
+      } catch (cleanupError) {
+        console.warn("Failed to clean upload dir test file:", cleanupError.message);
+      }
+      resolvedUploadDir = candidate;
+      process.urls.__VIDEO_UPLOAD_DIR = candidate;
+      console.log("Using writable upload directory:", candidate);
+      return resolvedUploadDir;
+    } catch (error) {
+      console.warn(`Upload directory not writable (${candidate}):`, error.message);
+    }
+  }
+
+  return null;
+}
+
+function getFirstFieldValue(field) {
+  if (Array.isArray(field)) {
+    return field.length > 0 ? field[0] : undefined;
+  }
+  return field;
+}
+
+function parseNumericField(field) {
+  const raw = getFirstFieldValue(field);
+  if (raw === undefined || raw === null || raw === "") {
+    return undefined;
+  }
+  const parsed = Number(raw);
+  return Number.isFinite(parsed) ? parsed : undefined;
+}
+
+function ensureFilenameWithExtension(baseName, fallbackExt) {
+  if (!baseName || typeof baseName !== "string") {
+    return null;
+  }
+  if (baseName.includes(".")) {
+    return baseName;
+  }
+  const safeExt = fallbackExt ? fallbackExt.replace(/^\./, "") : "";
+  if (!safeExt) {
+    return baseName;
+  }
+  return `${baseName}.${safeExt}`;
+}
+
+function scheduleDeferredMediaProcessing({
+  fileType,
+  mediaId,
+  uploadResult,
+  generatedFileName,
+  ext,
+  initialDuration = null,
+  initialDimensions = null,
+}) {
+  if (!mediaId) {
+    return;
+  }
+
+  if (fileType === "Video" && !uploadResult?.videoUrl) {
+    return;
+  }
+
+  setImmediate(async () => {
+    console.log("🎬 Deferred processing started:", { mediaId, fileType });
+    try {
+      if (fileType === "Video") {
+        let conversionResult = null;
+        let thumbnailResult = null;
+        let metadataResult = null;
+
+        try {
+          conversionResult = await processVideoWithConversion_S3(
+            uploadResult.videoUrl,
+            generatedFileName,
+            ext
+          );
+        } catch (conversionError) {
+          console.error("❌ Deferred conversion failed:", conversionError.message);
+        }
+
+        try {
+          metadataResult = await getVideoMetadata(uploadResult.videoUrl);
+        } catch (metadataError) {
+          console.error("❌ Deferred metadata extraction failed:", metadataError.message);
+        }
+
+        try {
+          thumbnailResult = await video__getNsaveThumbnail_S3(uploadResult.videoUrl, mediaId, {
+            fallbackDimensions: initialDimensions || metadataResult?.video,
+          });
+        } catch (thumbnailError) {
+          console.error("❌ Deferred thumbnail generation failed:", thumbnailError.message);
+        }
+
+        const mediaDoc = await media.findById(mediaId);
+        if (!mediaDoc) {
+          console.warn("⚠️ Deferred processing skipped, media not found:", mediaId);
+          return;
+        }
+
+        let hasChanges = false;
+        mediaDoc.MetaData = mediaDoc.MetaData || {};
+        mediaDoc.Location = Array.isArray(mediaDoc.Location) ? mediaDoc.Location : [];
+
+        if (conversionResult?.success && conversionResult.s3Info?.url) {
+          const existingConverted = mediaDoc.Location.some(
+            (loc) => loc?.Type === "converted" && loc?.S3Key === conversionResult.s3Info?.s3Key
+          );
+          if (!existingConverted) {
+            mediaDoc.Location.push({
+              Size: conversionResult.convertedSize,
+              URL: conversionResult.s3Info.url,
+              Type: "converted",
+              Index: mediaDoc.Location.length,
+              S3Key: conversionResult.s3Info.s3Key,
+              Format: conversionResult.convertedFormat,
+              CompressionRatio: conversionResult.compressionRatio,
+              Duration: conversionResult.duration || initialDuration || null,
+            });
+            mediaDoc.markModified("Location");
+            hasChanges = true;
+          }
+        }
+
+        let durationToSet = initialDuration;
+        if (metadataResult?.success && typeof metadataResult.duration === "number") {
+          durationToSet = metadataResult.duration;
+        }
+        if (durationToSet !== null) {
+          const originalLocation = mediaDoc.Location.find((loc) => loc && loc.Type === "original");
+          if (originalLocation) {
+            originalLocation.Duration = durationToSet;
+            mediaDoc.markModified("Location");
+            hasChanges = true;
+          }
+        }
+
+        let finalDimensions = initialDimensions;
+        if (
+          metadataResult?.success &&
+          metadataResult.video?.width &&
+          metadataResult.video?.height
+        ) {
+          finalDimensions = {
+            width: metadataResult.video.width,
+            height: metadataResult.video.height,
+            aspectRatio:
+              metadataResult.video.height === 0
+                ? null
+                : parseFloat((metadataResult.video.width / metadataResult.video.height).toFixed(4)),
+          };
+        }
+
+        if (thumbnailResult?.success) {
+          const aspectfitThumbnail = thumbnailResult.thumbnails?.find((t) => t.size === "aspectfit");
+          if (aspectfitThumbnail?.thumbnailUrl) {
+            mediaDoc.thumbnail = aspectfitThumbnail.thumbnailUrl;
+          }
+          if (thumbnailResult.dimensions) {
+            finalDimensions = thumbnailResult.dimensions;
+          }
+          hasChanges = true;
+        }
+
+        if (finalDimensions) {
+          mediaDoc.MetaData.VideoDimensions = finalDimensions;
+          hasChanges = true;
+        }
+
+        mediaDoc.ProcessingStatus = "completed";
+        mediaDoc.UpdatedOn = new Date();
+
+        if (hasChanges) {
+          mediaDoc.markModified("MetaData");
+          await mediaDoc.save();
+          console.log("🎬 Deferred video processing completed:", mediaId);
+        } else {
+          await media.updateOne(
+            { _id: mediaId },
+            {
+              $set: {
+                ProcessingStatus: "completed",
+                UpdatedOn: new Date(),
+              },
+            }
+          );
+        }
+      } else if (fileType === "Audio") {
+        await media.updateOne(
+          { _id: mediaId },
+          {
+            $set: {
+              ProcessingStatus: "completed",
+              UpdatedOn: new Date(),
+            },
+          }
+        );
+        console.log("🎧 Deferred audio processing marked complete:", mediaId);
+      }
+    } catch (error) {
+      console.error("❌ Deferred processing crashed:", { mediaId, fileType, error: error.message });
+      try {
+        await media.updateOne(
+          { _id: mediaId },
+          {
+            $set: {
+              ProcessingStatus: "failed",
+              ProcessingError: error.message,
+              UpdatedOn: new Date(),
+            },
+          }
+        );
+      } catch (updateError) {
+        console.error("❌ Failed to update processing status:", updateError.message);
+      }
+    }
+  });
 }
 
 function deriveS3InfoFromUrl(url) {
@@ -864,7 +1108,18 @@ function shouldConvertVideo(ext, metadata) {
   return false;
 }
 
-async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadResult, conversionResult = null, fields = {}) {
+async function saveMedia__toDB_S3(
+  req,
+  res,
+  incNum,
+  fileName,
+  fileType,
+  uploadResult,
+  conversionResult = null,
+  fields = {},
+  options = {}
+) {
+  const { deferProcessing = false, onAfterSave } = options || {};
   try {
     console.log("=== SAVE MEDIA TO DB (S3) ===");
     console.log("incNum:", incNum);
@@ -873,6 +1128,7 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
     console.log("uploadResult:", uploadResult);
 
     const isDuplicateMedia = !!(uploadResult && uploadResult.isDuplicate);
+    const isVideo = fileType === "Video";
 
     if (!req.session.user) {
       throw new Error("User not authenticated");
@@ -896,7 +1152,7 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
     if (conversionResult && conversionResult.thumbnailUrl) {
       finalThumbnail = conversionResult.thumbnailUrl;
       console.log("🎬 Using thumbnail from video processing:", finalThumbnail);
-    } else if (fileType === "Video" && uploadResult.thumbnailUrl) {
+    } else if (isVideo && uploadResult.thumbnailUrl) {
       finalThumbnail = uploadResult.thumbnailUrl;
       console.log("🎬 Using thumbnail from upload result:", finalThumbnail);
     } else {
@@ -989,6 +1245,7 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
         console.log("🎬 SAVE TO DB - uploadResult:", uploadResult);
         return finalThumbnail;
       })(),
+      ProcessingStatus: deferProcessing ? "processing" : "completed",
       // Add text content fields
       Content: content,
       Title: title,
@@ -1020,7 +1277,7 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
     }
 
     // Fetch metadata from the uploaded video when available
-    if (!isDuplicateMedia && fileType === "Video" && uploadResult.videoUrl) {
+    if (!deferProcessing && !isDuplicateMedia && isVideo && uploadResult.videoUrl) {
       try {
         console.log("Extracting metadata from uploaded video for duration and dimensions...");
         const metadataResult = await getVideoMetadata(uploadResult.videoUrl);
@@ -1083,7 +1340,7 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
       });
 
       // Add converted video if available
-      if (conversionResult && conversionResult.success && conversionResult.converted) {
+      if (!deferProcessing && conversionResult && conversionResult.success && conversionResult.converted) {
         dataToUpload.Location.push({
           Size: conversionResult.convertedSize,
           URL: conversionResult.s3Info.url,
@@ -1122,7 +1379,7 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
     console.log("Database save successful, ID:", dataToUpload._id);
 
     // Generate thumbnail for videos
-      if (fileType === "Video" && !isDuplicateMedia) {
+    if (!deferProcessing && isVideo && !isDuplicateMedia) {
         try {
           console.log("Starting thumbnail generation for video...");
           const thumbnailResult = await video__getNsaveThumbnail_S3(uploadResult.videoUrl, dataToUpload._id, {
@@ -1139,7 +1396,7 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
           console.error("Thumbnail generation failed:", thumbnailError);
           // Continue with the upload even if thumbnail generation fails
         }
-      } else if (fileType === "Video" && isDuplicateMedia) {
+      } else if (isVideo && isDuplicateMedia) {
         console.log("Skipping thumbnail generation for duplicate video asset.");
       }
 
@@ -1190,8 +1447,16 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
       response.duplicateOf = uploadResult.existingMediaId;
     }
 
+    if (deferProcessing) {
+      response.processingDeferred = true;
+      response.message = pageId
+        ? `${fileType} upload received. Processing will continue in the background before being added to the page.`
+        : `${fileType} upload received. Processing will continue in the background.`;
+      response.msg = response.message;
+    }
+
     // Add conversion info if available
-    if (conversionResult && conversionResult.success) {
+    if (!deferProcessing && conversionResult && conversionResult.success) {
       response.conversionInfo = {
         converted: conversionResult.converted,
         originalFormat: conversionResult.originalFormat,
@@ -1204,6 +1469,19 @@ async function saveMedia__toDB_S3(req, res, incNum, fileName, fileType, uploadRe
     }
 
     res.json(response);
+
+    if (typeof onAfterSave === "function") {
+      try {
+        onAfterSave({
+          mediaId: dataToUpload._id,
+          videoDuration,
+          videoDimensions,
+          fileType,
+        });
+      } catch (afterSaveError) {
+        console.error("Deferred processing callback failed:", afterSaveError.message);
+      }
+    }
 
   } catch (error) {
     console.error("Error saving media to DB:", error);
@@ -1260,14 +1538,18 @@ function video__anyToMP4OrWebm(inputFile) {
 async function saveFile(req, res, fileType) {
   console.log("=== S3 VIDEO/AUDIO UPLOAD START ===");
   console.log("FileType:", fileType);
-  
-  // Ensure upload directory exists
-  const uploadDir = __dirname + "/../../public/assets/Media/video/";
-  if (!fs.existsSync(uploadDir)) {
-    console.log("Creating upload directory:", uploadDir);
-    fs.mkdirSync(uploadDir, { recursive: true });
+
+  const uploadDir = ensureWritableUploadDir();
+  if (!uploadDir) {
+    console.error("No writable upload directory available for video/audio uploads");
+    return res.json({
+      success: false,
+      code: '500',
+      error: "No writable storage available for uploads",
+      msg: "No writable storage available for uploads"
+    });
   }
-  
+
   var form = new formidable.IncomingForm();
   form.keepExtensions = true;
   form.uploadDir = uploadDir; // Temporary local storage
@@ -1295,13 +1577,26 @@ async function saveFile(req, res, fileType) {
 
     // Check if any file was uploaded (regardless of field name)
     const fileKeys = Object.keys(files);
-    if (fileKeys.length === 0) {
-      console.error("No files uploaded");
+    const hasFileUpload = fileKeys.length > 0;
+    const hasS3Metadata =
+      !!(
+        getFirstFieldValue(fields?.s3Key) ||
+        getFirstFieldValue(fields?.s3_object_key) ||
+        getFirstFieldValue(fields?.key) ||
+        getFirstFieldValue(fields?.mediaUrl) ||
+        getFirstFieldValue(fields?.videoUrl) ||
+        getFirstFieldValue(fields?.audioUrl) ||
+        getFirstFieldValue(fields?.s3Url)
+      );
+    const isDirectS3Upload = !hasFileUpload && hasS3Metadata;
+
+    if (!hasFileUpload && !isDirectS3Upload) {
+      console.error("No files uploaded and no S3 metadata provided");
       return res.json({ 
         success: false, 
         code: '400',
-        error: "No files uploaded",
-        msg: "No files uploaded"
+        error: "No files uploaded or S3 metadata provided",
+        msg: "No files uploaded or S3 metadata provided"
       });
     }
 
@@ -1311,44 +1606,75 @@ async function saveFile(req, res, fileType) {
       fileKey = fileKeys[0];
     }
     let uploadedFile = files[fileKey];
-    
-    // Handle case where file is an array (formidable sometimes returns arrays)
-    if (Array.isArray(uploadedFile)) {
-      uploadedFile = uploadedFile[0]; // Take the first file
-    }
-    
     console.log("=== DEBUG: FILE DETAILS ===");
     console.log("File key:", fileKey);
     console.log("Uploaded file:", uploadedFile);
     console.log("Is array:", Array.isArray(files[fileKey]));
 
-    // Validate file upload
-    if (!uploadedFile) {
-      console.error("No file uploaded");
-      return res.json({ success: false, error: "No file uploaded" });
+    let cleanupUploadedFile = () => {};
+    let originalFileName = "";
+    let fileSize = 0;
+    let fileMimeType = "";
+    let filePath = "";
+    let uploadResult;
+    let conversionResult = null;
+    let providedGeneratedFileName = null;
+
+    if (hasFileUpload) {
+      // Handle case where file is an array (formidable sometimes returns arrays)
+      if (Array.isArray(uploadedFile)) {
+        uploadedFile = uploadedFile[0]; // Take the first file
+      }
+      
+      // Validate file upload
+      if (!uploadedFile) {
+        console.error("No file uploaded");
+        return res.json({ success: false, error: "No file uploaded" });
+      }
     }
 
     // Get file properties (formidable uses different property names)
-    const originalFileName = uploadedFile.originalFilename || uploadedFile.name;
-    const fileSize = uploadedFile.size;
-    const fileMimeType = uploadedFile.mimetype || uploadedFile.type;
-    const filePath = uploadedFile.filepath || uploadedFile.path;
+    if (hasFileUpload) {
+      originalFileName = uploadedFile.originalFilename || uploadedFile.name;
+      fileSize = uploadedFile.size;
+      fileMimeType = uploadedFile.mimetype || uploadedFile.type;
+      filePath = uploadedFile.filepath || uploadedFile.path;
+      let uploadedFilePath = filePath;
 
-    if (!originalFileName || originalFileName === 'invalid-name') {
-      console.error("Invalid file name:", originalFileName);
-      return res.json({ success: false, error: "Invalid file name" });
+      cleanupUploadedFile = () => {
+        if (!uploadedFilePath) {
+          return;
+        }
+        fs.unlink(uploadedFilePath, (unlinkError) => {
+          if (unlinkError && unlinkError.code !== "ENOENT") {
+            console.warn("Failed to clean temporary upload:", unlinkError.message);
+          }
+        });
+        uploadedFilePath = null;
+      };
     }
 
-    if (!fileSize || fileSize === 0) {
-      console.error("Empty file uploaded");
-      return res.json({ success: false, error: "Empty file uploaded" });
-    }
+    if (hasFileUpload) {
+      if (!originalFileName || originalFileName === 'invalid-name') {
+        console.error("Invalid file name:", originalFileName);
+        cleanupUploadedFile();
+        return res.json({ success: false, error: "Invalid file name" });
+      }
 
-    console.log("=== FILE INFO ===");
-    console.log("File size:", fileSize);
-    console.log("File name:", originalFileName);
-    console.log("File MIME type:", fileMimeType);
-    console.log("File path:", filePath);
+      if (!fileSize || fileSize === 0) {
+        console.error("Empty file uploaded");
+        cleanupUploadedFile();
+        return res.json({ success: false, error: "Empty file uploaded" });
+      }
+
+      console.log("=== FILE INFO ===");
+      console.log("File size:", fileSize);
+      console.log("File name:", originalFileName);
+      console.log("File MIME type:", fileMimeType);
+      console.log("File path:", filePath);
+    } else {
+      console.log("=== DIRECT S3 UPLOAD (NO FILE) ===");
+    }
     
     console.log("=== FORM FIELDS ===");
     console.log("Content:", fields.content);
@@ -1359,26 +1685,29 @@ async function saveFile(req, res, fileType) {
 
     try {
     // Validate and extract file extension
-    var temp = originalFileName.split(".");
+    if (isDirectS3Upload && !originalFileName) {
+      originalFileName =
+        getFirstFieldValue(fields.generatedFileName) ||
+        getFirstFieldValue(fields.fileName) ||
+        getFirstFieldValue(fields.originalFileName) ||
+        getFirstFieldValue(fields.originalFilename) ||
+        getFirstFieldValue(fields.s3Key)?.split("/").pop() ||
+        getFirstFieldValue(fields.key)?.split("/").pop() ||
+        `remote_${Date.now()}.${fileType === "Video" ? "mp4" : "mp3"}`;
+    }
+
+    var temp = (originalFileName || "").split(".");
     if (temp.length < 2) {
-      console.error("File has no extension:", originalFileName);
-      return res.json({ 
-        success: false, 
-        code: '400',
-        error: "File must have a valid extension",
-        msg: "File must have a valid extension"
-      });
+      const fallbackExt = fileType === "Video" ? "mp4" : "mp3";
+      originalFileName = ensureFilenameWithExtension(originalFileName || `remote_${Date.now()}`, fallbackExt);
+      temp = originalFileName.split(".");
     }
     
     var ext = temp.pop();
     if (!ext || ext.length === 0) {
-      console.error("Invalid file extension:", ext);
-      return res.json({ 
-        success: false, 
-        code: '400',
-        error: "Invalid file extension",
-        msg: "Invalid file extension"
-      });
+      const fallbackExt = fileType === "Video" ? "mp4" : "mp3";
+      ext = fallbackExt;
+      originalFileName = ensureFilenameWithExtension(originalFileName || `remote_${Date.now()}`, fallbackExt);
     }
 
     // Validate file extension for video/audio
@@ -1386,6 +1715,7 @@ async function saveFile(req, res, fileType) {
     if (!validExtensions.includes(ext.toLowerCase())) {
       console.error("Unsupported file extension:", ext);
       const errorMsg = `Unsupported file extension: ${ext}. Supported: ${validExtensions.join(', ')}`;
+      cleanupUploadedFile();
       return res.json({ 
         success: false, 
         code: '400',
@@ -1398,7 +1728,7 @@ async function saveFile(req, res, fileType) {
     let duplicateMediaRecord = null;
     let isDuplicateVideo = false;
 
-    if (fileMimeType.startsWith("video/")) {
+    if (!isDirectS3Upload && fileMimeType.startsWith("video/")) {
       try {
         videoHash = await calculateFileHash(filePath, 'md5');
         console.log("Computed video hash (MD5):", videoHash);
@@ -1442,23 +1772,126 @@ async function saveFile(req, res, fileType) {
       }
       
       incNum = counterData.seq;
-          var generatedFileName = Date.now() + "_recording_" + incNum + "." + ext;
+      let generatedFileName;
+      if (isDirectS3Upload) {
+        generatedFileName =
+          ensureFilenameWithExtension(
+            providedGeneratedFileName || originalFileName || `remote_${incNum}`,
+            ext
+          ) || `remote_${incNum}.${ext}`;
+      } else {
+        generatedFileName = Date.now() + "_recording_" + incNum + "." + ext;
+      }
 
       console.log("Generated fileName:", generatedFileName);
       console.log("File extension:", ext);
 
       // Upload directly to S3 (no local storage)
-      const fileObj = {
+      const fileObj = hasFileUpload ? {
         path: filePath, // Use the temporary file path from formidable
         originalname: generatedFileName,
         mimetype: fileMimeType,
         size: fileSize
-      };
+      } : null;
 
-      let uploadResult;
-      let conversionResult = null;
+      if (isDirectS3Upload) {
+        const directS3Key =
+          getFirstFieldValue(fields.s3Key) ||
+          getFirstFieldValue(fields.s3_object_key) ||
+          getFirstFieldValue(fields.key) ||
+          null;
+        const directBucket =
+          getFirstFieldValue(fields.s3Bucket) ||
+          getFirstFieldValue(fields.bucket) ||
+          process.env.AWS_BUCKET_NAME ||
+          null;
+        const directRegion =
+          getFirstFieldValue(fields.s3Region) ||
+          getFirstFieldValue(fields.region) ||
+          process.env.AWS_REGION ||
+          null;
+        const directUrl =
+          getFirstFieldValue(fields.mediaUrl) ||
+          getFirstFieldValue(fields.videoUrl) ||
+          getFirstFieldValue(fields.audioUrl) ||
+          getFirstFieldValue(fields.url) ||
+          null;
+        const directThumbnail =
+          getFirstFieldValue(fields.thumbnailUrl) ||
+          getFirstFieldValue(fields.posterUrl) ||
+          null;
+        const directMime =
+          getFirstFieldValue(fields.mimeType) ||
+          getFirstFieldValue(fields.contentType) ||
+          getFirstFieldValue(fields.fileMimeType) ||
+          (fileType === "Video" ? "video/mp4" : "audio/mpeg");
+        const directFileSize =
+          parseNumericField(fields.fileSize) ||
+          parseNumericField(fields.size) ||
+          undefined;
+        const fallbackExtFromS3 = (() => {
+          const keySource =
+            (directS3Key || "").split(".").pop() ||
+            (directUrl || "").split(".").pop() ||
+            null;
+          if (keySource && keySource.length <= 6) {
+            return keySource;
+          }
+          return fileType === "Video" ? "mp4" : "mp3";
+        })();
+        const providedFileNameCandidate =
+          getFirstFieldValue(fields.generatedFileName) ||
+          getFirstFieldValue(fields.fileName) ||
+          getFirstFieldValue(fields.originalFileName) ||
+          getFirstFieldValue(fields.originalFilename) ||
+          (directS3Key ? directS3Key.split("/").pop() : null) ||
+          `remote_${Date.now()}.${fallbackExtFromS3}`;
+        const providedFileName = ensureFilenameWithExtension(
+          providedFileNameCandidate,
+          fallbackExtFromS3
+        );
+        providedGeneratedFileName = providedFileName;
 
-      if (fileMimeType.startsWith("video/") && isDuplicateVideo && duplicateMediaRecord) {
+        originalFileName = providedFileName || generatedFileName;
+        fileMimeType = directMime;
+        fileSize = directFileSize || 0;
+
+        if (!directS3Key || !directUrl) {
+          console.error("Missing S3 metadata (s3Key or media URL)");
+          return res.json({
+            success: false,
+            code: "400",
+            error: "Missing S3 metadata (s3Key or media URL)",
+            msg: "Missing S3 metadata (s3Key or media URL)"
+          });
+        }
+
+        uploadResult = {
+          success: true,
+          isDuplicate: false,
+          s3Key: directS3Key,
+          bucket: directBucket,
+          region: directRegion,
+          fileSize: directFileSize,
+          contentType: directMime,
+        };
+
+        if (fileType === "Video") {
+          uploadResult.videoUrl = directUrl;
+          if (directThumbnail) {
+            uploadResult.thumbnailUrl = directThumbnail;
+          }
+        } else {
+          uploadResult.audioUrl = directUrl;
+        }
+
+        const providedVideoHash = getFirstFieldValue(fields.videoHash) || getFirstFieldValue(fields.mediaHash);
+        if (providedVideoHash) {
+          uploadResult.videoHash = providedVideoHash;
+        }
+      }
+
+      if (!isDirectS3Upload && fileMimeType.startsWith("video/") && isDuplicateVideo && duplicateMediaRecord) {
         const existingLocations = Array.isArray(duplicateMediaRecord.Location)
           ? duplicateMediaRecord.Location
           : [];
@@ -1520,23 +1953,67 @@ async function saveFile(req, res, fileType) {
         uploadResult.videoHash = videoHash;
       }
 
+      const shouldDeferProcessing =
+        (
+          (fileType === "Video" && fileMimeType.startsWith("video/")) ||
+          (fileType === "Audio" && fileMimeType.startsWith("audio/"))
+        ) && !uploadResult?.isDuplicate;
+
       if (fileMimeType.startsWith("video/")) {
-        if (uploadResult.isDuplicate) {
-          console.log("Skipping video conversion for duplicate asset.");
+        if (!shouldDeferProcessing) {
+          if (!isDirectS3Upload && uploadResult.isDuplicate) {
+            console.log("Skipping video conversion for duplicate asset.");
+          } else {
+            conversionResult = await processVideoWithConversion_S3(
+              uploadResult.videoUrl,
+              generatedFileName,
+              ext
+            );
+          }
         } else {
-          // Download from S3, convert, and upload back to S3
-          conversionResult = await processVideoWithConversion_S3(uploadResult.videoUrl, generatedFileName, ext);
+          console.log("Scheduling deferred processing for video upload:", generatedFileName);
         }
       } else {
-        // For audio, we can process locally and upload to S3
-        await Audio__anyToMP3_S3(filePath, generatedFileName);
+        if (!isDirectS3Upload && filePath) {
+          if (!shouldDeferProcessing) {
+            await Audio__anyToMP3_S3(filePath, generatedFileName);
+          } else {
+            console.log("Scheduling deferred processing for audio upload:", generatedFileName);
+          }
+        }
       }
 
-      // Save to database with S3 URLs and conversion info
-      await saveMedia__toDB_S3(req, res, incNum, generatedFileName, fileType, uploadResult, conversionResult, fields);
+      await saveMedia__toDB_S3(
+        req,
+        res,
+        incNum,
+        generatedFileName,
+        fileType,
+        uploadResult,
+        conversionResult,
+        fields,
+        shouldDeferProcessing
+          ? {
+              deferProcessing: true,
+              onAfterSave: ({ mediaId, videoDuration, videoDimensions }) => {
+                scheduleDeferredMediaProcessing({
+                  fileType,
+                  mediaId,
+                  uploadResult,
+                  generatedFileName,
+                  ext,
+                  initialDuration: videoDuration,
+                  initialDimensions: videoDimensions,
+                });
+              },
+            }
+          : undefined
+      );
+      cleanupUploadedFile();
 
     } catch (error) {
       console.error("Error in saveFile:", error);
+      cleanupUploadedFile();
       res.json({ 
         success: false,
         code: '500', // Add code field for frontend compatibility

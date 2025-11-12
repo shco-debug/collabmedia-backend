@@ -2826,6 +2826,7 @@ const createSinglePost = async (req, res) => {
       metadata = {},
       postStatement = "",
       pageId, // Optional - if provided, adds to page; if not, creates independent post
+      postPrivacySetting,
     } = req.body;
 
     // Check if user is logged in (support both JWT and session)
@@ -2850,6 +2851,17 @@ const createSinglePost = async (req, res) => {
     if (mediaArray && mediaArray.length > 0) {
       mediaUrls = mediaArray.map((m) => m.url).filter((url) => url);
     }
+
+    // Determine privacy setting with validation
+    const allowedPrivacySettings = [
+      "PublicWithName",
+      "PublicWithoutName",
+      "OnlyForOwner",
+      "InvitedFriends",
+    ];
+    const finalPrivacySetting = allowedPrivacySettings.includes(postPrivacySetting)
+      ? postPrivacySetting
+      : "OnlyForOwner";
 
     // Handle blend settings if provided
     let blendImage1Url = null;
@@ -3172,13 +3184,13 @@ const createSinglePost = async (req, res) => {
       UserScore: 0,
       OwnerFSGs: {},
       WebThumbnail: mainImageUrl,
-      IsPrivate: 0,
+      IsPrivate: finalPrivacySetting === "OnlyForOwner" ? 1 : 0,
       RandomSortId: shortid.generate(),
       RandomSortId_UpdatedOn: new Date(),
       PostedBy: new ObjectId(userId),
       PostedOn: new Date(),
       UpdatedOn: new Date(),
-      PostPrivacySetting: "OnlyForOwner",
+      PostPrivacySetting: finalPrivacySetting,
     };
 
     // Save media record
