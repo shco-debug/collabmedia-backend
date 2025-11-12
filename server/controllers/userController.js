@@ -36,6 +36,132 @@ function getStripeClient() {
 	return stripeClient;
 }
 
+async function normalizeSubscriptionState(userDocument, session) {
+	try {
+		if (!userDocument || !userDocument._id) {
+			return userDocument;
+		}
+
+		const rawStatus =
+			userDocument.SubscriptionStatus ||
+			userDocument.subscriptionStatus ||
+			null;
+		const rawTrialEndsOn =
+			userDocument.SubscriptionTrialEndsOn ||
+			userDocument.subscriptionTrialEndsOn ||
+			null;
+		const rawExpiresOn =
+			userDocument.SubscriptionExpiresOn ||
+			userDocument.subscriptionExpiresOn ||
+			null;
+
+		const now = Date.now();
+
+		// Handle active subscription expiry (annual subscription)
+		if (rawStatus === "active" && rawExpiresOn) {
+			const expiresOnDate =
+				rawExpiresOn instanceof Date ? rawExpiresOn : new Date(rawExpiresOn);
+
+			if (!Number.isNaN(expiresOnDate.getTime()) && expiresOnDate.getTime() <= now) {
+				const updatePayload = {
+					IsSubscriber: false,
+					SubscriptionStatus: "expired",
+					SubscriptionExpiresOn: expiresOnDate,
+					SubscriptionTrialEndsOn: null,
+					SubscriberStreamIds: [],
+				};
+
+				await user
+					.updateOne(
+						{ _id: new ObjectId(userDocument._id) },
+						{ $set: updatePayload }
+					)
+					.exec();
+
+				userDocument.IsSubscriber = false;
+				userDocument.SubscriptionStatus = "expired";
+				userDocument.SubscriptionExpiresOn = expiresOnDate;
+				userDocument.SubscriptionTrialEndsOn = null;
+				userDocument.SubscriberStreamIds = [];
+
+				if (
+					session &&
+					session.user &&
+					session.user._id &&
+					String(session.user._id) === String(userDocument._id)
+				) {
+					session.user.IsSubscriber = false;
+					session.user.SubscriptionStatus = "expired";
+					session.user.SubscriptionExpiresOn = expiresOnDate;
+					session.user.SubscriptionTrialEndsOn = null;
+					session.user.SubscriberStreamIds = [];
+				}
+			}
+
+			return userDocument;
+		}
+
+		// Handle trial expiry
+		if (rawStatus !== "trial" || !rawTrialEndsOn) {
+			return userDocument;
+		}
+
+		const trialEndsOnDate =
+			rawTrialEndsOn instanceof Date
+				? rawTrialEndsOn
+				: new Date(rawTrialEndsOn);
+
+		if (Number.isNaN(trialEndsOnDate.getTime())) {
+			return userDocument;
+		}
+
+		if (trialEndsOnDate.getTime() > now) {
+			return userDocument;
+		}
+
+		const updatePayload = {
+			IsSubscriber: false,
+			SubscriptionStatus: "expired",
+			SubscriptionTrialEndsOn: null,
+			SubscriptionLastTrialEndsOn: trialEndsOnDate,
+			SubscriptionExpiresOn: null,
+			SubscriberStreamIds: [],
+		};
+
+		await user
+			.updateOne(
+				{ _id: new ObjectId(userDocument._id) },
+				{ $set: updatePayload }
+			)
+			.exec();
+
+		userDocument.IsSubscriber = false;
+		userDocument.SubscriptionStatus = "expired";
+		userDocument.SubscriptionTrialEndsOn = null;
+		userDocument.SubscriptionLastTrialEndsOn = trialEndsOnDate;
+		userDocument.SubscriptionExpiresOn = null;
+		userDocument.SubscriberStreamIds = [];
+
+		if (
+			session &&
+			session.user &&
+			session.user._id &&
+			String(session.user._id) === String(userDocument._id)
+		) {
+			session.user.IsSubscriber = false;
+			session.user.SubscriptionStatus = "expired";
+			session.user.SubscriptionTrialEndsOn = null;
+			session.user.SubscriptionLastTrialEndsOn = trialEndsOnDate;
+			session.user.SubscriptionExpiresOn = null;
+			session.user.SubscriberStreamIds = [];
+		}
+	} catch (error) {
+		console.error("⚠️ normalizeSubscriptionState error:", error);
+	}
+
+	return userDocument;
+}
+
 var mediaController = require('./../controllers/mediaController.js');
 var EmailTemplate = require('./../models/emailTemplateModel.js');
 
@@ -325,6 +451,53 @@ const login = async (req, res) => {
             });
         }
 
+        await normalizeSubscriptionState(userData, req.session);
+
+        // Get complete user data from database (excluding password)
+        const completeUserData = userData.toObject();
+        delete completeUserData.Password; // Remove password from response for security
+
+        const subscriberStreamIds = Array.isArray(completeUserData.SubscriberStreamIds)
+            ? completeUserData.SubscriberStreamIds.map((id) => {
+                if (!id) return null;
+                if (typeof id === 'string') return id;
+                if (typeof id === 'object' && id !== null) {
+                    if (typeof id.toString === 'function') {
+                        return id.toString();
+                    }
+                    if (typeof id._id === 'string') return id._id;
+                }
+                try {
+                    return String(id);
+                } catch (error) {
+                    return null;
+                }
+            }).filter(Boolean)
+            : [];
+
+        const subscriberSinceISO = completeUserData.SubscriberSince
+            ? new Date(completeUserData.SubscriberSince).toISOString()
+            : null;
+        const subscriptionStatus = completeUserData.SubscriptionStatus || null;
+        const subscriptionTrialEndsOnISO = completeUserData.SubscriptionTrialEndsOn
+            ? new Date(completeUserData.SubscriptionTrialEndsOn).toISOString()
+            : null;
+        const subscriptionLastTrialEndsOnISO = completeUserData.SubscriptionLastTrialEndsOn
+            ? new Date(completeUserData.SubscriptionLastTrialEndsOn).toISOString()
+            : null;
+        const isSubscriber = Boolean(completeUserData.IsSubscriber);
+        const subscriptionExpiresOnISO = completeUserData.SubscriptionExpiresOn
+            ? new Date(completeUserData.SubscriptionExpiresOn).toISOString()
+            : null;
+
+        completeUserData.SubscriberStreamIds = subscriberStreamIds;
+        completeUserData.SubscriberSince = subscriberSinceISO;
+        completeUserData.SubscriptionStatus = subscriptionStatus;
+        completeUserData.SubscriptionTrialEndsOn = subscriptionTrialEndsOnISO;
+        completeUserData.SubscriptionLastTrialEndsOn = subscriptionLastTrialEndsOnISO;
+        completeUserData.IsSubscriber = isSubscriber;
+        completeUserData.SubscriptionExpiresOn = subscriptionExpiresOnISO;
+
         // Create JWT token with all user data
         const userId = userData._id;
         const username = userData.Name;
@@ -343,6 +516,13 @@ const login = async (req, res) => {
             createdOn: userData.CreatedOn,
             modifiedOn: userData.ModifiedOn,
             lastActiveTime: userData.LastActiveTime,
+            isSubscriber: isSubscriber,
+            subscriberStreamIds,
+            subscriberSince: subscriberSinceISO,
+            subscriptionStatus,
+            subscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
+            subscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
+            subscriptionExpiresOn: subscriptionExpiresOnISO,
             iat: Math.floor(Date.now() / 1000)
         };
 
@@ -354,10 +534,6 @@ const login = async (req, res) => {
 
         console.log('🔑 JWT token generated for user:', userData.Email);
         console.log('🔑 Token expires in 7 days');
-
-        // Get complete user data from database (excluding password)
-        const completeUserData = userData.toObject();
-        delete completeUserData.Password; // Remove password from response for security
 
         // Handle board-specific logic
                 if (req.body.board) {
@@ -549,6 +725,41 @@ const oauthLogin = async (req, res) => {
             userRecord.Status = 1;
         }
 
+        await normalizeSubscriptionState(userRecord, req.session);
+
+        const subscriberStreamIds =
+            Array.isArray(userRecord.SubscriberStreamIds)
+                ? userRecord.SubscriberStreamIds.map((id) => {
+                    if (!id) return null;
+                    if (typeof id === 'string') return id;
+                    if (typeof id === 'object' && id !== null) {
+                        if (typeof id.toString === 'function') {
+                            return id.toString();
+                        }
+                        if (typeof id._id === 'string') return id._id;
+                    }
+                    try {
+                        return String(id);
+                    } catch (error) {
+                        return null;
+                    }
+                }).filter(Boolean)
+                : [];
+        const subscriberSinceISO = userRecord.SubscriberSince
+            ? new Date(userRecord.SubscriberSince).toISOString()
+            : null;
+        const subscriptionStatus = userRecord.SubscriptionStatus || null;
+        const subscriptionTrialEndsOnISO = userRecord.SubscriptionTrialEndsOn
+            ? new Date(userRecord.SubscriptionTrialEndsOn).toISOString()
+            : null;
+        const subscriptionLastTrialEndsOnISO = userRecord.SubscriptionLastTrialEndsOn
+            ? new Date(userRecord.SubscriptionLastTrialEndsOn).toISOString()
+            : null;
+        const isSubscriber = Boolean(userRecord.IsSubscriber);
+        const subscriptionExpiresOnISO = userRecord.SubscriptionExpiresOn
+            ? new Date(userRecord.SubscriptionExpiresOn).toISOString()
+            : null;
+
         // Generate JWT token
         const tokenPayload = {
             userId: userRecord._id.toString(),
@@ -562,7 +773,14 @@ const oauthLogin = async (req, res) => {
             gender: userRecord.Gender || '',
             createdOn: userRecord.CreatedOn || Date.now(),
             modifiedOn: userRecord.ModifiedOn || Date.now(),
-            lastActiveTime: userRecord.LastActiveTime || Date.now()
+            lastActiveTime: userRecord.LastActiveTime || Date.now(),
+            isSubscriber,
+            subscriberStreamIds,
+            subscriberSince: subscriberSinceISO,
+            subscriptionStatus,
+            subscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
+            subscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
+            subscriptionExpiresOn: subscriptionExpiresOnISO,
         };
 
         const jwtSecret =
@@ -583,7 +801,14 @@ const oauthLogin = async (req, res) => {
             Gender: userRecord.Gender,
             Role: userRecord.Role || 'user',
             EmailConfirmationStatus: userRecord.EmailConfirmationStatus,
-            Status: userRecord.Status
+            Status: userRecord.Status,
+            IsSubscriber: isSubscriber,
+            SubscriberStreamIds: subscriberStreamIds,
+            SubscriberSince: subscriberSinceISO,
+            SubscriptionStatus: subscriptionStatus,
+            SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
+            SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
+            SubscriptionExpiresOn: subscriptionExpiresOnISO
         };
 
         // Return comprehensive user data
@@ -607,7 +832,14 @@ const oauthLogin = async (req, res) => {
                 OAuthProvider: userRecord.OAuthProvider,
                 CreatedOn: userRecord.CreatedOn,
                 LastActiveTime: userRecord.LastActiveTime,
-                EmailConfirmationStatus: userRecord.EmailConfirmationStatus
+                EmailConfirmationStatus: userRecord.EmailConfirmationStatus,
+                IsSubscriber: isSubscriber,
+                SubscriberStreamIds: subscriberStreamIds,
+                SubscriberSince: subscriberSinceISO,
+                SubscriptionStatus: subscriptionStatus,
+                SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
+                SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
+                SubscriptionExpiresOn: subscriptionExpiresOnISO
             },
             userData: {
                 id: userRecord._id,
@@ -617,7 +849,14 @@ const oauthLogin = async (req, res) => {
                 avatar: userRecord.ProfilePic || picture,
                 gender: userRecord.Gender,
                 role: userRecord.Role || 'user',
-                EmailConfirmationStatus: userRecord.EmailConfirmationStatus
+                EmailConfirmationStatus: userRecord.EmailConfirmationStatus,
+                IsSubscriber: isSubscriber,
+                SubscriberStreamIds: subscriberStreamIds,
+                SubscriberSince: subscriberSinceISO,
+                SubscriptionStatus: subscriptionStatus,
+                SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
+                SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
+                SubscriptionExpiresOn: subscriptionExpiresOnISO
             },
             wasNewUserCreated: isNewUser
         });
@@ -2560,7 +2799,7 @@ var getUserData = async function (req, res) {
         };
 
         // Fetch user data excluding password
-        const userData = await user.findOne(conditions, fields).exec();
+        let userData = await user.findOne(conditions, fields).exec();
         
         if (!userData) {
             return res.status(404).json({
@@ -2568,6 +2807,8 @@ var getUserData = async function (req, res) {
                 message: "User not found"
             });
         }
+
+        userData = await normalizeSubscriptionState(userData, req.session);
         
         var response = {
             status: 200,
@@ -2657,19 +2898,26 @@ var subscribeToPlatform = async function (req, res) {
 		}
 
 		const userId = req.session.user._id;
-		const token = req.body.token || null;
+		const providedToken = req.body.token || null;
 		const tokenEmail = req.body.tokenEmail || req.session.user.Email || null;
-		const amount =
+		const configuredAmount =
 			req.body.amount !== undefined
 				? Number(req.body.amount)
 				: Number(process.PLATFORM_SUBSCRIPTION_PRICE || 0);
 		const description =
 			req.body.description || "Scrpt Platform Subscription";
+		const trialDurationDays = Number(process.env.PLATFORM_TRIAL_DAYS || 15);
+		const now = new Date();
 
 		const currentUser = await user
 			.findOne(
 				{ _id: new ObjectId(userId), IsDeleted: false },
-				{ IsSubscriber: 1 }
+				{
+					IsSubscriber: 1,
+					SubscriptionStatus: 1,
+					SubscriptionTrialEndsOn: 1,
+					SubscriberSince: 1,
+				}
 			)
 			.exec();
 
@@ -2680,11 +2928,59 @@ var subscribeToPlatform = async function (req, res) {
 			});
 		}
 
-		if (currentUser.IsSubscriber) {
+		const existingTrialEndsOn = currentUser.SubscriptionTrialEndsOn
+			? new Date(currentUser.SubscriptionTrialEndsOn)
+			: null;
+		const isTrialActive =
+			currentUser.SubscriptionStatus === "trial" &&
+			existingTrialEndsOn &&
+			existingTrialEndsOn.getTime() > now.getTime();
+		const isTrialExpired =
+			currentUser.SubscriptionStatus === "trial" &&
+			existingTrialEndsOn &&
+			existingTrialEndsOn.getTime() <= now.getTime();
+
+		if (isTrialActive || (currentUser.IsSubscriber && currentUser.SubscriptionStatus !== "trial")) {
 			return res.status(409).json({
 				status: 409,
-				message: "You are already a platform subscriber.",
+				message: "You already have an active platform subscription.",
 			});
+		}
+
+		const isTrialRequest =
+			!providedToken ||
+			typeof providedToken === "string" &&
+				providedToken.toLowerCase() === "trial";
+
+		if (isTrialExpired && isTrialRequest) {
+			return res.status(402).json({
+				status: 402,
+				message: "Your free trial has already ended. Please add a payment method to continue.",
+			});
+		}
+
+		let token = providedToken;
+		let amount = configuredAmount;
+		let subscriptionStatus = "active";
+		let subscriptionTrialEndsOn = null;
+		let subscriptionExpiresOn =
+			currentUser.SubscriptionExpiresOn instanceof Date
+				? currentUser.SubscriptionExpiresOn
+				: currentUser.SubscriptionExpiresOn
+				? new Date(currentUser.SubscriptionExpiresOn)
+				: null;
+
+		if (isTrialRequest) {
+			subscriptionStatus = "trial";
+			subscriptionTrialEndsOn = new Date(
+				now.getTime() + trialDurationDays * 24 * 60 * 60 * 1000
+			);
+			amount = 0;
+		} else {
+			const annualDurationDays = Number(process.env.PLATFORM_SUBSCRIPTION_DURATION_DAYS || 365);
+			subscriptionExpiresOn = new Date(
+				now.getTime() + annualDurationDays * 24 * 60 * 60 * 1000
+			);
 		}
 
 		const streamConditions = {
@@ -2716,7 +3012,7 @@ var subscribeToPlatform = async function (req, res) {
 			const stripe = getStripeClient();
 			let stripeToken = token;
 
-			if (token === "trial") {
+			if (token && token.toLowerCase && token.toLowerCase() === "trial") {
 				if (process.env.NODE_ENV === "production") {
 					return res.status(400).json({
 						status: 400,
@@ -2753,10 +3049,23 @@ var subscribeToPlatform = async function (req, res) {
 			}
 		}
 
+		const subscriberSinceDate =
+			currentUser.SubscriberSince instanceof Date
+				? currentUser.SubscriberSince
+				: now;
+
 		const subscriberData = {
 			IsSubscriber: true,
 			SubscriberStreamIds: streamIds,
-			SubscriberSince: new Date(),
+			SubscriberSince: subscriberSinceDate,
+			SubscriptionStatus: subscriptionStatus,
+			SubscriptionTrialEndsOn: subscriptionTrialEndsOn,
+			SubscriptionLastTrialEndsOn:
+				subscriptionStatus === "trial"
+					? subscriptionTrialEndsOn
+					: currentUser.SubscriptionLastTrialEndsOn || null,
+			SubscriptionExpiresOn:
+				subscriptionExpiresOn,
 		};
 
 		await user
@@ -2768,14 +3077,226 @@ var subscribeToPlatform = async function (req, res) {
 			id.toString()
 		);
 		req.session.user.SubscriberSince = subscriberData.SubscriberSince;
+		req.session.user.SubscriptionStatus = subscriptionStatus;
+		req.session.user.SubscriptionTrialEndsOn = subscriptionTrialEndsOn;
+		req.session.user.SubscriptionLastTrialEndsOn =
+			subscriberData.SubscriptionLastTrialEndsOn || null;
+		req.session.user.SubscriptionExpiresOn =
+			subscriberData.SubscriptionExpiresOn || null;
+
+		// Fetch refreshed user data to include in response and JWT
+		let refreshedUserRecord = await user
+			.findOne({ _id: new ObjectId(userId) })
+			.exec();
+
+		if (refreshedUserRecord) {
+			refreshedUserRecord = await normalizeSubscriptionState(
+				refreshedUserRecord,
+				req.session
+			);
+		}
+
+		const refreshedUserObject = refreshedUserRecord
+			? refreshedUserRecord.toObject
+				? refreshedUserRecord.toObject()
+				: refreshedUserRecord
+			: null;
+
+		const normalizedStreamIds =
+			Array.isArray(
+				refreshedUserObject?.SubscriberStreamIds ||
+					refreshedUserObject?.subscriberStreamIds
+			)
+				? (
+						refreshedUserObject.SubscriberStreamIds ||
+						refreshedUserObject.subscriberStreamIds
+				  )
+						.map((id) => {
+							try {
+								if (!id) return null;
+								if (typeof id === "string") return id;
+								if (
+									typeof id === "object" &&
+									id !== null &&
+									typeof id.toString === "function"
+								) {
+									return id.toString();
+								}
+								return String(id);
+							} catch (error) {
+								return null;
+							}
+						})
+						.filter(Boolean)
+				: streamIds.map((id) => id.toString());
+
+		const subscriberSinceISO =
+			refreshedUserObject?.SubscriberSince ||
+			refreshedUserObject?.subscriberSince
+				? new Date(
+						refreshedUserObject.SubscriberSince ||
+							refreshedUserObject.subscriberSince
+				  ).toISOString()
+				: subscriberData.SubscriberSince instanceof Date
+				? subscriberData.SubscriberSince.toISOString()
+				: subscriberData.SubscriberSince;
+
+		const subscriptionStatusNormalized =
+			refreshedUserObject?.SubscriptionStatus ||
+			refreshedUserObject?.subscriptionStatus ||
+			subscriptionStatus;
+
+		const subscriptionTrialEndsOnISO =
+			refreshedUserObject?.SubscriptionTrialEndsOn ||
+			refreshedUserObject?.subscriptionTrialEndsOn
+				? new Date(
+						refreshedUserObject.SubscriptionTrialEndsOn ||
+							refreshedUserObject.subscriptionTrialEndsOn
+				  ).toISOString()
+				: subscriptionTrialEndsOn instanceof Date
+				? subscriptionTrialEndsOn.toISOString()
+				: subscriptionTrialEndsOn;
+
+		const subscriptionLastTrialEndsOnISO =
+			refreshedUserObject?.SubscriptionLastTrialEndsOn ||
+			refreshedUserObject?.subscriptionLastTrialEndsOn
+				? new Date(
+						refreshedUserObject.SubscriptionLastTrialEndsOn ||
+							refreshedUserObject.subscriptionLastTrialEndsOn
+				  ).toISOString()
+				: subscriberData.SubscriptionLastTrialEndsOn instanceof Date
+				? subscriberData.SubscriptionLastTrialEndsOn.toISOString()
+				: subscriberData.SubscriptionLastTrialEndsOn;
+
+		const subscriptionExpiresOnISO =
+			refreshedUserObject?.SubscriptionExpiresOn ||
+			refreshedUserObject?.subscriptionExpiresOn
+				? new Date(
+						refreshedUserObject.SubscriptionExpiresOn ||
+							refreshedUserObject.subscriptionExpiresOn
+				  ).toISOString()
+				: subscriberData.SubscriptionExpiresOn instanceof Date
+				? subscriberData.SubscriptionExpiresOn.toISOString()
+				: subscriberData.SubscriptionExpiresOn;
+
+		const isSubscriberNormalized =
+			typeof refreshedUserObject?.IsSubscriber !== "undefined"
+				? Boolean(refreshedUserObject.IsSubscriber)
+				: true;
+
+		const jwtPayload = {
+			userId: userId.toString(),
+			email: refreshedUserObject?.Email || req.session.user.Email,
+			name: refreshedUserObject?.Name || req.session.user.Name,
+			role: refreshedUserObject?.Role || req.session.user.Role || "user",
+			status:
+				typeof refreshedUserObject?.Status !== "undefined"
+					? refreshedUserObject.Status
+					: req.session.user.Status,
+			emailConfirmationStatus:
+				refreshedUserObject?.EmailConfirmationStatus ??
+				req.session.user.EmailConfirmationStatus ??
+				true,
+			allowCreate:
+				refreshedUserObject?.AllowCreate ??
+				req.session.user.AllowCreate ??
+				false,
+			profilePic:
+				refreshedUserObject?.ProfilePic || req.session.user.ProfilePic,
+			gender: refreshedUserObject?.Gender || req.session.user.Gender,
+			createdOn:
+				refreshedUserObject?.CreatedOn || req.session.user.CreatedOn,
+			modifiedOn:
+				refreshedUserObject?.ModifiedOn || req.session.user.ModifiedOn,
+			lastActiveTime:
+				refreshedUserObject?.LastActiveTime ||
+				req.session.user.LastActiveTime,
+			isSubscriber: isSubscriberNormalized,
+			subscriberStreamIds: normalizedStreamIds,
+			subscriberSince: subscriberSinceISO,
+			subscriptionStatus: subscriptionStatusNormalized,
+			subscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
+			subscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
+			subscriptionExpiresOn: subscriptionExpiresOnISO,
+			iat: Math.floor(Date.now() / 1000),
+		};
+
+		const jwtSecret =
+			process.env.JWT_SECRET ||
+			process.env.SECRET_API_KEY ||
+			"your-jwt-secret-key-change-in-production";
+
+		const refreshedToken = jwt.sign(jwtPayload, jwtSecret, {
+			expiresIn: "7d",
+		});
+
+		const sessionExpiresISO = new Date(
+			Date.now() + 7 * 24 * 60 * 60 * 1000
+		).toISOString();
+
+		const responseUserData = refreshedUserObject
+			? {
+					...refreshedUserObject,
+					IsSubscriber: isSubscriberNormalized,
+					SubscriberStreamIds: normalizedStreamIds,
+					SubscriberSince: subscriberSinceISO,
+					SubscriptionStatus: subscriptionStatusNormalized,
+					SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
+					SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
+					SubscriptionExpiresOn: subscriptionExpiresOnISO,
+			  }
+			: {
+					IsSubscriber: isSubscriberNormalized,
+					SubscriberStreamIds: normalizedStreamIds,
+					SubscriberSince: subscriberSinceISO,
+					SubscriptionStatus: subscriptionStatusNormalized,
+					SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
+					SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
+					SubscriptionExpiresOn: subscriptionExpiresOnISO,
+			  };
 
 		return res.json({
 			status: 200,
 			message: "Platform subscription activated successfully.",
 			data: {
-				streamIds: streamIds.map((id) => id.toString()),
-				totalStreams: streamIds.length,
+				streamIds: normalizedStreamIds,
+				totalStreams: normalizedStreamIds.length,
 				amountCharged: amount > 0 ? amount : 0,
+				subscriptionStatus: subscriptionStatusNormalized,
+				subscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
+				subscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
+				subscriptionExpiresOn: subscriptionExpiresOnISO,
+				subscriberSince: subscriberSinceISO,
+			},
+			token: refreshedToken,
+			sessionExpires: sessionExpiresISO,
+			user: responseUserData,
+			userData: responseUserData,
+			usersession: {
+				_id: userId,
+				Email: responseUserData.Email || req.session.user.Email,
+				Name: responseUserData.Name || req.session.user.Name,
+				NickName:
+					responseUserData.NickName || req.session.user.NickName,
+				ProfilePic:
+					responseUserData.ProfilePic || req.session.user.ProfilePic,
+				Gender: responseUserData.Gender || req.session.user.Gender,
+				Role: responseUserData.Role || req.session.user.Role || "user",
+				EmailConfirmationStatus:
+					responseUserData.EmailConfirmationStatus ??
+					req.session.user.EmailConfirmationStatus ??
+					true,
+				Status:
+					typeof responseUserData.Status !== "undefined"
+						? responseUserData.Status
+						: req.session.user.Status,
+				IsSubscriber: isSubscriberNormalized,
+				SubscriberStreamIds: normalizedStreamIds,
+				SubscriberSince: subscriberSinceISO,
+				SubscriptionStatus: subscriptionStatusNormalized,
+				SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
+				SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
+				SubscriptionExpiresOn: subscriptionExpiresOnISO,
 			},
 		});
 	} catch (error) {

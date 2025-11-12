@@ -79,6 +79,15 @@ var userSchema = new mongoose.Schema({
 		ref: 'Capsule'
 	}],
 	SubscriberSince: {type: Date, default: null},
+	SubscriptionExpiresOn: {type: Date, default: null},
+	SubscriptionStatus: {
+		type: String,
+		enum: ['trial', 'active', 'expired', 'cancelled'],
+		default: null
+	},
+	SubscriptionTrialEndsOn: { type: Date, default: null },
+	SubscriptionLastTrialEndsOn: { type: Date, default: null },
+	SubscriptionExpiresOn: { type: Date, default: null },
 	Role: {type: String, enum: ["user", "subadmin", "admin"], default: "user"},
 	
 	// Admin/SubAdmin specific fields (only used when Role is "admin" or "subadmin")
