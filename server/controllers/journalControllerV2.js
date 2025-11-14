@@ -11,6 +11,24 @@ var smtpTransport = require("nodemailer-smtp-transport");
 var User = require("./../models/userModel.js");
 var mongoose = require("mongoose");
 var ObjectId = mongoose.Types.ObjectId;
+const DEFAULT_STREAM_OWNER_ID = "5f4835e67a5d1b040c63237e";
+
+const getActorUserIdFromRequest = (req) => {
+  if (req?.user?.userId) return req.user.userId;
+  if (req?.session?.user?._id) return req.session.user._id;
+  if (req?.session?.admin?._id) return req.session.admin._id;
+  if (req?.session?.subadmin?._id) return req.session.subadmin._id;
+  return null;
+};
+
+const toObjectIdIfPossible = (id) => {
+  if (!id) return null;
+  try {
+    return new ObjectId(id);
+  } catch (error) {
+    return id;
+  }
+};
 var Media = require("./../models/mediaModel.js");
 var mediaController = require("./mediaController.js");
 
@@ -25104,9 +25122,11 @@ var getAllImages_BROWSER_API = async function (req, res) {
 
 var setupStream_BROWSER_API = async function (req, res) {
   var data = req.query || {};
+  const actorId = toObjectIdIfPossible(getActorUserIdFromRequest(req) || DEFAULT_STREAM_OWNER_ID);
+
   data = {
-    CreaterId: "5f4835e67a5d1b040c63237e",
-    OwnerId: "5f4835e67a5d1b040c63237e",
+    CreaterId: actorId,
+    OwnerId: actorId,
     Title: data.Title || "Untitled Stream",
     LaunchSettings: {
       IsInvitationSent: false,
@@ -25155,6 +25175,16 @@ var setupStream_BROWSER_API = async function (req, res) {
     return res.json(response);
   }
 
+  // Ensure capsule tracks this new chapter
+  try {
+    await Capsule.updateOne(
+      { _id: capsuleResult._id },
+      { $addToSet: { Chapters: chapterResult._id } }
+    );
+  } catch (err) {
+    console.error("Failed to link chapter to capsule", err);
+  }
+
   data = {
     ChapterId: chapterResult._id,
     CreaterId: chapterResult.CreaterId,
@@ -25173,6 +25203,16 @@ var setupStream_BROWSER_API = async function (req, res) {
       message: "Something went wrong.",
     };
     return res.json(response);
+  }
+
+  // Ensure chapter tracks this page
+  try {
+    await Chapter.updateOne(
+      { _id: chapterResult._id },
+      { $addToSet: { pages: pageResult._id } }
+    );
+  } catch (err) {
+    console.error("Failed to link page to chapter", err);
   }
 
   var response = {
