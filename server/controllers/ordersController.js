@@ -3954,141 +3954,67 @@ var __getObjArrayIdxByKey = function (ObjArr, matchKey, matchVal) {
 	return idx;
 }
 
-var capsule__checkCompleteness = function (req, res) {
-	Capsule.find({ _id: req.headers.capsule_id, Status: true, IsDeleted: false }, { _id: true }, function (err, result) {
-		if (!err) {
-			if (result.length) {
-				var conditions = {
-					CapsuleId: req.headers.capsule_id,
-					Status: 1,
-					IsDeleted: 0
-				};
-
-				var fields = { _id: true };
-				Chapter.find(conditions, fields, function (err, results) {
-					if (!err) {
-						if (results.length) {
-							var chapter_ids = [], temp_cIds = [];
-							for (var loop = 0; loop < results.length; loop++) {
-								chapter_ids.push(results[loop]._id);
-								temp_cIds.push(String(results[loop]._id));
-							}
-							// //console.log("chapter_ids = ", temp_cIds);
-							if (chapter_ids.length) {
-								var conditions = {
-									ChapterId: { $in: temp_cIds },
-									//Status : 1,
-									IsDeleted: 0,
-									PageType: { $in: ["gallery", "content"] }
-								};
-
-								var fields = {
-									_id: false,
-									ChapterId: true
-								};
-
-
-								Page.find(conditions, fields, function (err, result) {
-									if (!err) {
-										//var result = new Array(result);
-										var resultArr = [];
-										for (var loop = 0; loop < result.length; loop++) {
-											resultArr[loop] = { ChapterId: result[loop].ChapterId };
-										}
-
-										// //console.log(resultArr.length + "---------- >= --------------" + chapter_ids.length);
-										if (resultArr.length && resultArr.length >= chapter_ids.length) {
-											var flag = true;
-											for (var loop = 0; loop < chapter_ids.length; loop++) {
-												var idx = __getObjArrayIdxByKey(resultArr, 'ChapterId', chapter_ids[loop]);
-												if (idx >= 0) {
-													continue;
-												}
-												else {
-													flag = false;
-													break;
-												}
-											}
-
-											if (flag) {
-												var response = {
-													status: 200,
-													message: "Capsule is complete to publish."
-												}
-												res.json(response);
-											}
-											else {
-												// //console.log("--------------------------------------4");
-												var response = {
-													status: 400,
-													message: "Error: It seems like you have at least one chapter without a page. Please add at least one page into the empty chapter or delete the chapter and publish again."
-												}
-												res.json(response);
-											}
-										}
-										else {
-											// //console.log("--------------------------------------3");
-											var response = {
-												status: 400,
-												message: "Error: It seems like you have at least one chapter without a page. Please add at least one page into the empty chapter or delete the chapter and publish again."
-											}
-											res.json(response);
-										}
-									}
-									else {
-										var response = {
-											status: 501,
-											message: "Something went wrong."
-										}
-										res.json(response);
-									}
-								})
-							}
-							else {
-								// //console.log("--------------------------------------2");
-								var response = {
-									status: 400,
-									message: "Error: It seems like you have no chapter in this capsule. Please add at least one chapter and one page into the chapter and publish again."
-								}
-								res.json(response);
-							}
-						}
-						else {
-							// //console.log("--------------------------------------1");
-							var response = {
-								status: 400,
-								message: "Error: It seems like you have no chapter in this capsule. Please add at least one chapter and one page into the chapter and publish again."
-							}
-							res.json(response);
-						}
-					}
-					else {
-						// //console.log(err);
-						var response = {
-							status: 501,
-							message: "Something went wrong."
-						}
-						res.json(response);
-					}
-				});
-			}
-			else {
-				var response = {
-					status: 501,
-					message: "Something went wrong."
-				}
-				res.json(response);
-			}
+const capsule__checkCompleteness = async (req, res) => {
+	try {
+		const capsuleId = req.headers.capsule_id
+		if (!capsuleId) {
+			return res.json({
+				status: 400,
+				message: "Capsule id is required.",
+			})
 		}
-		else {
-			// //console.log(err);
-			var response = {
-				status: 501,
-				message: "Something went wrong."
-			}
-			res.json(response);
+
+		const capsule = await Capsule.findOne({ _id: capsuleId, Status: true, IsDeleted: false }).select("_id").lean()
+		if (!capsule) {
+			return res.json({
+				status: 404,
+				message: "Capsule not found or inactive.",
+			})
 		}
-	});
+
+		const chapters = await Chapter.find({ CapsuleId: capsuleId, Status: 1, IsDeleted: 0 }).select("_id").lean()
+		if (!chapters.length) {
+			return res.json({
+				status: 400,
+				message: "Error: It seems like you have no chapter in this capsule. Please add at least one chapter and one page into the chapter and publish again.",
+			})
+		}
+
+		const chapterIds = chapters.map((chapter) => chapter._id.toString())
+
+		const pages = await Page.find({
+			ChapterId: { $in: chapterIds },
+			IsDeleted: 0,
+			PageType: { $in: ["gallery", "content"] },
+		})
+			.select("ChapterId")
+			.lean()
+
+		const pageCountByChapter = new Map()
+		for (const page of pages) {
+			const chapterId = page.ChapterId
+			pageCountByChapter.set(chapterId, (pageCountByChapter.get(chapterId) || 0) + 1)
+		}
+
+		const missingChapter = chapterIds.find((chapterId) => !pageCountByChapter.has(chapterId))
+		if (missingChapter) {
+			return res.json({
+				status: 400,
+				message: "Error: It seems like you have at least one chapter without a page. Please add at least one page into the empty chapter or delete the chapter and publish again.",
+			})
+		}
+
+		return res.json({
+			status: 200,
+			message: "Capsule is complete to publish.",
+		})
+	} catch (error) {
+		console.error("capsule__checkCompleteness error:", error)
+		return res.json({
+			status: 500,
+			message: "Something went wrong.",
+		})
+	}
 }
 
 //Jack / Jill replacement.

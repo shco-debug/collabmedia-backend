@@ -6,7 +6,9 @@ var mediaAction = require('../models/mediaActionLogModel.js');
 var groupTags = require('./../models/groupTagsModel.js');
 var formidable = require('formidable');
 var fs = require('fs');
+var path = require('path');
 var counters = require('./../models/countersModel.js');
+const fsPromises = fs.promises;
 
 var faultyMediaModel = require('./../models/faultyMediaModel.js');
 var flagAsInAppropriate = require('./../models/flagAsInAppropriateModel.js');
@@ -6354,341 +6356,286 @@ var importKeywords = function(req, res, files) {
 	//});
 }
 
+const parseFormAsync = (req) =>
+	new Promise((resolve, reject) => {
+		const form = new formidable.IncomingForm();
+		form.parse(req, (err, fields, files) => {
+			if (err) return reject(err);
+			resolve({ fields, files });
+		});
+	});
+
+const moveUploadedFile = async (file, destinationDir, prefix) => {
+	const sourcePath = file.filepath || file.path;
+	if (!sourcePath) {
+		throw new Error("Uploaded file path not found.");
+	}
+	await fsPromises.mkdir(destinationDir, { recursive: true });
+	const extension = path.extname(file.name || "") || "";
+	const safePrefix = prefix || dateFormat();
+	const fileName = `${safePrefix}${extension ? extension : ""}`;
+	const targetPath = path.join(destinationDir, fileName);
+	await fsPromises.rename(sourcePath, targetPath);
+	return targetPath;
+};
+
+const convertXlsxToJson = (inputPath, outputPath) =>
+	new Promise((resolve, reject) => {
+		xlsxj({ input: inputPath, output: outputPath }, (err, result) => {
+			if (err) return reject(err);
+			resolve(result || []);
+		});
+	});
+
+const normalizeDescriptor = (rawValue) => {
+	if (typeof rawValue !== "string") return null;
+	const cleaned = rawValue.trim().toLowerCase().replace(/[^a-z0-9 \-\\]/gi, "");
+	return cleaned || null;
+};
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const chunkArray = (array, size) => {
+	const chunks = [];
+	for (let i = 0; i < array.length; i += size) {
+		chunks.push(array.slice(i, i + size));
+	}
+	return chunks;
+};
+
+const buildGroupTagRecord = (title) => ({
+	_id: new ObjectId(),
+	GroupTagTitle: title,
+	MetaMetaTagID: "54c98aab4fde7f30079fdd5a",
+	MetaTagID: "54c98aba4fde7f30079fdd5b",
+	status: 3,
+	LastModified: Date.now(),
+	DateAdded: Date.now(),
+	Tags: [{ _id: new ObjectId(), TagTitle: title, status: 1 }],
+	Think: [],
+	Less: [],
+	More: [],
+});
+
+const buildMediaDocument = ({
+	record,
+	seq,
+	uploaderId,
+	groupTagMap,
+	normalizedDescriptors,
+}) => {
+	const unsplashPhotoId = record["Photo ID"] ? record["Photo ID"].trim() : null;
+	const unsplashImageURL = record["Image Source"] ? record["Image Source"].trim() : null;
+	const unsplashImageTags =
+		record["Descriptors/Concepts/Related tags"] || record["Combined tags (all 4)"] || "";
+	const unsplashImageTitle = record["Title"] ? record["Title"].trim() : null;
+	const unsplashImagePhotographer = record["Photographer"] ? record["Photographer"].trim() : null;
+	const unsplashStyleKeyword = record["StyleKeyword"] ? record["StyleKeyword"].trim() : "";
+	const lightness = record["Lightness"] ? record["Lightness"] : 0;
+	const dominantColors = record["Dominant colors"] ? record["Dominant colors"] : "";
+	const recordLocator = unsplashImageURL ? unsplashImageURL.split("?")[0].split("/").pop() : "";
+	const locator = `${recordLocator || "unsplash"}_${seq}`;
+	const groupTagsPayload = [];
+
+	normalizedDescriptors.forEach((descriptor) => {
+		const tagId = groupTagMap.get(descriptor);
+		if (tagId) {
+			groupTagsPayload.push({
+				_id: new ObjectId(),
+				GroupTagID: tagId,
+			});
+		}
+	});
+
+	return {
+		Prompt: unsplashImageTags,
+		Title: unsplashImageTitle,
+		Photographer: unsplashImagePhotographer,
+		Location: [
+			{
+				Size: "",
+				URL: unsplashImageURL,
+			},
+		],
+		UploadedBy: "admin",
+		UploadedOn: Date.now(),
+		UploaderID: uploaderId || null,
+		Source: "Unsplash",
+		SourceUniqueID: null,
+		Domains: null,
+		AutoId: seq,
+		GroupTags: groupTagsPayload,
+		Collection: null,
+		Status: 1,
+		MetaMetaTags: "5464931fde9f6868484be3d7",
+		MetaTags: null,
+		AddedWhere: "directToPf",
+		IsDeleted: 0,
+		TagType: "",
+		ContentType: "",
+		MediaType: "Link",
+		LinkType: "image",
+		IsUnsplashImage: true,
+		UnsplashPhotoId: unsplashPhotoId,
+		thumbnail: unsplashImageURL,
+		Content: `<img src="${unsplashImageURL}" alt="Link">`,
+		AddedHow: "importExcel",
+		Locator: locator,
+		StyleKeyword: unsplashStyleKeyword,
+		Lightness: lightness ? lightness : 0,
+		DominantColors: dominantColors ? dominantColors : "",
+	};
+};
+
 var importUnsplashImagesV2 = async function (req, res) {
-	console.log("importUnsplashImagesV2-------------", req.body)
-	var form = new formidable.IncomingForm();
-	form.parse(req, async function (err, fields, files) {
-		files = files ? files : {};
-		files.myFile0 = files.myFile0 ? files.myFile0 : {};
-		files.myFile0.name = files.myFile0.name ? files.myFile0.name : null;
-		var file_name = "";
-		console.log("files.myFile.name", files.myFile0.name);
-		if (files.myFile0.name) {
-			if( files.myFile0.name.indexOf('KEYWORDS_IMPORT') > -1) {
-				importKeywords(req, res, files);
-				//return;
+	try {
+		const { files = {} } = await parseFormAsync(req);
+		const file = files.myFile0 || {};
+		file.name = file.name ? file.name : null;
+
+		if (!file.name) {
+			return res.json({ code: 501, msg: "Wrong Input!" });
+		}
+
+		if (file.name.indexOf("KEYWORDS_IMPORT") > -1) {
+			return importKeywords(req, res, files);
+		}
+
+		if (!req.session || (!req.session.admin && !req.session.subAdmin)) {
+			return res.json({ code: 401, msg: "Admin/Subadmin session not found." });
+		}
+
+		const uploadDir = path.join(__dirname, "..", "..", "public", "assets", "unsplashimport");
+		const savedFilePath = await moveUploadedFile(file, uploadDir, `${dateFormat()}_unsplashimport`);
+		const outputJsonPath = path.join(uploadDir, "output.json");
+		const rows = await convertXlsxToJson(savedFilePath, outputJsonPath);
+
+		const descriptorSet = new Set();
+		const recordsToUpload = [];
+		const recordsToReportError = [];
+
+		rows.forEach((row) => {
+			if (!row["Descriptors/Concepts/Related tags"] && row["Combined tags (all 4)"]) {
+				row["Descriptors/Concepts/Related tags"] =
+					typeof row["Combined tags (all 4)"] === "string" ? row["Combined tags (all 4)"] : "";
+			}
+
+			if (row["Styled images"]) {
+				row.StyleKeyword = typeof row["Styled images"] === "string" ? row["Styled images"].trim() : "";
+			}
+
+			const descriptorString = row["Descriptors/Concepts/Related tags"] || "";
+			const normalizedDescriptors = descriptorString
+				.toString()
+				.split(",")
+				.map(normalizeDescriptor)
+				.filter(Boolean);
+
+			row.__normalizedDescriptors = normalizedDescriptors;
+			normalizedDescriptors.forEach((descriptor) => descriptorSet.add(descriptor));
+
+			if (row["Image Source"]) {
+				recordsToUpload.push(row);
 			} else {
-				uploadDir = __dirname + "/../../public/assets/unsplashimport";
-				file_name = files.myFile0.name;
-				file_name = file_name.split('.');
-				ext = file_name[file_name.length - 1];
-				var name = '';
-				name = dateFormat() + '_' + "unsplashimport";
-				file_name = uploadDir + "/" + name + '.' + ext;
+				recordsToReportError.push(row);
+			}
+		});
 
-				fs.renameSync(files.myFile0.path, file_name);
+		const descriptorRegexes = Array.from(descriptorSet).map(
+			(descriptor) => new RegExp(`^${escapeRegExp(descriptor)}$`, "i")
+		);
 
-				xlsxj({
-					input: file_name,
-					output: uploadDir+"/output.json"
-				},
-				async function(err, result) {
-					if(err) {
-					  console.error(err);
-					} else {
-						//console.log(result);
-						//res.json({data : result});
-						var result = result ? result : [];
+		const existingGroupTags = descriptorRegexes.length
+			? await groupTags
+					.find({ $or: [{ status: 1 }, { status: 3 }], GroupTagTitle: { $in: descriptorRegexes } }, { GroupTagTitle: 1 })
+					.lean()
+			: [];
 
-						var descriptorArr = [];
-						var recordsToUpload = [];
-						var recordsToReportError = [];
+		const groupTagMap = new Map();
+		existingGroupTags.forEach((tag) => {
+			const normalized = normalizeDescriptor(tag.GroupTagTitle);
+			if (normalized) {
+				groupTagMap.set(normalized, String(tag._id));
+			}
+		});
 
-						for( var loop = 0; loop < result.length; loop++ ) {
-							var record = result[loop];
-							if(!record["Descriptors/Concepts/Related tags"]) {
-								if(record["Combined tags (all 4)"]) {
-									record["Descriptors/Concepts/Related tags"] = typeof record["Combined tags (all 4)"] == 'string' ? record["Combined tags (all 4)"] : "";
-								}
-							}
-
-							if(record["Styled images"]){
-								record["StyleKeyword"] = typeof record["Styled images"] == 'string' ? record["Styled images"].trim() : "";
-							}
-							if(record["Image Source"]){
-								recordsToUpload.push(record);
-								if(record["Descriptors/Concepts/Related tags"]){
-									descriptorArr.push(record["Descriptors/Concepts/Related tags"].trim());
-								}
-							}
-							else{
-								recordsToReportError.push(record);
-							}
-						}
-
-						descriptorArr = descriptorArr.toString();
-						descriptorArr = descriptorArr.split(',');
-
-						var descriptorArr__unique = [];
-
-						for (var a = 0; a < descriptorArr.length; a++) {
-							var flag = 0;
-							var tagStr = typeof (descriptorArr[a]) == 'string' ? descriptorArr[a].trim().toLowerCase() : '93w844923469126';
-							if (descriptorArr__unique.indexOf(tagStr) == -1) {
-								descriptorArr__unique.push(tagStr);
-							}
-						}
-
-						//console.log("---------descriptorArr__unique---------",descriptorArr__unique);
-
-						var allDescriptors = [];
-						for( var loop = 0; loop < descriptorArr__unique.length; loop++ ){
-							var title = descriptorArr__unique[loop];
-							title = typeof (title) == 'string' ? title.trim().toLowerCase() : '';
-							if (title) {
-								title = title ? title.trim() : '';	//added by manishp on 09032016
-								title = title.replace(/[^a-zA-Z0-9 \-\\]/g, "");
-								if(title){
-									allDescriptors.push(title);
-								}
-							}
-						}
-
-						//$in conditions
-						var inArrayDescriptors = [];
-						for( var loop = 0; loop < allDescriptors.length; loop++ ){
-							var title = allDescriptors[loop];
-							title = typeof (title) == 'string' ? title.trim().toLowerCase() : '';
-							if (title) {
-								title = title ? title.trim() : '';	//added by manishp on 09032016
-								title = title.replace(/[^a-zA-Z0-9 \-\\]/g, "");
-								if(title){
-									inArrayDescriptors.push(new RegExp("^"+title+"$", "i"));
-								}
-							}
-						}
-
-						var savedGTs = await groupTags.find({$or:[{status:1},{status:3}],GroupTagTitle:{ $in : inArrayDescriptors }}, {GroupTagTitle : true});
-						savedGTs = savedGTs ? savedGTs : [];
-
-						console.log("savedGTs == ", savedGTs.length);
-
-						var localGTMap = {};
-						for(var loop = 0; loop < savedGTs.length; loop++) {
-							savedGTs[loop].GroupTagTitle = savedGTs[loop].GroupTagTitle ? savedGTs[loop].GroupTagTitle.trim().toLowerCase() : null;
-							if(savedGTs[loop].GroupTagTitle) {
-								localGTMap[savedGTs[loop].GroupTagTitle] = String(savedGTs[loop]._id);
-
-								//keep removing the keywords from array so we will have only remaining keywrod
-								var index = allDescriptors.indexOf(savedGTs[loop].GroupTagTitle);
-								if (index > -1) {
-								   allDescriptors.splice(index, 1);
-								}
-							}
-						}
-
-						var newGtNeedsToBeSaved = allDescriptors;
-
-						console.log("newGtNeedsToBeSaved = ", newGtNeedsToBeSaved.length);
-						//new gts to created
-						var allRecordsToSave = [];
-						for( var loop = 0; loop < newGtNeedsToBeSaved.length; loop++ ){
-							var title = newGtNeedsToBeSaved[loop];
-							if(title) {
-								var record = {};
-								record._id = new ObjectId();
-								record.GroupTagTitle = title;
-								record.MetaMetaTagID = '54c98aab4fde7f30079fdd5a';// for 8888
-								record.MetaTagID = '54c98aba4fde7f30079fdd5b';// for 8888
-								record.status = 3;
-								record.LastModified = Date.now();
-								record.DateAdded = Date.now();
-								record.Tags = [{ _id: new ObjectId(), TagTitle: title, status: 1 }];
-								record.Think = [];
-								record.Less = [];
-								record.More = [];
-
-								allRecordsToSave.push(record);
-								localGTMap[title] = String(record._id);
-							}
-						}
-
-						console.log("allRecordsToSave = ", allRecordsToSave.length);
-						if(allRecordsToSave.length) {
-							var i,j, temporary, chunk = 200;
-							for (i = 0,j = allRecordsToSave.length; i < j; i += chunk) {
-								temporary = allRecordsToSave.slice(i, i + chunk);
-								var results = await groupTags.insertMany(temporary);
-								results = results ? results : null;
-								if(results) {
-									console.log("200 new gt saved ....");
-								}
-							}
-						}
-
-						// all GTs have been saved and mapped with local object - Now save Images;
-						console.log("----------__saveUnsplashImagesNow(recordsToUpload , recordsToReportError)---------");
-						console.log("recordsToUpload ======== ", recordsToUpload.length);
-						recordsToUpload = recordsToUpload ? recordsToUpload : [];
-						var allUnsplashPhotoIds = [];
-						for(var loop = 0; loop < recordsToUpload.length; loop++ ){
-							var recordsToUploadObj = recordsToUpload[loop];
-							var unsplashPhotoId = recordsToUploadObj["Photo ID"] ? recordsToUploadObj["Photo ID"].trim() : null;
-							if(unsplashPhotoId) {
-								allUnsplashPhotoIds.push(unsplashPhotoId);
-							}
-						}
-
-						//check already exists one
-						var UnsplashPhotoId__AlreadyExists = [];
-
-						var savedMedias = await media.find({UnsplashPhotoId : {$in : allUnsplashPhotoIds} , IsDeleted : false} , {_id:1,UnsplashPhotoId:1});
-						savedMedias = savedMedias ? savedMedias : [];
-
-						console.log("savedMedias === ", savedMedias.length);
-						for(var loop = 0; loop < savedMedias.length; loop++ ){
-							UnsplashPhotoId__AlreadyExists.push(savedMedias[loop].UnsplashPhotoId);
-						}
-						console.log("UnsplashPhotoId__AlreadyExists === ", UnsplashPhotoId__AlreadyExists.length);
-						var newRecordsToSave = [];
-						for(var loop = 0; loop < recordsToUpload.length; loop++ ){
-							var recordsToUploadObj = recordsToUpload[loop];
-							var unsplashPhotoId = recordsToUploadObj["Photo ID"] ? recordsToUploadObj["Photo ID"] : null;
-							var unsplashImageURL = recordsToUploadObj["Image Source"] ? recordsToUploadObj["Image Source"] : null;
-
-							var unsplashImageTags = recordsToUploadObj["Descriptors/Concepts/Related tags"] ? recordsToUploadObj["Descriptors/Concepts/Related tags"] : null;
-
-							var unsplashImageTitle = recordsToUploadObj["Title"] ? recordsToUploadObj["Title"] : null;
-
-							var unsplashImagePhotographer = recordsToUploadObj["Photographer"] ? recordsToUploadObj["Photographer"] : null;
-
-							var unsplashStyleKeyword =  recordsToUploadObj["StyleKeyword"] ? recordsToUploadObj["StyleKeyword"] : "";
-
-							var Lightness =  recordsToUploadObj["Lightness"] ? recordsToUploadObj["Lightness"] : "";
-							var DominantColors =  recordsToUploadObj["Dominant colors"] ? recordsToUploadObj["Dominant colors"] : "";
-
-							if(UnsplashPhotoId__AlreadyExists.indexOf(unsplashPhotoId) < 0) {
-								var incNum = 0;
-								//console.log("incNum = ", incNum);
-
-								var data = await counters.findOneAndUpdate({ _id: "userId" }, { $inc: { seq: 1 } }, { new: true });
-								data = data ? data : null;
-								if(data) {
-									incNum = data.seq;
-									//console.log("incNum = ", incNum);
-
-									var RecordLocator = unsplashImageURL.split('?')[0].split('/').pop();
-									var file_name = "";
-									var name = '';
-									name = dateFormat() + '_' + incNum;
-
-									file_name = name + '.' + ext;
-
-									var media_type = 'Link';
-
-									var __UploaderID = '';
-									if (req.session.admin) {
-										__UploaderID = req.session.admin._id;
-									} else if (req.session.subAdmin) {
-										__UploaderID = req.session.subAdmin._id;
-									}
-									else {
-										//return;
-									}
-
-									var dataToUpload = {
-										Prompt : unsplashImageTags,
-										Title : unsplashImageTitle,
-										Photographer : unsplashImagePhotographer,
-										Location: [],
-										UploadedBy: "admin",
-										UploadedOn: Date.now(),
-										UploaderID: __UploaderID,
-										Source: "Unsplash",
-										SourceUniqueID: null,
-										Domains: null,
-										AutoId: incNum,
-										GroupTags: [],
-										Collection: null,
-										Status: 1,
-										MetaMetaTags: "5464931fde9f6868484be3d7",
-										MetaTags: null,
-										AddedWhere: "directToPf", //directToPf,hardDrive,dragDrop
-										IsDeleted: 0,
-										TagType: "",
-										ContentType: "",
-										MediaType: media_type,
-										LinkType : "image",
-										IsUnsplashImage : true,
-										UnsplashPhotoId : unsplashPhotoId,
-										thumbnail : unsplashImageURL,
-										Content : '<img src="'+unsplashImageURL+'" alt="Link">',
-										AddedHow: 'importExcel',
-										Locator: RecordLocator + "_" + incNum,	//added on 23012014
-										StyleKeyword : unsplashStyleKeyword,
-										Lightness: Lightness ? Lightness : 0,
-										DominantColors: DominantColors ? DominantColors : ""
-									};
-
-									dataToUpload.Location.push({
-										Size: "",
-										URL: unsplashImageURL
-									});
-
-									var descriptorArr = unsplashImageTags ? unsplashImageTags : '';
-									descriptorArr = descriptorArr.toString();
-									descriptorArr = descriptorArr.split(',');
-
-									var descriptorArr__unique = [];
-
-									for (var a = 0; a < descriptorArr.length; a++) {
-										var flag = 0;
-										var tagStr = typeof (descriptorArr[a]) == 'string' ? descriptorArr[a].trim().toLowerCase() : '';
-										if (descriptorArr__unique.indexOf(tagStr) == -1) {
-											descriptorArr__unique.push(tagStr);
-										}
-									}
-
-									for( var loop2 = 0; loop2 < descriptorArr__unique.length; loop2++ ){
-										var title = descriptorArr__unique[loop2];
-										title = typeof (title) == 'string' ? title.trim().toLowerCase() : '';
-										if (title) {
-											title = title ? title.trim() : '';	//added by manishp on 09032016
-											title = title.replace(/[^a-zA-Z0-9 \-\\]/g, "");
-											if(title){
-												//allDescriptors.push(title);
-												var gtId = localGTMap[title] ? localGTMap[title] : null;
-												if(gtId) {
-													dataToUpload.GroupTags.push({
-														_id : new ObjectId(),
-														GroupTagID : gtId
-													});
-												}
-											}
-										}
-									}
-
-									newRecordsToSave.push(dataToUpload);
-
-								} else {
-									console.log("data went wrong = ", data);
-								}
-							}
-						}
-						console.log("newRecordsToSave === ", newRecordsToSave.length);
-						if(newRecordsToSave.length) {
-							var i,j, temporary, chunk = 200;
-							for (i = 0,j = newRecordsToSave.length; i < j; i += chunk) {
-								temporary = newRecordsToSave.slice(i, i + chunk);
-								var results = await media.insertMany(temporary);
-								results = results ? results : null;
-								if(results) {
-									console.log("200 new medias saved ....");
-								}
-							}
-							res.json({code:200 , recordsUploaded : newRecordsToSave.length, recordsToReportError : recordsToReportError , UnsplashPhotoId__AlreadyExists : UnsplashPhotoId__AlreadyExists.length});
-						} else {
-							res.json({code:200 , recordsUploaded : 0 , recordsToReportError : recordsToReportError , UnsplashPhotoId__AlreadyExists : UnsplashPhotoId__AlreadyExists.length});
-						}
+		const descriptorsToCreate = Array.from(descriptorSet).filter((descriptor) => !groupTagMap.has(descriptor));
+		if (descriptorsToCreate.length) {
+			const newRecords = descriptorsToCreate.map((descriptor) => buildGroupTagRecord(descriptor));
+			const chunks = chunkArray(newRecords, 200);
+			for (const chunk of chunks) {
+				const inserted = await groupTags.insertMany(chunk);
+				inserted.forEach((doc) => {
+					const normalized = normalizeDescriptor(doc.GroupTagTitle);
+					if (normalized) {
+						groupTagMap.set(normalized, String(doc._id));
 					}
 				});
 			}
 		}
-		else {
-			res.json({ "code": 501, "msg": "Wrong Input!" });
+
+		const unsplashIds = recordsToUpload
+			.map((record) => (record["Photo ID"] ? record["Photo ID"].trim() : null))
+			.filter(Boolean);
+
+		const existingMediaRecords = unsplashIds.length
+			? await media.find({ UnsplashPhotoId: { $in: unsplashIds }, IsDeleted: false }, { UnsplashPhotoId: 1 }).lean()
+			: [];
+
+		const existingUnsplashIds = new Set(existingMediaRecords.map((doc) => doc.UnsplashPhotoId));
+		const newMediaRecords = [];
+		const uploaderId = req.session.admin ? req.session.admin._id : req.session.subAdmin._id;
+
+		for (const record of recordsToUpload) {
+			const unsplashPhotoId = record["Photo ID"] ? record["Photo ID"].trim() : null;
+			const unsplashImageURL = record["Image Source"] ? record["Image Source"].trim() : null;
+
+			if (!unsplashPhotoId || !unsplashImageURL) {
+				recordsToReportError.push(record);
+				continue;
+			}
+
+			if (existingUnsplashIds.has(unsplashPhotoId)) {
+				continue;
+			}
+
+			const counter = await counters.findOneAndUpdate({ _id: "userId" }, { $inc: { seq: 1 } }, { new: true });
+			if (!counter || !counter.seq) {
+				console.log("Failed to fetch counter for Unsplash import record.");
+				continue;
+			}
+
+			const mediaDocument = buildMediaDocument({
+				record,
+				seq: counter.seq,
+				uploaderId,
+				groupTagMap,
+				normalizedDescriptors: record.__normalizedDescriptors || [],
+			});
+
+			newMediaRecords.push(mediaDocument);
 		}
-	});
-}
+
+		let insertedCount = 0;
+		if (newMediaRecords.length) {
+			const chunks = chunkArray(newMediaRecords, 200);
+			for (const chunk of chunks) {
+				const inserted = await media.insertMany(chunk);
+				insertedCount += inserted.length;
+			}
+		}
+
+		return res.json({
+			code: 200,
+			recordsUploaded: insertedCount,
+			recordsToReportError: recordsToReportError.length,
+			UnsplashPhotoId__AlreadyExists: existingUnsplashIds.size,
+		});
+	} catch (error) {
+		console.error("importUnsplashImagesV2 error:", error);
+		return res.json({ code: 500, msg: "Something went wrong while processing the import." });
+	}
+};
 
 //exports.uploadMassImport = uploadMassImport;
 //exports.uploadMassImport = importUnsplashImages;
