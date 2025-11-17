@@ -6,6 +6,7 @@ var mediaAction = require('../models/mediaActionLogModel.js');
 var groupTags = require('./../models/groupTagsModel.js');
 var formidable = require('formidable');
 var fs = require('fs');
+var os = require('os');
 var path = require('path');
 var counters = require('./../models/countersModel.js');
 const fsPromises = fs.promises;
@@ -6488,12 +6489,30 @@ const buildMediaDocument = ({
 };
 
 var importUnsplashImagesV2 = async function (req, res) {
+	let tempUploadDir = null;
+	let savedFilePath = null;
 	try {
-		const { files = {} } = await parseFormAsync(req);
-		const file = files.myFile0 || {};
-		file.name = file.name ? file.name : null;
+		console.log("[massmediaupload] Incoming request");
+		const { files = {}, fields = {} } = await parseFormAsync(req);
+		console.log("[massmediaupload] Parsed form fields:", Object.keys(fields || {}));
+		console.log("[massmediaupload] Parsed files keys:", Object.keys(files || {}));
+
+		let file = files.myFile0 || {};
+		if (Array.isArray(file)) {
+			file = file[0] || {};
+		}
+		console.log("[massmediaupload] Raw myFile0 object:", file);
+		file.name = file.name ? file.name : (file.originalFilename || file.newFilename || null);
+		console.log("[massmediaupload] File metadata:", {
+			name: file.name,
+			originalFilename: file.originalFilename,
+			newFilename: file.newFilename,
+			size: file.size,
+			filepath: file.filepath || file.path,
+		});
 
 		if (!file.name) {
+			console.warn("[massmediaupload] myFile0 missing or has no name");
 			return res.json({ code: 501, msg: "Wrong Input!" });
 		}
 
@@ -6501,14 +6520,36 @@ var importUnsplashImagesV2 = async function (req, res) {
 			return importKeywords(req, res, files);
 		}
 
-		if (!req.session || (!req.session.admin && !req.session.subAdmin)) {
-			return res.json({ code: 401, msg: "Admin/Subadmin session not found." });
+		const normalizedJwtRole = typeof req.user?.role === "string"
+			? req.user.role.toLowerCase()
+			: typeof req.user?.Role === "string"
+			? req.user.Role.toLowerCase()
+			: null;
+
+		const sessionSummary = {
+			hasSession: !!req.session,
+			hasAdmin: !!req.session?.admin,
+			hasSubAdmin: !!req.session?.subAdmin,
+			hasUserFromJwt: !!req.user,
+			jwtRole: normalizedJwtRole,
+		};
+		console.log("[massmediaupload] Session summary:", sessionSummary);
+
+		const hasSessionAdmin = !!req.session?.admin;
+		const hasAdminPrivilegesFromSession = hasSessionAdmin;
+		const hasAdminPrivilegesFromJwt = normalizedJwtRole === "admin";
+
+		if (!hasAdminPrivilegesFromSession && !hasAdminPrivilegesFromJwt) {
+			console.warn("[massmediaupload] Missing admin privileges (session or JWT)");
+			return res.json({ code: 401, msg: "Admin session or token not found." });
 		}
 
-		const uploadDir = path.join(__dirname, "..", "..", "public", "assets", "unsplashimport");
-		const savedFilePath = await moveUploadedFile(file, uploadDir, `${dateFormat()}_unsplashimport`);
-		const outputJsonPath = path.join(uploadDir, "output.json");
+		tempUploadDir = fs.mkdtempSync(path.join(os.tmpdir(), "unsplashimport-"));
+		savedFilePath = await moveUploadedFile(file, tempUploadDir, `${dateFormat()}_unsplashimport`);
+		console.log("[massmediaupload] Saved file to:", savedFilePath);
+		const outputJsonPath = path.join(tempUploadDir, "output.json");
 		const rows = await convertXlsxToJson(savedFilePath, outputJsonPath);
+		console.log("[massmediaupload] Parsed rows count:", Array.isArray(rows) ? rows.length : 0);
 
 		const descriptorSet = new Set();
 		const recordsToUpload = [];
@@ -6584,7 +6625,12 @@ var importUnsplashImagesV2 = async function (req, res) {
 
 		const existingUnsplashIds = new Set(existingMediaRecords.map((doc) => doc.UnsplashPhotoId));
 		const newMediaRecords = [];
-		const uploaderId = req.session.admin ? req.session.admin._id : req.session.subAdmin._id;
+		const uploaderId =
+			req.session?.admin?._id ||
+			req.user?.userId ||
+			req.user?._id ||
+			req.user?.id ||
+			null;
 
 		for (const record of recordsToUpload) {
 			const unsplashPhotoId = record["Photo ID"] ? record["Photo ID"].trim() : null;
@@ -6634,6 +6680,27 @@ var importUnsplashImagesV2 = async function (req, res) {
 	} catch (error) {
 		console.error("importUnsplashImagesV2 error:", error);
 		return res.json({ code: 500, msg: "Something went wrong while processing the import." });
+	} finally {
+		if (savedFilePath) {
+			try {
+				await fsPromises.unlink(savedFilePath);
+			} catch (unlinkErr) {
+				console.warn("[massmediaupload] Failed to delete uploaded file:", unlinkErr?.message);
+			}
+		}
+		if (tempUploadDir) {
+			try {
+				const remainingFiles = await fsPromises.readdir(tempUploadDir);
+				await Promise.all(
+					remainingFiles.map((fileName) =>
+						fsPromises.unlink(path.join(tempUploadDir, fileName)).catch(() => null)
+					)
+				);
+				await fsPromises.rmdir(tempUploadDir).catch(() => null);
+			} catch (cleanupErr) {
+				console.warn("[massmediaupload] Failed to clean temp directory:", cleanupErr?.message);
+			}
+		}
 	}
 };
 

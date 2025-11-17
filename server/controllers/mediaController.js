@@ -26,8 +26,10 @@ var CommonAlgo = require("../components/commonAlgorithms.js");
 var sharp = require("sharp");
 var path = require("path");
 var shortid = require("shortid");
+var os = require("os");
 
 const { ObjectId } = mongoose.Types;
+const fsPromises = fs.promises;
 
 // __dirname is already available in CommonJS
 
@@ -5019,6 +5021,361 @@ const deleteMedia = async function (req, res) {
   }
 };
 
+// ============================================================================
+// Mass Media Import Functions
+// ============================================================================
+
+const parseFormAsync = (req) =>
+	new Promise((resolve, reject) => {
+		const form = new formidable.IncomingForm();
+		form.parse(req, (err, fields, files) => {
+			if (err) return reject(err);
+			resolve({ fields, files });
+		});
+	});
+
+const moveUploadedFile = async (file, destinationDir, prefix) => {
+	const sourcePath = file.filepath || file.path;
+	if (!sourcePath) {
+		throw new Error("Uploaded file path not found.");
+	}
+	await fsPromises.mkdir(destinationDir, { recursive: true });
+	const extension = path.extname(file.name || "") || "";
+	const safePrefix = prefix || dateFormat();
+	const fileName = `${safePrefix}${extension ? extension : ""}`;
+	const targetPath = path.join(destinationDir, fileName);
+	await fsPromises.rename(sourcePath, targetPath);
+	return targetPath;
+};
+
+const convertXlsxToJson = (inputPath, outputPath) =>
+	new Promise((resolve, reject) => {
+		xlsxj({ input: inputPath, output: outputPath }, (err, result) => {
+			if (err) return reject(err);
+			resolve(result || []);
+		});
+	});
+
+const normalizeDescriptor = (rawValue) => {
+	if (typeof rawValue !== "string") return null;
+	const cleaned = rawValue.trim().toLowerCase().replace(/[^a-z0-9 \-\\]/gi, "");
+	return cleaned || null;
+};
+
+const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const chunkArray = (array, size) => {
+	const chunks = [];
+	for (let i = 0; i < array.length; i += size) {
+		chunks.push(array.slice(i, i + size));
+	}
+	return chunks;
+};
+
+const buildGroupTagRecord = (title) => ({
+	_id: new ObjectId(),
+	GroupTagTitle: title,
+	MetaMetaTagID: "54c98aab4fde7f30079fdd5a",
+	MetaTagID: "54c98aba4fde7f30079fdd5b",
+	status: 3,
+	LastModified: Date.now(),
+	DateAdded: Date.now(),
+	Tags: [{ _id: new ObjectId(), TagTitle: title, status: 1 }],
+	Think: [],
+	Less: [],
+	More: [],
+});
+
+const buildMediaDocument = ({
+	record,
+	seq,
+	uploaderId,
+	groupTagMap,
+	normalizedDescriptors,
+}) => {
+	const unsplashPhotoId = record["Photo ID"] ? record["Photo ID"].trim() : null;
+	const unsplashImageURL = record["Image Source"] ? record["Image Source"].trim() : null;
+	const unsplashImageTags =
+		record["Descriptors/Concepts/Related tags"] || record["Combined tags (all 4)"] || "";
+	const unsplashImageTitle = record["Title"] ? record["Title"].trim() : null;
+	const unsplashImagePhotographer = record["Photographer"] ? record["Photographer"].trim() : null;
+	const unsplashStyleKeyword = record["StyleKeyword"] ? record["StyleKeyword"].trim() : "";
+	const lightness = record["Lightness"] ? record["Lightness"] : 0;
+	const dominantColors = record["Dominant colors"] ? record["Dominant colors"] : "";
+	const recordLocator = unsplashImageURL ? unsplashImageURL.split("?")[0].split("/").pop() : "";
+	const locator = `${recordLocator || "unsplash"}_${seq}`;
+	const groupTagsPayload = [];
+
+	normalizedDescriptors.forEach((descriptor) => {
+		const tagId = groupTagMap.get(descriptor);
+		if (tagId) {
+			groupTagsPayload.push({
+				_id: new ObjectId(),
+				GroupTagID: tagId,
+			});
+		}
+	});
+
+	return {
+		Prompt: unsplashImageTags,
+		Title: unsplashImageTitle,
+		Photographer: unsplashImagePhotographer,
+		Location: [
+			{
+				Size: "",
+				URL: unsplashImageURL,
+			},
+		],
+		UploadedBy: "admin",
+		UploadedOn: Date.now(),
+		UploaderID: uploaderId || null,
+		Source: "Unsplash",
+		SourceUniqueID: null,
+		Domains: null,
+		AutoId: seq,
+		GroupTags: groupTagsPayload,
+		Collection: null,
+		Status: 1,
+		MetaMetaTags: "5464931fde9f6868484be3d7",
+		MetaTags: null,
+		AddedWhere: "directToPf",
+		IsDeleted: 0,
+		TagType: "",
+		ContentType: "",
+		MediaType: "Link",
+		LinkType: "image",
+		IsUnsplashImage: true,
+		UnsplashPhotoId: unsplashPhotoId,
+		thumbnail: unsplashImageURL,
+		Content: `<img src="${unsplashImageURL}" alt="Link">`,
+		AddedHow: "importExcel",
+		Locator: locator,
+		StyleKeyword: unsplashStyleKeyword,
+		Lightness: lightness ? lightness : 0,
+		DominantColors: dominantColors ? dominantColors : "",
+	};
+};
+
+const importUnsplashImagesV2 = async function (req, res) {
+	let tempUploadDir = null;
+	let savedFilePath = null;
+	try {
+		console.log("[massmediaupload] Incoming request");
+		const { files = {}, fields = {} } = await parseFormAsync(req);
+		console.log("[massmediaupload] Parsed form fields:", Object.keys(fields || {}));
+		console.log("[massmediaupload] Parsed files keys:", Object.keys(files || {}));
+
+		let file = files.myFile0 || {};
+		if (Array.isArray(file)) {
+			file = file[0] || {};
+		}
+		console.log("[massmediaupload] Raw myFile0 object:", file);
+		file.name = file.name ? file.name : (file.originalFilename || file.newFilename || null);
+		console.log("[massmediaupload] File metadata:", {
+			name: file.name,
+			originalFilename: file.originalFilename,
+			newFilename: file.newFilename,
+			size: file.size,
+			filepath: file.filepath || file.path,
+		});
+
+		if (!file.name) {
+			console.warn("[massmediaupload] myFile0 missing or has no name");
+			return res.json({ code: 501, msg: "Wrong Input!" });
+		}
+
+		// Handle keyword import - if this function doesn't exist, return error
+		if (file.name.indexOf("KEYWORDS_IMPORT") > -1) {
+			console.warn("[massmediaupload] Keyword import requested but not implemented in new controller");
+			return res.json({ code: 501, msg: "Keyword import not yet implemented in new controller. Please use mediaControllerOld for keyword imports." });
+		}
+
+		const normalizedJwtRole = typeof req.user?.role === "string"
+			? req.user.role.toLowerCase()
+			: typeof req.user?.Role === "string"
+			? req.user.Role.toLowerCase()
+			: null;
+
+		const sessionSummary = {
+			hasSession: !!req.session,
+			hasAdmin: !!req.session?.admin,
+			hasSubAdmin: !!req.session?.subAdmin,
+			hasUserFromJwt: !!req.user,
+			jwtRole: normalizedJwtRole,
+		};
+		console.log("[massmediaupload] Session summary:", sessionSummary);
+
+		const hasSessionAdmin = !!req.session?.admin;
+		const hasAdminPrivilegesFromSession = hasSessionAdmin;
+		const hasAdminPrivilegesFromJwt = normalizedJwtRole === "admin";
+
+		if (!hasAdminPrivilegesFromSession && !hasAdminPrivilegesFromJwt) {
+			console.warn("[massmediaupload] Missing admin privileges (session or JWT)");
+			return res.json({ code: 401, msg: "Admin session or token not found." });
+		}
+
+		tempUploadDir = fs.mkdtempSync(path.join(os.tmpdir(), "unsplashimport-"));
+		savedFilePath = await moveUploadedFile(file, tempUploadDir, `${dateFormat()}_unsplashimport`);
+		console.log("[massmediaupload] Saved file to:", savedFilePath);
+		const outputJsonPath = path.join(tempUploadDir, "output.json");
+		const rows = await convertXlsxToJson(savedFilePath, outputJsonPath);
+		console.log("[massmediaupload] Parsed rows count:", Array.isArray(rows) ? rows.length : 0);
+
+		const descriptorSet = new Set();
+		const recordsToUpload = [];
+		const recordsToReportError = [];
+
+		rows.forEach((row) => {
+			if (!row["Descriptors/Concepts/Related tags"] && row["Combined tags (all 4)"]) {
+				row["Descriptors/Concepts/Related tags"] =
+					typeof row["Combined tags (all 4)"] === "string" ? row["Combined tags (all 4)"] : "";
+			}
+
+			if (row["Styled images"]) {
+				row.StyleKeyword = typeof row["Styled images"] === "string" ? row["Styled images"].trim() : "";
+			}
+
+			const descriptorString = row["Descriptors/Concepts/Related tags"] || "";
+			const normalizedDescriptors = descriptorString
+				.toString()
+				.split(",")
+				.map(normalizeDescriptor)
+				.filter(Boolean);
+
+			row.__normalizedDescriptors = normalizedDescriptors;
+			normalizedDescriptors.forEach((descriptor) => descriptorSet.add(descriptor));
+
+			if (row["Image Source"]) {
+				recordsToUpload.push(row);
+			} else {
+				recordsToReportError.push(row);
+			}
+		});
+
+		const descriptorRegexes = Array.from(descriptorSet).map(
+			(descriptor) => new RegExp(`^${escapeRegExp(descriptor)}$`, "i")
+		);
+
+		const existingGroupTags = descriptorRegexes.length
+			? await groupTags
+					.find({ $or: [{ status: 1 }, { status: 3 }], GroupTagTitle: { $in: descriptorRegexes } }, { GroupTagTitle: 1 })
+					.lean()
+			: [];
+
+		const groupTagMap = new Map();
+		existingGroupTags.forEach((tag) => {
+			const normalized = normalizeDescriptor(tag.GroupTagTitle);
+			if (normalized) {
+				groupTagMap.set(normalized, String(tag._id));
+			}
+		});
+
+		const descriptorsToCreate = Array.from(descriptorSet).filter((descriptor) => !groupTagMap.has(descriptor));
+		if (descriptorsToCreate.length) {
+			const newRecords = descriptorsToCreate.map((descriptor) => buildGroupTagRecord(descriptor));
+			const chunks = chunkArray(newRecords, 200);
+			for (const chunk of chunks) {
+				const inserted = await groupTags.insertMany(chunk);
+				inserted.forEach((doc) => {
+					const normalized = normalizeDescriptor(doc.GroupTagTitle);
+					if (normalized) {
+						groupTagMap.set(normalized, String(doc._id));
+					}
+				});
+			}
+		}
+
+		const unsplashIds = recordsToUpload
+			.map((record) => (record["Photo ID"] ? record["Photo ID"].trim() : null))
+			.filter(Boolean);
+
+		const existingMediaRecords = unsplashIds.length
+			? await media.find({ UnsplashPhotoId: { $in: unsplashIds }, IsDeleted: false }, { UnsplashPhotoId: 1 }).lean()
+			: [];
+
+		const existingUnsplashIds = new Set(existingMediaRecords.map((doc) => doc.UnsplashPhotoId));
+		const newMediaRecords = [];
+		const uploaderId =
+			req.session?.admin?._id ||
+			req.user?.userId ||
+			req.user?._id ||
+			req.user?.id ||
+			null;
+
+		for (const record of recordsToUpload) {
+			const unsplashPhotoId = record["Photo ID"] ? record["Photo ID"].trim() : null;
+			const unsplashImageURL = record["Image Source"] ? record["Image Source"].trim() : null;
+
+			if (!unsplashPhotoId || !unsplashImageURL) {
+				recordsToReportError.push(record);
+				continue;
+			}
+
+			if (existingUnsplashIds.has(unsplashPhotoId)) {
+				continue;
+			}
+
+			const counter = await counters.findOneAndUpdate({ _id: "userId" }, { $inc: { seq: 1 } }, { new: true });
+			if (!counter || !counter.seq) {
+				console.log("Failed to fetch counter for Unsplash import record.");
+				continue;
+			}
+
+			const mediaDocument = buildMediaDocument({
+				record,
+				seq: counter.seq,
+				uploaderId,
+				groupTagMap,
+				normalizedDescriptors: record.__normalizedDescriptors || [],
+			});
+
+			newMediaRecords.push(mediaDocument);
+		}
+
+		let insertedCount = 0;
+		if (newMediaRecords.length) {
+			const chunks = chunkArray(newMediaRecords, 200);
+			for (const chunk of chunks) {
+				const inserted = await media.insertMany(chunk);
+				insertedCount += inserted.length;
+			}
+		}
+
+		return res.json({
+			code: 200,
+			recordsUploaded: insertedCount,
+			recordsToReportError: recordsToReportError.length,
+			UnsplashPhotoId__AlreadyExists: existingUnsplashIds.size,
+		});
+	} catch (error) {
+		console.error("importUnsplashImagesV2 error:", error);
+		return res.json({ code: 500, msg: "Something went wrong while processing the import." });
+	} finally {
+		if (savedFilePath) {
+			try {
+				await fsPromises.unlink(savedFilePath);
+			} catch (unlinkErr) {
+				console.warn("[massmediaupload] Failed to delete uploaded file:", unlinkErr?.message);
+			}
+		}
+		if (tempUploadDir) {
+			try {
+				const remainingFiles = await fsPromises.readdir(tempUploadDir);
+				await Promise.all(
+					remainingFiles.map((fileName) =>
+						fsPromises.unlink(path.join(tempUploadDir, fileName)).catch(() => null)
+					)
+				);
+				await fsPromises.rmdir(tempUploadDir).catch(() => null);
+			} catch (cleanupErr) {
+				console.warn("[massmediaupload] Failed to clean temp directory:", cleanupErr?.message);
+			}
+		}
+	}
+};
+
+const uploadMassImport = importUnsplashImagesV2;
+
 module.exports = {
   crop_image,
   findAll,
@@ -5040,4 +5397,5 @@ module.exports = {
   updatePost,
   findAllStatus,
   deleteMedia,
+  uploadMassImport,
 };
