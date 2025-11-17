@@ -65,9 +65,9 @@ module.exports = function(router){
 
 
 
-	router.post('/addMassImport',function(req,res){
-		mediaOld.uploadMassImport(req,res);
-	})
+router.post('/addMassImport',function(req,res){
+	media.uploadMassImport(req,res);
+})
 
 	router.post('/viewMassImport',function(req,res){
 		mediaOld.findAllMassImport(req,res);
