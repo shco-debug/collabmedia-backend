@@ -243,6 +243,14 @@ module.exports = function(req, res, next){
 		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}
+	else if(reqUrl.substring(0,7) == '/ebooks'){
+		//console.log("ebooks--- in checkSession.js");
+		var frontendApiPrefix = '/ebooks';
+		var unprotectedRoutes = [
+			// All e-book routes require authentication
+		];
+		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
+	}
 	else if(reqUrl.substring(0,4) == '/fsg' ||
 			reqUrl.substring(0,8) == '/domains' ||
 			reqUrl.substring(0,12) == '/collections' ||

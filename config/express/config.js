@@ -242,6 +242,7 @@ module.exports = (app) => {
 	app.use(express.static(__dirname + '/../../public/office/journale'));
 	app.use(express.static(__dirname + '/../../public/office/website'));
 	app.use(express.static(__dirname + '/../../public/topmost'));
+	app.use(express.static(__dirname + '/../../public/assets/ebooks')); // Serve e-books statically
 	//app.use(express.static(__dirname + '/../../public/office/tree/A Tree - 18- Singlepage.hyperesources'));
 	//app.use(express.static(__dirname + '/../../public/v2'));
 	app.engine('html', (path, opt, fn) => {
@@ -1052,6 +1053,11 @@ module.exports = (app) => {
 	const shareRoutes = express.Router();
 	app.use('/api/share', shareRoutes);
 	router.shareRoutes = shareRoutes;
+	
+	// E-book routes (for e-book stream functionality)
+	const ebookRoutes = express.Router();
+	app.use('/ebooks', ebookRoutes);
+	router.ebookRoutes = ebookRoutes;
 	
 	// Card Details routes (for payment card management)
 	const cardDetailsRoutes = express.Router();

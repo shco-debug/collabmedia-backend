@@ -280,6 +280,7 @@ require("./server/middlewares.js")(router.journalRoutes);
 require("./server/middlewares.js")(router.mediaActionRoutes);
 require("./server/middlewares.js")(router.userActivityRoutes);
 require("./server/middlewares.js")(router.cardDetailsRoutes);
+require("./server/middlewares.js")(router.ebookRoutes);
 require("./server/middlewares.js")(router.mainRoutes);
 
 // NOW load the route handlers AFTER middlewares are applied
@@ -422,6 +423,11 @@ require("./server/routes/frontend/api/relationshipRoutes.js")(
 // Share routes (public - no auth middleware)
 require("./server/routes/frontend/api/shareRoutes.js")(
   router.shareRoutes
+);
+
+// E-book routes
+require("./server/routes/frontend/api/ebookRoutes.js")(
+  router.ebookRoutes
 );
 
 // GPT API Routes

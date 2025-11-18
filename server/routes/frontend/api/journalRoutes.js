@@ -418,6 +418,17 @@ module.exports = function(router){
 	router.post('/getQuestAudioStats', function (req, res){
 		Journal.getQuestAudioStats(req, res);
 	});
+	// Get audio file URL for a post
+	router.post('/getPostAudio', function (req, res){
+		Journal.getPostAudio(req, res);
+	});
+	router.get('/getPostAudio/:postId', function (req, res){
+		Journal.getPostAudio(req, res);
+	});
+	// Serve audio file directly
+	router.get('/servePostAudio/:postId', function (req, res){
+		Journal.servePostAudio(req, res);
+	});
 	router.post('/updateAddDetailsSeen', function (req, res){
 		Journal.updateAddDetailsSeen(req, res);
 	});

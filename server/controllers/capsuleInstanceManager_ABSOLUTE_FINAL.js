@@ -1036,15 +1036,21 @@ const createCapsuleInstance = async (
                     }
                     
                     CapsuleData._id = newCapsuleId;
-                    const streamPagePostNow = getStreamPagePostNow();
-                    await streamPagePostNow(
-                      mediaDocsForStreaming, // Pass full media objects with blend configurations
-                      newPage,
-                      shareWithEmail,
-                      req,
-                      CapsuleData,
-                      newPage.OwnerId // Pass new owner ID for SyncedPost creation
-                    );
+                    // Skip SyncedPost creation for E-book streams - they don't need email delivery
+                    const streamType = CapsuleData.LaunchSettings?.StreamType || "";
+                    if (streamType !== "E-book") {
+                      const streamPagePostNow = getStreamPagePostNow();
+                      await streamPagePostNow(
+                        mediaDocsForStreaming, // Pass full media objects with blend configurations
+                        newPage,
+                        shareWithEmail,
+                        req,
+                        CapsuleData,
+                        newPage.OwnerId // Pass new owner ID for SyncedPost creation
+                      );
+                    } else {
+                      console.log(`📚 E-book stream detected - skipping SyncedPost creation for capsule ${newCapsuleId}`);
+                    }
                   }
                 }
               }
