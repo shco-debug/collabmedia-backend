@@ -27,6 +27,14 @@ var sharp = require("sharp");
 var path = require("path");
 var shortid = require("shortid");
 var os = require("os");
+// Import capsulesController for shared helper functions (lazy load to avoid circular dependency)
+var capsulesController = null;
+var getCapsulesController = function() {
+  if (!capsulesController) {
+    capsulesController = require('./capsulesController.js');
+  }
+  return capsulesController;
+};
 
 const { ObjectId } = mongoose.Types;
 const fsPromises = fs.promises;
@@ -3810,7 +3818,7 @@ const getUserPosts = async (req, res) => {
     const hasPrevPage = pageNum > 1;
 
     // Format response data
-    const formattedPosts = posts.map((post) => {
+    let formattedPosts = posts.map((post) => {
       const postIdStr = post._id ? post._id.toString() : null;
 
       console.log("📝 Post interactions snapshot:", {
@@ -3942,6 +3950,29 @@ const getUserPosts = async (req, res) => {
 
       return formattedPost;
     });
+
+    // ✅ Add audio file data to posts using the generic helper function from capsulesController
+    const CapsuleController = getCapsulesController();
+    const getPostAudioFileData = CapsuleController.getPostAudioFileData;
+
+    // Process posts and add audio file data
+    const postsWithAudio = await Promise.all(formattedPosts.map(async (post) => {
+      const postIdForAudio = post._id || post.id;
+      if (postIdForAudio) {
+        const audioData = await getPostAudioFileData(postIdForAudio);
+        if (audioData) {
+          post.audioFile = audioData;
+        } else {
+          post.audioFile = null;
+        }
+      } else {
+        post.audioFile = null;
+      }
+      return post;
+    }));
+
+    // Update formattedPosts with audio data
+    formattedPosts = postsWithAudio;
 
     // Response
     res.status(200).json({

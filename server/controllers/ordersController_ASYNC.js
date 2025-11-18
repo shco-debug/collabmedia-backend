@@ -524,6 +524,12 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
       return false;
     }
 
+    // Skip SyncedPost creation for E-book streams - they don't need email delivery
+    if (__StreamTYPE === "E-book") {
+      console.log(`📚 E-book stream detected - skipping mapPostsAsPerSettings for capsule ${StreamId}`);
+      return true; // Return true to indicate success, but skip SyncedPost creation
+    }
+
     if (firstTimeFlag) {
       //1) fetch all saved SyncedPosts
       var conditions = {
@@ -3904,9 +3910,12 @@ var buyNow = async function (req, res) {
         }
 
         var CartItem_totalOwners = validCartItemsOwners.length;
+        // Subscribers get free access to ALL published streams, not just the ones at subscription time
         var isSubscriberEligible =
           subscriberInfo.isSubscriber &&
-          subscriberInfo.streamIds.includes(String(CartItem_capsuleId));
+          cartItemsObj.CapsuleId &&
+          cartItemsObj.CapsuleId.IsPublished === true &&
+          cartItemsObj.CapsuleId.Origin === "published";
 
         var CartItem_totalPaymentPerCapsule = "0.00";
         var CartItem_totalCommissionPerCapsule = "0.00";
@@ -3929,10 +3938,12 @@ var buyNow = async function (req, res) {
           CartItem_capsulePrice = "0.00";
         } else {
           if (subscriberInfo.isSubscriber) {
-            console.log("[Subscription] Capsule not covered by subscriber snapshot", {
+            console.log("[Subscription] Capsule not eligible for subscriber coverage (not published)", {
               capsuleId: String(CartItem_capsuleId),
               userId: req.session.user?._id,
               userEmail: req.session.user?.Email,
+              isPublished: cartItemsObj.CapsuleId?.IsPublished,
+              origin: cartItemsObj.CapsuleId?.Origin,
             });
           }
           CartItem_totalPaymentPerCapsule = parseFloat(
@@ -4191,6 +4202,32 @@ var buyNow = async function (req, res) {
               console.log('   Token:', token);
               console.log('   Email:', email);
               console.log('   Amount: $' + order.TotalPayment);
+              
+              // Check if amount is zero - subscribers get free access
+              const paymentAmount = parseFloat(order.TotalPayment);
+              if (paymentAmount <= 0) {
+                console.log('💰 Zero payment amount detected - processing as free order');
+                var buy = {
+                  paid: null,
+                  failure_code: null,
+                };
+                var fromFree = "free";
+                console.log(
+                  "---------------------- Calling savedOrder (zero payment) --------------"
+                );
+                savedOrder(
+                  buy,
+                  orderInit,
+                  fromFree,
+                  rdm_credit,
+                  savedResult,
+                  order,
+                  req,
+                  res,
+                  isSelectivePurchase
+                );
+                return; // Exit early, don't create Stripe charge
+              }
               
               const customer = await getStripe().customers.create({
                 source: token,

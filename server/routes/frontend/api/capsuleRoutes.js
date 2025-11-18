@@ -373,6 +373,9 @@ module.exports = function(router){
 	router.post('/getUserMixedFeedPosts',function(req,res){
 		Capsule.getUserMixedFeedPosts(req,res);
 	});
+	router.post('/getUserFeedPosts',function(req,res){
+		Capsule.getUserFeedPosts(req,res);
+	});
 	// ⚡ NEW: Get more replies for a specific comment (lazy loading)
 	router.get('/getCommentReplies',function(req,res){
 		Capsule.getCommentReplies(req,res);
@@ -447,6 +450,10 @@ module.exports = function(router){
 	// Get all posts from a capsule (chapters -> pages -> media)
 	router.post('/getCapsulePosts', function(req, res) {
 		Capsule.getCapsulePosts(req, res);
+	});
+
+	router.post('/getEbookPosts', function(req, res) {
+		Capsule.getEbookPosts(req, res);
 	});
 	
 	// Get stream posts using SyncedPost collection (optimized, same as feed page)

@@ -8993,7 +8993,13 @@ var getBlendImages = async function (req, res) {
       var rankObj2 = {};
       noOfMediaPerRankLimit = 500;
 
-      if (PostStreamType === "1UnsplashPost") {
+      // ✅ FIX: For 1MJ/1Unsplash posts, create MediaSet2 with source image repeated
+      if (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost") {
+        // Use source image URL if available (defined earlier in function scope), otherwise fallback to placeholder
+        const sourceImgUrl = typeof sourceImageUrl !== 'undefined' && sourceImageUrl 
+          ? sourceImageUrl 
+          : "09182022204653_35889.png";
+        
         //reset MediaSet2, MediaSet2Length and noOfMediaPerRankLimit
         MediaSet2Length = MediaSet1Length;
         noOfMediaPerRankLimit = MediaSet2Length;
@@ -9003,10 +9009,10 @@ var getBlendImages = async function (req, res) {
           MediaSet2.push({
             value: {
               Ranks: 1,
-              thumbnail: null,
+              thumbnail: sourceImgUrl,
               Location: [
                 {
-                  URL: "09182022204653_35889.png",
+                  URL: sourceImgUrl,
                 },
               ],
               _id: null,
@@ -9015,6 +9021,10 @@ var getBlendImages = async function (req, res) {
               Prompt: "",
             },
           });
+        }
+        
+        if (typeof sourceImageUrl !== 'undefined' && sourceImageUrl) {
+          console.log(`✅ Created ${MediaSet2Length} entries in MediaSet2 for ${PostStreamType} using source image`);
         }
       }
 
@@ -15238,23 +15248,31 @@ var removeStreamPostLike = async function(req, res) {
 			};
 		} else {
 			// Fallback to original multi-parameter approach for backward compatibility
+			// Match how likes are checked in addStreamPostLike - use UserId and SocialPostId as primary match
 			var conditions = {
-				UserId : loginUserId,
-				SocialPageId : socialPageId ? new ObjectId(socialPageId) : null,
-				SocialPostId : req.body.SocialPostId ? new ObjectId(req.body.SocialPostId) : null,
-				hexcode_blendedImage : req.body.hexcode_blendedImage ? req.body.hexcode_blendedImage : null,
+				UserId : new ObjectId(loginUserId),
+				// ⚠️ SocialPostId is stored as a string in StreamLikes (see addStreamPostLike)
+				// Do NOT convert to ObjectId here or the match will fail for existing likes
+				SocialPostId : req.body.SocialPostId ? String(req.body.SocialPostId) : null,
 				IsDeleted: 0
 			};
 
-			// Handle hexcode_blendedImage matching for null/undefined cases
-			if (!req.body.hexcode_blendedImage) {
+			// Handle hexcode_blendedImage matching - either exact match or null/undefined (same as addStreamPostLike)
+			if (req.body.hexcode_blendedImage) {
+				conditions.hexcode_blendedImage = req.body.hexcode_blendedImage;
+			} else {
+				// Match documents where hexcode_blendedImage is null, undefined, or empty string
 				conditions.$or = [
 					{ hexcode_blendedImage: null },
 					{ hexcode_blendedImage: { $exists: false } },
 					{ hexcode_blendedImage: "" }
 				];
-				delete conditions.hexcode_blendedImage;
 			}
+
+			// Note: SocialPageId is NOT used in the match condition because:
+			// 1. addStreamPostLike doesn't use it when checking for existing likes
+			// 2. It's only used for fetching the updated likes list after removal
+			// This ensures consistency with how likes are created and checked
 
 			updateConditions = conditions;
 		}
@@ -21302,6 +21320,38 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       console.log("🔍 DEBUG: MediaSet1 length:", MediaSet1.length);
       console.log("🔍 DEBUG: MediaSet2 length:", MediaSet2.length);
       
+      // ✅ FIX: For 1MJ/1Unsplash posts, fetch source image (single image, no blending)
+      var sourceImageUrl = null;
+      var sourceMediaId = null;
+      if ((PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost") && req.body.PostId) {
+        try {
+          const sourceMedia = await Media.findById(req.body.PostId).lean();
+          sourceMediaId = sourceMedia ? String(sourceMedia._id) : null;
+          if (sourceMedia && sourceMedia.Location && sourceMedia.Location.length > 0) {
+            // Get the aspectfit URL or first available URL
+            const aspectfitLoc = sourceMedia.Location.find(loc => loc.Size === "aspectfit");
+            sourceImageUrl = aspectfitLoc 
+              ? aspectfitLoc.URL 
+              : (sourceMedia.Location[0].URL || null);
+            
+            // If URL is relative, make it absolute
+            if (sourceImageUrl && !sourceImageUrl.startsWith("http")) {
+              const bucket = process.env.AWS_BUCKET_NAME || "scrpt";
+              const region = process.env.AWS_REGION || "us-east-1";
+              if (sourceImageUrl.startsWith("/")) {
+                sourceImageUrl = `https://${bucket}.s3.${region}.amazonaws.com${sourceImageUrl}`;
+              } else {
+                sourceImageUrl = `https://${bucket}.s3.${region}.amazonaws.com/scrptMedia/img/aspectfit/${sourceImageUrl}`;
+              }
+            }
+            
+            console.log("✅ Source image URL for 1MJ/1Unsplash:", sourceImageUrl);
+          }
+        } catch (error) {
+          console.log("⚠️ Error fetching source image:", error.message);
+        }
+      }
+      
       // Log final selected media with their ranks
       // if (MediaSet1.length > 0) {
       //   console.log("🏆 FINAL SELECTED MEDIA SET 1:");
@@ -21429,7 +21479,13 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       var rankObj2 = {};
       noOfMediaPerRankLimit = 500;
 
-      if (PostStreamType === "1UnsplashPost") {
+      // ✅ FIX: For 1MJ/1Unsplash posts, create MediaSet2 with source image repeated
+      if (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost") {
+        // Use source image URL if available (defined earlier in function scope), otherwise fallback to placeholder
+        const sourceImgUrl = typeof sourceImageUrl !== 'undefined' && sourceImageUrl 
+          ? sourceImageUrl 
+          : "09182022204653_35889.png";
+        
         //reset MediaSet2, MediaSet2Length and noOfMediaPerRankLimit
         MediaSet2Length = MediaSet1Length;
         noOfMediaPerRankLimit = MediaSet2Length;
@@ -21439,10 +21495,10 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
           MediaSet2.push({
             value: {
               Ranks: 1,
-              thumbnail: null,
+              thumbnail: sourceImgUrl,
               Location: [
                 {
-                  URL: "09182022204653_35889.png",
+                  URL: sourceImgUrl,
                 },
               ],
               _id: null,
@@ -21451,6 +21507,10 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
               Prompt: "",
             },
           });
+        }
+        
+        if (typeof sourceImageUrl !== 'undefined' && sourceImageUrl) {
+          console.log(`✅ Created ${MediaSet2Length} entries in MediaSet2 for ${PostStreamType} using source image`);
         }
       }
 
@@ -21516,8 +21576,16 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       var set1 = finalMediaArr[0].Medias ? finalMediaArr[0].Medias : [];
       var set2 = finalMediaArr[1].Medias ? finalMediaArr[1].Medias : [];
       var selectedIndexes = [];
-      var selectedLengthForLoop =
-        set1.length > set2.length ? set2.length : set1.length;
+      
+      // ✅ FIX: For 1MJ/1Unsplash, use set1 length (single image, no blending)
+      var selectedLengthForLoop;
+      if (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost") {
+        // For single image posts, create versions using only source image
+        selectedLengthForLoop = set1.length > 30 ? 30 : set1.length;
+      } else {
+        // For dual image posts, use minimum of set1 and set2
+        selectedLengthForLoop = set1.length > set2.length ? set2.length : set1.length;
+      }
 
       //save maximum of 30 selection if suggested blend images are more than 30
       selectedLengthForLoop =
@@ -21525,28 +21593,37 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
 
       var selectedArr = [];
       for (var loop = 0; loop < selectedLengthForLoop; loop++) {
-        // Fix: Check if MediaURL2[0].URL already starts with http:// or https://
-        var mediaUrl2_1 = set1[loop].MediaURL2 && set1[loop].MediaURL2[0] && set1[loop].MediaURL2[0].URL
-          ? set1[loop].MediaURL2[0].URL
-          : "";
-        var blendImage1 = set1[loop].MediaURL
-          ? set1[loop].MediaURL
-          : (mediaUrl2_1.startsWith("http://") || mediaUrl2_1.startsWith("https://"))
-            ? mediaUrl2_1
-            : mediaUrl2_1
-              ? "https://www.scrpt.com/assets/Media/img/300/" + mediaUrl2_1
-              : "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
+        var blendImage1, blendImage2;
         
-        var mediaUrl2_2 = set2[loop].MediaURL2 && set2[loop].MediaURL2[0] && set2[loop].MediaURL2[0].URL
-          ? set2[loop].MediaURL2[0].URL
-          : "";
-        var blendImage2 = set2[loop].MediaURL
-          ? set2[loop].MediaURL
-          : (mediaUrl2_2.startsWith("http://") || mediaUrl2_2.startsWith("https://"))
-            ? mediaUrl2_2
-            : mediaUrl2_2
-              ? "https://www.scrpt.com/assets/Media/img/300/" + mediaUrl2_2
-              : "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
+        // ✅ FIX: For 1MJ/1Unsplash, use source image only (no blending)
+        if (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost") {
+          // Use source image for both (single image post)
+          blendImage1 = sourceImageUrl || "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
+          blendImage2 = null; // No second image for single image posts
+        } else {
+          // Dual image posts - use images from both sets
+          var mediaUrl2_1 = set1[loop].MediaURL2 && set1[loop].MediaURL2[0] && set1[loop].MediaURL2[0].URL
+            ? set1[loop].MediaURL2[0].URL
+            : "";
+          blendImage1 = set1[loop].MediaURL
+            ? set1[loop].MediaURL
+            : (mediaUrl2_1.startsWith("http://") || mediaUrl2_1.startsWith("https://"))
+              ? mediaUrl2_1
+              : mediaUrl2_1
+                ? "https://www.scrpt.com/assets/Media/img/300/" + mediaUrl2_1
+                : "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
+          
+          var mediaUrl2_2 = set2[loop].MediaURL2 && set2[loop].MediaURL2[0] && set2[loop].MediaURL2[0].URL
+            ? set2[loop].MediaURL2[0].URL
+            : "";
+          blendImage2 = set2[loop].MediaURL
+            ? set2[loop].MediaURL
+            : (mediaUrl2_2.startsWith("http://") || mediaUrl2_2.startsWith("https://"))
+              ? mediaUrl2_2
+              : mediaUrl2_2
+                ? "https://www.scrpt.com/assets/Media/img/300/" + mediaUrl2_2
+                : "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
+        }
 
       // ✅ FIXED: For SelectedKeywords, use primary keywords based on post type
         var selectedKeywords = [];
@@ -21594,25 +21671,58 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
             : [],
           MetaData_1: set1[loop].AllMetaData ? set1[loop].AllMetaData : [],
 
-          SecondaryKeywordsCount_2: set2[loop].SecondaryKeywordsCount
-            ? set2[loop].SecondaryKeywordsCount
-            : 0,
-          SecondaryKeywordsMap_2: set2[loop].SecondaryKeywordsMap
-            ? set2[loop].SecondaryKeywordsMap
-            : [],
-          MediaSelectionCriteriaCount_2: set2[loop].MediaSelectionCriteriaCount
-            ? set2[loop].MediaSelectionCriteriaCount
-            : 0,
-          MediaSelectionCriteriaArr_2: set2[loop].MediaSelectionCriteriaArr
-            ? set2[loop].MediaSelectionCriteriaArr
-            : [],
-          MetaData_2: set2[loop].AllMetaData ? set2[loop].AllMetaData : {},
+          SecondaryKeywordsCount_2: (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost") 
+            ? 0 
+            : (set2[loop] && set2[loop].SecondaryKeywordsCount ? set2[loop].SecondaryKeywordsCount : 0),
+          SecondaryKeywordsMap_2: (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost")
+            ? []
+            : (set2[loop] && set2[loop].SecondaryKeywordsMap ? set2[loop].SecondaryKeywordsMap : []),
+          MediaSelectionCriteriaCount_2: (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost")
+            ? 0
+            : (set2[loop] && set2[loop].MediaSelectionCriteriaCount ? set2[loop].MediaSelectionCriteriaCount : 0),
+          MediaSelectionCriteriaArr_2: (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost")
+            ? []
+            : (set2[loop] && set2[loop].MediaSelectionCriteriaArr ? set2[loop].MediaSelectionCriteriaArr : []),
+          MetaData_2: (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost")
+            ? {}
+            : (set2[loop] && set2[loop].AllMetaData ? set2[loop].AllMetaData : {}),
         };
-        obj = CommonAlgo.commonModule.getBlendConfigByLightnessScores(
-          obj,
-          set1[loop].Lightness || 0,
-          set2[loop].Lightness || 0
-        );
+
+        // ✅ FIX: Generate unique hexcode for 1MJ/1Unsplash using source image + MediaId from set1
+        let hexcodeMeta;
+        if (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost") {
+          // For single image posts, use source image + MediaId from set1 to create unique hexcode per version
+          const versionIdentifier = set1[loop] && set1[loop].MediaId 
+            ? String(set1[loop].MediaId) 
+            : `version_${loop}`;
+          const dataToHash = `${sourceImageUrl || blendImage1}::${versionIdentifier}::single`;
+          const hexcode = crypto.createHash("md5").update(dataToHash).digest("hex");
+          hexcodeMeta = {
+            hexcode: hexcode,
+            hexcodePath: hexcode ? `/streamposts/${hexcode}.png` : null
+          };
+        } else {
+          // For dual image posts, use standard blend pair hexcode
+          hexcodeMeta = getHexcodeForBlendPair(
+            obj.blendImage1,
+            obj.blendImage2,
+            obj.blendMode || "overlay"
+          );
+        }
+        obj.hexcode_blendedImage = hexcodeMeta.hexcodePath;
+        obj.hexcode = hexcodeMeta.hexcode;
+
+        // Only apply blend config for dual image posts
+        if (PostStreamType !== "1MJPost" && PostStreamType !== "1UnsplashPost") {
+          obj = CommonAlgo.commonModule.getBlendConfigByLightnessScores(
+            obj,
+            set1[loop].Lightness || 0,
+            set2[loop] && set2[loop].Lightness ? set2[loop].Lightness : 0
+          );
+        } else {
+          // For single image posts, set blendMode to null (no blending)
+          obj.blendMode = null;
+        }
 
         selectedArr.push(obj);
 
@@ -21679,6 +21789,7 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
                 PostStatement: PostStatement,
                 PostStreamType: PostStreamType,
                 UpdatedOn: Date.now(),
+            hexcode_blendedImage: firstBlend.hexcode_blendedImage || null,
                 // Store all blend configurations for reference
                 allBlendConfigurations: SelectedBlendImages
               };
@@ -23158,6 +23269,173 @@ var getQuestAudioStats = async function (req, res) {
   return res.json({ code: 200, results: questIdsWithAudio });
 };
 
+// Get audio file URL for a specific post ID
+var getPostAudio = async function (req, res) {
+  try {
+    var postId = req.body.postId || req.params.postId || req.query.postId || null;
+    
+    if (!postId) {
+      return res.json({
+        code: 400,
+        message: "Post ID is required",
+        results: null
+      });
+    }
+
+    // Check for .mp3 file (default format) - MPEG-1 Audio Layer 3
+    // Audio files are stored in public/assets/postaudios
+    var audioFile = __dirname + "/../../public/assets/postaudios/" + postId + ".mp3";
+    var fileExists = await isFileExists(audioFile);
+    
+    // If .mp3 doesn't exist, try other common audio formats including MPEG formats
+    // .mp3 is MPEG-1 Audio Layer 3 (most common MPEG audio format)
+    // Also support other MPEG audio formats: .mp2, .mp1, .mpa, .mpeg
+    var audioFormats = [
+      ".mp3",   // MPEG-1 Audio Layer 3 (most common)
+      ".mp2",   // MPEG-1 Audio Layer 2
+      ".mp1",   // MPEG-1 Audio Layer 1
+      ".mpa",   // MPEG audio
+      ".mpeg",  // MPEG audio (less common)
+      ".wav",   // Waveform Audio
+      ".m4a",   // MPEG-4 Audio
+      ".ogg",   // Ogg Vorbis
+      ".aac",   // Advanced Audio Coding
+      ".flac",  // Free Lossless Audio Codec
+      ".wma"    // Windows Media Audio
+    ];
+    var foundFormat = null;
+    var foundFile = null;
+    
+    if (fileExists) {
+      foundFormat = ".mp3";
+      foundFile = audioFile;
+    } else {
+      for (var i = 0; i < audioFormats.length; i++) {
+        var testFile = __dirname + "/../../public/assets/postaudios/" + postId + audioFormats[i];
+        if (await isFileExists(testFile)) {
+          foundFormat = audioFormats[i];
+          foundFile = testFile;
+          break;
+        }
+      }
+    }
+
+    if (!foundFile) {
+      return res.json({
+        code: 404,
+        message: "Audio file not found for this post",
+        results: null
+      });
+    }
+
+    // Get base URL from environment or use default
+    var baseUrl = process.env.HOST_URL || process.HOST_URL || "http://localhost:3002";
+    
+    // Construct the URL (static files are served from /public, so /assets/postaudios/ is accessible)
+    var audioUrl = baseUrl + "/assets/postaudios/" + postId + foundFormat;
+
+    return res.json({
+      code: 200,
+      message: "Audio file found",
+      results: {
+        postId: postId,
+        audioUrl: audioUrl,
+        format: foundFormat,
+        exists: true
+      }
+    });
+  } catch (err) {
+    console.error('Error in getPostAudio:', err);
+    return res.json({
+      code: 500,
+      message: "Error fetching audio file",
+      error: err.message,
+      results: null
+    });
+  }
+};
+
+// Serve audio file directly (alternative endpoint)
+var servePostAudio = async function (req, res) {
+  try {
+    var postId = req.params.postId || req.body.postId || req.query.postId || null;
+    
+    if (!postId) {
+      return res.status(400).json({
+        code: 400,
+        message: "Post ID is required"
+      });
+    }
+
+    // Try different audio formats including MPEG formats
+    // .mp3 is MPEG-1 Audio Layer 3 (most common MPEG audio format)
+    // Also support other MPEG audio formats: .mp2, .mp1, .mpa, .mpeg
+    // Audio files are stored in public/assets/postaudios
+    var audioFormats = [
+      ".mp3",   // MPEG-1 Audio Layer 3 (most common)
+      ".mp2",   // MPEG-1 Audio Layer 2
+      ".mp1",   // MPEG-1 Audio Layer 1
+      ".mpa",   // MPEG audio
+      ".mpeg",  // MPEG audio (less common)
+      ".wav",   // Waveform Audio
+      ".m4a",   // MPEG-4 Audio
+      ".ogg",   // Ogg Vorbis
+      ".aac",   // Advanced Audio Coding
+      ".flac",  // Free Lossless Audio Codec
+      ".wma"    // Windows Media Audio
+    ];
+    var foundFile = null;
+    var foundFormat = null;
+    
+    for (var i = 0; i < audioFormats.length; i++) {
+      var testFile = __dirname + "/../../public/assets/postaudios/" + postId + audioFormats[i];
+      if (await isFileExists(testFile)) {
+        foundFile = testFile;
+        foundFormat = audioFormats[i];
+        break;
+      }
+    }
+
+    if (!foundFile) {
+      return res.status(404).json({
+        code: 404,
+        message: "Audio file not found for this post"
+      });
+    }
+
+    // Set appropriate content type based on format
+    var contentTypeMap = {
+      ".mp3": "audio/mpeg",      // MPEG-1 Audio Layer 3
+      ".mp2": "audio/mpeg",      // MPEG-1 Audio Layer 2
+      ".mp1": "audio/mpeg",      // MPEG-1 Audio Layer 1
+      ".mpa": "audio/mpeg",      // MPEG audio
+      ".mpeg": "audio/mpeg",     // MPEG audio
+      ".wav": "audio/wav",
+      ".m4a": "audio/mp4",       // MPEG-4 Audio
+      ".ogg": "audio/ogg",
+      ".aac": "audio/aac",
+      ".flac": "audio/flac",
+      ".wma": "audio/x-ms-wma"
+    };
+    
+    var contentType = contentTypeMap[foundFormat] || "audio/mpeg";
+    
+    // Set headers and send file
+    res.setHeader("Content-Type", contentType);
+    res.setHeader("Content-Disposition", `inline; filename="${postId}${foundFormat}"`);
+    // Use path.join for cross-platform compatibility
+    var path = require('path');
+    res.sendFile(path.resolve(foundFile));
+  } catch (err) {
+    console.error('Error in servePostAudio:', err);
+    return res.status(500).json({
+      code: 500,
+      message: "Error serving audio file",
+      error: err.message
+    });
+  }
+};
+
 var getUnsubscribeIdByEmail = function (req, res) {
   var email = req.query.email ? req.query.email : "";
   res.send(
@@ -23185,17 +23463,17 @@ async function __getPostHexCodeOfFirstBlendedImageSet(pageId, postId) {
       : [];
 
     if (PageStreamMap.length) {
-      let blendImage1 = PageStreamMap[0].blendImage1;
-      let blendImage2 = PageStreamMap[0].blendImage2;
-      let blendOption = PageStreamMap[0].blendMode || "overlay";
-
-      if (blendImage1 && blendImage2 && blendOption) {
-        let data = blendImage1 + blendImage2 + blendOption;
-        var hexcode = crypto.createHash("md5").update(data).digest("hex");
-        if (hexcode) {
-          hexcode_blendedImage = `/streamposts/${hexcode}.png`;
-        }
+      const firstBlend = PageStreamMap[0] || {};
+      if (firstBlend.hexcode_blendedImage) {
+        return firstBlend.hexcode_blendedImage;
       }
+
+      const hexMeta = getHexcodeForBlendPair(
+        firstBlend.blendImage1,
+        firstBlend.blendImage2,
+        firstBlend.blendMode
+      );
+      hexcode_blendedImage = hexMeta.hexcodePath;
     }
   }
   return hexcode_blendedImage;
@@ -23206,17 +23484,12 @@ function __getPostHexCodeOfGivenBlendedImageSet(
   blendImage2,
   blendMode
 ) {
-  blendImage1 = blendImage1 || null;
-  blendImage2 = blendImage2 || null;
-  blendOption = blendMode || "overlay";
-  if (blendImage1 && blendImage2 && blendOption) {
-    let data = blendImage1 + blendImage2 + blendOption;
-    var hexcode = crypto.createHash("md5").update(data).digest("hex");
-    if (hexcode) {
-      hexcode_blendedImage = `/streamposts/${hexcode}.png`;
-    }
-  }
-  return hexcode_blendedImage;
+  const hexMeta = getHexcodeForBlendPair(
+    blendImage1 || null,
+    blendImage2 || null,
+    blendMode
+  );
+  return hexMeta.hexcodePath;
 }
 
 async function __getUserIdByEmail(email) {
@@ -24690,6 +24963,26 @@ function getTagTypeByTagName(tag) {
   return TagType;
 }
 
+function getHexcodeForBlendPair(blendImage1, blendImage2, blendMode) {
+  const normalizedImage1 =
+    typeof blendImage1 === "string" ? blendImage1.trim() : "";
+  const normalizedImage2 =
+    typeof blendImage2 === "string" ? blendImage2.trim() : "";
+  const normalizedMode = blendMode || "overlay";
+
+  if (!normalizedImage1 && !normalizedImage2) {
+    return { hexcode: null, hexcodePath: null };
+  }
+
+  const dataToHash = `${normalizedImage1}::${normalizedImage2}::${normalizedMode}`;
+  const hexcode = crypto.createHash("md5").update(dataToHash).digest("hex");
+
+  return {
+    hexcode,
+    hexcodePath: hexcode ? `/streamposts/${hexcode}.png` : null,
+  };
+}
+
 var addGTAsyncAwait__INTERNAL_API = async function (req, res) {
   console.log("🚀 addGTAsyncAwait__INTERNAL_API STARTED");
   console.log("📅 Timestamp:", new Date().toISOString());
@@ -25124,17 +25417,23 @@ var setupStream_BROWSER_API = async function (req, res) {
   var data = req.query || {};
   const actorId = toObjectIdIfPossible(getActorUserIdFromRequest(req) || DEFAULT_STREAM_OWNER_ID);
 
+  // Support StreamType parameter: "" (default/regular), "Group", or "E-book"
+  const streamType = data.StreamType || "";
+  const streamFlow = data.StreamFlow || "Topic";
+  const audience = data.Audience || "BUYERS";
+  const shareMode = data.ShareMode || "private";
+
   data = {
     CreaterId: actorId,
     OwnerId: actorId,
     Title: data.Title || "Untitled Stream",
     LaunchSettings: {
       IsInvitationSent: false,
-      StreamType: "",
+      StreamType: streamType,
       Invitees: [],
       OthersData: [],
-      ShareMode: "private",
-      Audience: "BUYERS",
+      ShareMode: shareMode,
+      Audience: audience,
       CapsuleFor: "Stream",
     },
     Origin: "created",
@@ -25144,7 +25443,7 @@ var setupStream_BROWSER_API = async function (req, res) {
     IsHidden: parseInt(data.store || 0) === 1 ? false : true,
     DiscountPrice: 0,
     Price: 24.99,
-    StreamFlow: "Topic",
+    StreamFlow: streamFlow,
   };
 
   let capsuleResult = await Capsule(data).save();
@@ -25215,16 +25514,23 @@ var setupStream_BROWSER_API = async function (req, res) {
     console.error("Failed to link page to chapter", err);
   }
 
+  // Get base URL from environment variables
+  const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://www.scrpt.com';
+  // Ensure baseUrl doesn't have trailing slash
+  const cleanBaseUrl = baseUrl.replace(/\/$/, '');
+
   var response = {
     status: 200,
     message:
       "Stream container has been created successfully. you can use this to generate your stream.",
     StreamTitle: capsuleResult.Title || "",
+    StreamType: streamType || "",
+    StreamFlow: streamFlow,
     CapsuleId: capsuleResult._id || "",
     ChapterId: chapterResult._id || "",
     PageId: pageResult._id || "",
-    settings_url: `https://www.scrpt.com/ls/${capsuleResult._id}/AI`,
-    space_url: `https://www.scrpt.com/space/${chapterResult._id}/${pageResult._id}`,
+    settings_url: `${cleanBaseUrl}/ls/${capsuleResult._id}/AI`,
+    space_url: `${cleanBaseUrl}/space/${chapterResult._id}/${pageResult._id}`,
   };
   return res.json(response);
 };
@@ -25442,6 +25748,8 @@ exports.updatePostActionAnnouncementSeenLog =
   updatePostActionAnnouncementSeenLog;
 
 exports.getQuestAudioStats = getQuestAudioStats;
+exports.getPostAudio = getPostAudio;
+exports.servePostAudio = servePostAudio;
 
 exports.updateAddDetailsSeen = updateAddDetailsSeen;
 exports.updateWelcomeSeen = updateWelcomeSeen;
