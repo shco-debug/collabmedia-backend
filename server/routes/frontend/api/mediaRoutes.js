@@ -33,6 +33,14 @@ module.exports = function (router) {
     CronJobsModule.SynedPostEmailCronApi(req, res);
   });
 
+  router.get("/processSubscriptionRenewalsApi", function (req, res) {
+    CronJobsModule.processSubscriptionRenewalsApi(req, res);
+  });
+
+  router.get("/expireDueSubscriptionsApi", function (req, res) {
+    CronJobsModule.expireDueSubscriptionsApi(req, res);
+  });
+
   // 🧪 TEST ENDPOINT: Create a test SyncedPost for delivery testing
   router.get("/createTestSyncedPost", function (req, res) {
     CronJobsModule.createTestSyncedPost(req, res);

@@ -10198,10 +10198,33 @@ var addCommentOnSocialPost = async function(req, res) {
 	}
 
 
+	// ✅ CRITICAL: SocialPostId MUST be SyncedPost._id (not Media document's PostId)
+	// This is the _id from the SyncedPost collection, which is what the frontend sends
+	var socialPostId = null;
+	if (req.body.SocialPostId) {
+		try {
+			socialPostId = new mongoose.Types.ObjectId(req.body.SocialPostId);
+			console.log('✅ [streamController] Valid SocialPostId (SyncedPost._id):', socialPostId);
+		} catch (e) {
+			console.error('❌ [streamController] Invalid SocialPostId format:', req.body.SocialPostId);
+			return res.status(400).json({
+				code: 400,
+				msg: "Invalid SocialPostId format. Must be a valid SyncedPost _id (ObjectId).",
+				error: e.message
+			});
+		}
+	} else {
+		console.error('❌ [streamController] Missing SocialPostId (SyncedPost._id)');
+		return res.status(400).json({
+			code: 400,
+			msg: "SocialPostId (SyncedPost._id) is required."
+		});
+	}
+
 	var dataToSave = {
 		UserId : req.session.user._id,
-		SocialPageId : req.body.SocialPageId ? req.body.SocialPageId : null,
-		SocialPostId : req.body.SocialPostId ? req.body.SocialPostId : null,
+		SocialPageId : req.body.SocialPageId ? new mongoose.Types.ObjectId(req.body.SocialPageId) : null,
+		SocialPostId : socialPostId, // ✅ SyncedPost._id (NOT Media document's PostId)
 		hexcode_blendedImage : req.body.hexcode_blendedImage ? req.body.hexcode_blendedImage : null,
 		Comment : req.body.Comment ? req.body.Comment : null,
 		PrivacySetting : req.body.PrivacySetting ? req.body.PrivacySetting : "PublicWithName"
@@ -10228,9 +10251,11 @@ var addCommentOnSocialPost = async function(req, res) {
 	}
 
 	// ✅ DEBUG: Log what's being saved
-	console.log('💾 Saving comment with data:', JSON.stringify({
+	console.log('💾 [streamController] Saving comment with data:', JSON.stringify({
+		SocialPostId: dataToSave.SocialPostId, // ✅ SyncedPost._id
+		SocialPageId: dataToSave.SocialPageId,
 		UserId: dataToSave.UserId,
-		Comment: dataToSave.Comment,
+		Comment: dataToSave.Comment ? dataToSave.Comment.substring(0, 50) + '...' : null,
 		PrivacySetting: dataToSave.PrivacySetting,
 		OwnerId: dataToSave.OwnerId || 'NOT SET',
 		ParentId: dataToSave.ParentId || 'NOT SET'
@@ -10419,20 +10444,51 @@ var addStreamPostLike = async function(req, res) {
 	var loginUserId = req.session.user._id;
 	var loginUserName = req.session.user.Name;
 
+	// ✅ CRITICAL: SocialPostId MUST be SyncedPost._id (not Media document's PostId)
+	// This is the _id from the SyncedPost collection, which is what the frontend sends
+	var socialPostId = null;
+	if (req.body.SocialPostId) {
+		try {
+			if (!ObjectId.isValid(req.body.SocialPostId)) {
+				return res.json({
+					status: "error",
+					message: "Invalid SocialPostId format. Must be a valid SyncedPost _id (ObjectId).",
+					results: []
+				});
+			}
+			socialPostId = new ObjectId(req.body.SocialPostId);
+			console.log('✅ [streamController] Valid SocialPostId (SyncedPost._id):', socialPostId);
+		} catch (e) {
+			console.error('❌ [streamController] Invalid SocialPostId format:', req.body.SocialPostId);
+			return res.json({
+				status: "error",
+				message: "Invalid SocialPostId format. Must be a valid SyncedPost _id (ObjectId).",
+				error: e.message,
+				results: []
+			});
+		}
+	} else {
+		console.error('❌ [streamController] Missing SocialPostId (SyncedPost._id)');
+		return res.json({
+			status: "error",
+			message: "SocialPostId (SyncedPost._id) is required.",
+			results: []
+		});
+	}
+
 	var dataToSave = {
 		UserId : req.session.user._id,
-		SocialPageId : req.body.SocialPageId ? req.body.SocialPageId : null,
-		SocialPostId : req.body.SocialPostId ? req.body.SocialPostId : null,
+		SocialPageId : req.body.SocialPageId ? new ObjectId(req.body.SocialPageId) : null,
+		SocialPostId : socialPostId, // ✅ SyncedPost._id (NOT Media document's PostId)
 		hexcode_blendedImage : req.body.hexcode_blendedImage ? req.body.hexcode_blendedImage : null
 	};
 
 	try {
-		// Check if user already liked this post
-		// Build query conditions for checking existing like
+		// ✅ Check for existing like (regardless of IsDeleted status) to reuse if previously unliked
+		// Build query conditions for checking existing like (including deleted ones)
 		var existingLikeConditions = {
 			UserId : new ObjectId(req.session.user._id),
-			SocialPostId : dataToSave.SocialPostId ? new ObjectId(dataToSave.SocialPostId) : null,
-			IsDeleted: 0
+			SocialPostId : socialPostId, // ✅ SyncedPost._id
 		};
 
 		// Handle hexcode_blendedImage matching - either exact match or null/undefined
@@ -10447,26 +10503,54 @@ var addStreamPostLike = async function(req, res) {
 			];
 		}
 
+		// Check for existing like (including deleted ones)
 		const existingLike = await StreamLikes.findOne(existingLikeConditions);
 
 		if (existingLike) {
-			// User has already liked this post
-			var conditions = {
-				SocialPageId : new ObjectId(dataToSave.SocialPageId),
-				//SocialPostId: ObjectId(dataToSave.SocialPostId),
-				IsDeleted: 0
-			};
-			var results = await StreamLikes.find(conditions).populate('UserId', '_id Name Email ProfilePic');
-			results = Array.isArray(results) ? results : [];
+			// If like exists and is already active (not deleted)
+			if (existingLike.IsDeleted === 0 || existingLike.IsDeleted === false) {
+				// User has already liked this post
+				var conditions = {
+					SocialPageId : new ObjectId(dataToSave.SocialPageId),
+					IsDeleted: 0
+				};
+				var results = await StreamLikes.find(conditions).populate('UserId', '_id Name Email ProfilePic');
+				results = Array.isArray(results) ? results : [];
 
-			return res.json({
-				status : "error",
-				message : "You have already liked this post.",
-				results : results
-			});
+				return res.json({
+					status : "error",
+					message : "You have already liked this post.",
+					results : results
+				});
+			} else {
+				// ✅ Like exists but was deleted - restore it (reuse existing entry)
+				existingLike.IsDeleted = false;
+				existingLike.UpdatedOn = new Date();
+				const savedLike = await existingLike.save();
+				
+				// Fetch updated likes list
+				var conditions = {
+					SocialPageId : new ObjectId(dataToSave.SocialPageId),
+					IsDeleted: 0
+				};
+				var results = await StreamLikes.find(conditions).populate('UserId', '_id Name Email ProfilePic');
+				results = Array.isArray(results) ? results : [];
+
+				// Send notification
+				if(postOwnerId && (postOwnerId != loginUserId)) {
+					notifyMembers([postOwnerId], loginUserName, 'liked', streamId);
+				}
+
+				return res.json({
+					status : "success",
+					message : "Like restored successfully.",
+					likeId : savedLike._id,
+					results : results
+				});
+			}
 		}
 
-		// Save like using async/await
+		// No existing like found - create new entry
 		const savedLike = await StreamLikes(dataToSave).save();
 		
 		// Fetch updated likes list
@@ -10789,6 +10873,8 @@ var addLike = async function(req, res) {
 		});
 	}
 
+	// ✅ CRITICAL: CommentId MUST be StreamComments._id (works for both comments and replies)
+	// Replies are also StreamComments documents with a ParentId field
 	var CommentId = req.body.CommentId ? req.body.CommentId : null;
 	var SocialPageId = req.body.SocialPageId ? req.body.SocialPageId : null;
 	var loginUserId = req.session.user._id;
@@ -10798,7 +10884,7 @@ var addLike = async function(req, res) {
 		if (!CommentId || !SocialPageId) {
 			return res.json({
 				status : "error",
-				message : "CommentId and SocialPageId are required.",
+				message : "CommentId (StreamComments._id) and SocialPageId are required.",
 				results : []
 			});
 		}
@@ -10807,12 +10893,13 @@ var addLike = async function(req, res) {
 		if (!ObjectId.isValid(CommentId) || !ObjectId.isValid(SocialPageId)) {
 			return res.json({
 				status : "error",
-				message : "Invalid CommentId or SocialPageId format.",
+				message : "Invalid CommentId (StreamComments._id) or SocialPageId format.",
 				results : []
 			});
 		}
 
-		// Check if the comment exists in StreamComments collection
+		// Check if the comment/reply exists in StreamComments collection
+		// ✅ Note: This works for both top-level comments and replies (replies are StreamComments with ParentId)
 		var commentExists = await StreamComments.findOne({
 			_id: new ObjectId(CommentId),
 			IsDeleted: 0
@@ -10821,39 +10908,62 @@ var addLike = async function(req, res) {
 		if (!commentExists) {
 			return res.json({
 				status : "error",
-				message : "Comment not found or has been deleted.",
+				message : "Comment/Reply not found or has been deleted.",
 				results : []
 			});
 		}
 
-		// Check if user already liked this comment
+		// Check if user already liked this comment (check regardless of IsDeleted status)
 		var existingLike = await StreamCommentLikes.findOne({
 			SocialPageId : new ObjectId(SocialPageId),
 			CommentId : new ObjectId(CommentId),
-			LikedById : new ObjectId(loginUserId),
-			IsDeleted : 0
+			LikedById : new ObjectId(loginUserId)
 		});
 
 		if (existingLike) {
-			// User has already liked this comment
-			var conditions = {
-				SocialPageId : new ObjectId(SocialPageId),
-				IsDeleted: 0
-			};
-			var likes = await StreamCommentLikes.find(conditions).populate('LikedById', '_id Name Email ProfilePic');
-			likes = Array.isArray(likes) ? likes : [];
+			// If like exists and is already active (not deleted)
+			if (existingLike.IsDeleted === 0 || existingLike.IsDeleted === false) {
+				// User has already liked this comment
+				var conditions = {
+					SocialPageId : new ObjectId(SocialPageId),
+					IsDeleted: 0
+				};
+				var likes = await StreamCommentLikes.find(conditions).populate('LikedById', '_id Name Email ProfilePic');
+				likes = Array.isArray(likes) ? likes : [];
 
-			return res.json({
-				status : "error",
-				message : "You have already liked this comment.",
-				results : likes
-			});
+				return res.json({
+					status : "error",
+					message : "You have already liked this comment.",
+					results : likes
+				});
+			} else {
+				// ✅ Like exists but was deleted - restore it (reuse existing entry)
+				existingLike.IsDeleted = false;
+				existingLike.ModifiedOn = new Date();
+				const savedLike = await existingLike.save();
+				
+				// Fetch updated likes list
+				var conditions = {
+					SocialPageId : new ObjectId(SocialPageId),
+					IsDeleted: 0
+				};
+				var likes = await StreamCommentLikes.find(conditions).populate('LikedById', '_id Name Email ProfilePic');
+				likes = Array.isArray(likes) ? likes : [];
+
+				return res.json({
+					status : "success",
+					message : "Like restored successfully.",
+					likeId : savedLike._id,
+					results : likes
+				});
+			}
 		}
 
-		// Save the like
+		// No existing like found - create new entry
+		// ✅ CommentId is StreamComments._id (works for both comments and replies)
 	var dataToSave = {
 			SocialPageId : new ObjectId(SocialPageId),
-			CommentId : new ObjectId(CommentId),
+			CommentId : new ObjectId(CommentId), // ✅ StreamComments._id (comment or reply)
 			LikedById : new ObjectId(loginUserId),
 			CreatedOn : new Date(),
 			ModifiedOn : new Date(),

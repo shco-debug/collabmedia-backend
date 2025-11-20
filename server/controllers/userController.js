@@ -2,6 +2,7 @@ var user = require('./../models/userModel.js');
 var board = require('./../models/boardModel.js');
 var Referral = require('./../models/referralModel.js');
 var boardInvitees = require('./../models/boardInviteesModel.js');
+var AppSetting = require('./../models/appSettingModel.js');
 var bcrypt = require('bcryptjs');
 var generator = require('generate-password');
 var fs = require('fs');
@@ -68,7 +69,6 @@ async function normalizeSubscriptionState(userDocument, session) {
 					SubscriptionStatus: "expired",
 					SubscriptionExpiresOn: expiresOnDate,
 					SubscriptionTrialEndsOn: null,
-					SubscriberStreamIds: [],
 				};
 
 				await user
@@ -82,7 +82,7 @@ async function normalizeSubscriptionState(userDocument, session) {
 				userDocument.SubscriptionStatus = "expired";
 				userDocument.SubscriptionExpiresOn = expiresOnDate;
 				userDocument.SubscriptionTrialEndsOn = null;
-				userDocument.SubscriberStreamIds = [];
+				// Keep SubscriptionPrice/Currency so we know what to charge on renewal attempts
 
 				if (
 					session &&
@@ -94,7 +94,6 @@ async function normalizeSubscriptionState(userDocument, session) {
 					session.user.SubscriptionStatus = "expired";
 					session.user.SubscriptionExpiresOn = expiresOnDate;
 					session.user.SubscriptionTrialEndsOn = null;
-					session.user.SubscriberStreamIds = [];
 				}
 			}
 
@@ -125,7 +124,8 @@ async function normalizeSubscriptionState(userDocument, session) {
 			SubscriptionTrialEndsOn: null,
 			SubscriptionLastTrialEndsOn: trialEndsOnDate,
 			SubscriptionExpiresOn: null,
-			SubscriberStreamIds: [],
+			SubscriptionPrice: null,
+			SubscriptionCurrency: null,
 		};
 
 		await user
@@ -140,7 +140,8 @@ async function normalizeSubscriptionState(userDocument, session) {
 		userDocument.SubscriptionTrialEndsOn = null;
 		userDocument.SubscriptionLastTrialEndsOn = trialEndsOnDate;
 		userDocument.SubscriptionExpiresOn = null;
-		userDocument.SubscriberStreamIds = [];
+		userDocument.SubscriptionPrice = null;
+		userDocument.SubscriptionCurrency = null;
 
 		if (
 			session &&
@@ -153,7 +154,8 @@ async function normalizeSubscriptionState(userDocument, session) {
 			session.user.SubscriptionTrialEndsOn = null;
 			session.user.SubscriptionLastTrialEndsOn = trialEndsOnDate;
 			session.user.SubscriptionExpiresOn = null;
-			session.user.SubscriberStreamIds = [];
+			session.user.SubscriptionPrice = null;
+			session.user.SubscriptionCurrency = null;
 		}
 	} catch (error) {
 		console.error("⚠️ normalizeSubscriptionState error:", error);
@@ -457,24 +459,6 @@ const login = async (req, res) => {
         const completeUserData = userData.toObject();
         delete completeUserData.Password; // Remove password from response for security
 
-        const subscriberStreamIds = Array.isArray(completeUserData.SubscriberStreamIds)
-            ? completeUserData.SubscriberStreamIds.map((id) => {
-                if (!id) return null;
-                if (typeof id === 'string') return id;
-                if (typeof id === 'object' && id !== null) {
-                    if (typeof id.toString === 'function') {
-                        return id.toString();
-                    }
-                    if (typeof id._id === 'string') return id._id;
-                }
-                try {
-                    return String(id);
-                } catch (error) {
-                    return null;
-                }
-            }).filter(Boolean)
-            : [];
-
         const subscriberSinceISO = completeUserData.SubscriberSince
             ? new Date(completeUserData.SubscriberSince).toISOString()
             : null;
@@ -489,14 +473,18 @@ const login = async (req, res) => {
         const subscriptionExpiresOnISO = completeUserData.SubscriptionExpiresOn
             ? new Date(completeUserData.SubscriptionExpiresOn).toISOString()
             : null;
-
-        completeUserData.SubscriberStreamIds = subscriberStreamIds;
         completeUserData.SubscriberSince = subscriberSinceISO;
         completeUserData.SubscriptionStatus = subscriptionStatus;
         completeUserData.SubscriptionTrialEndsOn = subscriptionTrialEndsOnISO;
         completeUserData.SubscriptionLastTrialEndsOn = subscriptionLastTrialEndsOnISO;
         completeUserData.IsSubscriber = isSubscriber;
         completeUserData.SubscriptionExpiresOn = subscriptionExpiresOnISO;
+        const subscriptionPrice = typeof completeUserData.SubscriptionPrice === "number"
+            ? Number(completeUserData.SubscriptionPrice.toFixed(2))
+            : null;
+        const subscriptionCurrency = completeUserData.SubscriptionCurrency || "USD";
+        completeUserData.SubscriptionPrice = subscriptionPrice;
+        completeUserData.SubscriptionCurrency = subscriptionCurrency;
 
         // Create JWT token with all user data
         const userId = userData._id;
@@ -517,12 +505,13 @@ const login = async (req, res) => {
             modifiedOn: userData.ModifiedOn,
             lastActiveTime: userData.LastActiveTime,
             isSubscriber: isSubscriber,
-            subscriberStreamIds,
             subscriberSince: subscriberSinceISO,
             subscriptionStatus,
             subscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
             subscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
             subscriptionExpiresOn: subscriptionExpiresOnISO,
+            subscriptionPrice,
+            subscriptionCurrency,
             iat: Math.floor(Date.now() / 1000)
         };
 
@@ -727,24 +716,6 @@ const oauthLogin = async (req, res) => {
 
         await normalizeSubscriptionState(userRecord, req.session);
 
-        const subscriberStreamIds =
-            Array.isArray(userRecord.SubscriberStreamIds)
-                ? userRecord.SubscriberStreamIds.map((id) => {
-                    if (!id) return null;
-                    if (typeof id === 'string') return id;
-                    if (typeof id === 'object' && id !== null) {
-                        if (typeof id.toString === 'function') {
-                            return id.toString();
-                        }
-                        if (typeof id._id === 'string') return id._id;
-                    }
-                    try {
-                        return String(id);
-                    } catch (error) {
-                        return null;
-                    }
-                }).filter(Boolean)
-                : [];
         const subscriberSinceISO = userRecord.SubscriberSince
             ? new Date(userRecord.SubscriberSince).toISOString()
             : null;
@@ -759,6 +730,10 @@ const oauthLogin = async (req, res) => {
         const subscriptionExpiresOnISO = userRecord.SubscriptionExpiresOn
             ? new Date(userRecord.SubscriptionExpiresOn).toISOString()
             : null;
+        const subscriptionPrice = typeof userRecord.SubscriptionPrice === "number"
+            ? Number(userRecord.SubscriptionPrice.toFixed(2))
+            : null;
+        const subscriptionCurrency = userRecord.SubscriptionCurrency || "USD";
 
         // Generate JWT token
         const tokenPayload = {
@@ -775,12 +750,13 @@ const oauthLogin = async (req, res) => {
             modifiedOn: userRecord.ModifiedOn || Date.now(),
             lastActiveTime: userRecord.LastActiveTime || Date.now(),
             isSubscriber,
-            subscriberStreamIds,
             subscriberSince: subscriberSinceISO,
             subscriptionStatus,
             subscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
             subscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
             subscriptionExpiresOn: subscriptionExpiresOnISO,
+            subscriptionPrice,
+            subscriptionCurrency,
         };
 
         const jwtSecret =
@@ -803,12 +779,13 @@ const oauthLogin = async (req, res) => {
             EmailConfirmationStatus: userRecord.EmailConfirmationStatus,
             Status: userRecord.Status,
             IsSubscriber: isSubscriber,
-            SubscriberStreamIds: subscriberStreamIds,
             SubscriberSince: subscriberSinceISO,
             SubscriptionStatus: subscriptionStatus,
             SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
             SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
-            SubscriptionExpiresOn: subscriptionExpiresOnISO
+            SubscriptionExpiresOn: subscriptionExpiresOnISO,
+            SubscriptionPrice: subscriptionPrice,
+            SubscriptionCurrency: subscriptionCurrency
         };
 
         // Return comprehensive user data
@@ -833,13 +810,14 @@ const oauthLogin = async (req, res) => {
                 CreatedOn: userRecord.CreatedOn,
                 LastActiveTime: userRecord.LastActiveTime,
                 EmailConfirmationStatus: userRecord.EmailConfirmationStatus,
-                IsSubscriber: isSubscriber,
-                SubscriberStreamIds: subscriberStreamIds,
-                SubscriberSince: subscriberSinceISO,
+            IsSubscriber: isSubscriber,
+            SubscriberSince: subscriberSinceISO,
                 SubscriptionStatus: subscriptionStatus,
                 SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
                 SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
-                SubscriptionExpiresOn: subscriptionExpiresOnISO
+                SubscriptionExpiresOn: subscriptionExpiresOnISO,
+                SubscriptionPrice: subscriptionPrice,
+                SubscriptionCurrency: subscriptionCurrency
             },
             userData: {
                 id: userRecord._id,
@@ -850,13 +828,14 @@ const oauthLogin = async (req, res) => {
                 gender: userRecord.Gender,
                 role: userRecord.Role || 'user',
                 EmailConfirmationStatus: userRecord.EmailConfirmationStatus,
-                IsSubscriber: isSubscriber,
-                SubscriberStreamIds: subscriberStreamIds,
-                SubscriberSince: subscriberSinceISO,
+            IsSubscriber: isSubscriber,
+            SubscriberSince: subscriberSinceISO,
                 SubscriptionStatus: subscriptionStatus,
                 SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
                 SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
-                SubscriptionExpiresOn: subscriptionExpiresOnISO
+                SubscriptionExpiresOn: subscriptionExpiresOnISO,
+                SubscriptionPrice: subscriptionPrice,
+                SubscriptionCurrency: subscriptionCurrency
             },
             wasNewUserCreated: isNewUser
         });
@@ -2900,10 +2879,71 @@ var subscribeToPlatform = async function (req, res) {
 		const userId = req.session.user._id;
 		const providedToken = req.body.token || null;
 		const tokenEmail = req.body.tokenEmail || req.session.user.Email || null;
-		const configuredAmount =
-			req.body.amount !== undefined
-				? Number(req.body.amount)
-				: Number(process.PLATFORM_SUBSCRIPTION_PRICE || 0);
+		const normalizePrice = (value, fallback = 0) => {
+			const numericValue = Number(value);
+			return Number(
+				(Number.isFinite(numericValue) ? numericValue : fallback).toFixed(2)
+			);
+		};
+
+		const userRoleRaw =
+			req.session?.user?.Role ||
+			req.session?.user?.role ||
+			req.session?.user?.UserRole ||
+			"";
+		const normalizedUserRole =
+			typeof userRoleRaw === "string" ? userRoleRaw.toLowerCase() : "";
+		const isPrivilegedRole =
+			normalizedUserRole === "admin" || normalizedUserRole === "subadmin";
+
+		let lockedSubscriptionPrice = 0;
+		let priceIncrement = 0;
+		const subscriptionCurrency = "USD";
+		let appSettings = null;
+
+		if (!isPrivilegedRole) {
+			appSettings = await AppSetting.findOne({ isDeleted: false }).exec();
+			if (!appSettings) {
+				appSettings = await AppSetting.create({
+					ReferralDiscount: 0,
+					PlatformSubscriptionPrice: 1,
+					PlatformSubscriptionIncrement: 0.01,
+				});
+			}
+
+			let shouldPersistAppSettings = false;
+			if (
+				typeof appSettings.PlatformSubscriptionPrice !== "number" ||
+				Number.isNaN(appSettings.PlatformSubscriptionPrice)
+			) {
+				appSettings.PlatformSubscriptionPrice = 1;
+				shouldPersistAppSettings = true;
+			}
+			if (
+				typeof appSettings.PlatformSubscriptionIncrement !== "number" ||
+				Number.isNaN(appSettings.PlatformSubscriptionIncrement)
+			) {
+				appSettings.PlatformSubscriptionIncrement = 0.01;
+				shouldPersistAppSettings = true;
+			}
+			if (shouldPersistAppSettings && typeof appSettings.save === "function") {
+				await appSettings.save();
+			}
+
+			lockedSubscriptionPrice = normalizePrice(
+				appSettings.PlatformSubscriptionPrice,
+				1
+			);
+			priceIncrement = normalizePrice(
+				appSettings.PlatformSubscriptionIncrement,
+				0.01
+			);
+		} else {
+			lockedSubscriptionPrice = 0;
+			priceIncrement = 0;
+		}
+
+		const configuredAmount = lockedSubscriptionPrice;
 		const description =
 			req.body.description || "Scrpt Platform Subscription";
 		const trialDurationDays = Number(process.env.PLATFORM_TRIAL_DAYS || 15);
@@ -2952,7 +2992,7 @@ var subscribeToPlatform = async function (req, res) {
 			typeof providedToken === "string" &&
 				providedToken.toLowerCase() === "trial";
 
-		if (isTrialExpired && isTrialRequest) {
+		if (!isPrivilegedRole && isTrialExpired && isTrialRequest) {
 			return res.status(402).json({
 				status: 402,
 				message: "Your free trial has already ended. Please add a payment method to continue.",
@@ -2963,14 +3003,15 @@ var subscribeToPlatform = async function (req, res) {
 		let amount = configuredAmount;
 		let subscriptionStatus = "active";
 		let subscriptionTrialEndsOn = null;
-		let subscriptionExpiresOn =
-			currentUser.SubscriptionExpiresOn instanceof Date
-				? currentUser.SubscriptionExpiresOn
-				: currentUser.SubscriptionExpiresOn
-				? new Date(currentUser.SubscriptionExpiresOn)
-				: null;
+		let subscriptionExpiresOn = null;
 
-		if (isTrialRequest) {
+		if (isPrivilegedRole) {
+			amount = 0;
+			subscriptionStatus = "active";
+			subscriptionTrialEndsOn = null;
+			subscriptionExpiresOn = null;
+			token = token || "admin-free";
+		} else if (isTrialRequest) {
 			subscriptionStatus = "trial";
 			subscriptionTrialEndsOn = new Date(
 				now.getTime() + trialDurationDays * 24 * 60 * 60 * 1000
@@ -2982,23 +3023,6 @@ var subscribeToPlatform = async function (req, res) {
 				now.getTime() + annualDurationDays * 24 * 60 * 60 * 1000
 			);
 		}
-
-		const streamConditions = {
-			Status: true,
-			IsPublished: true,
-			IsLaunched: true,
-			IsDeleted: false,
-			IsAllowedForSales: true,
-			"LaunchSettings.Audience": "BUYERS",
-			"LaunchSettings.CapsuleFor": "Stream",
-		};
-
-		const availableStreams = await Capsule.find(streamConditions, {
-			_id: 1,
-		})
-			.lean()
-			.exec();
-		const streamIds = availableStreams.map((doc) => doc._id);
 
 		if (amount > 0) {
 			if (!token) {
@@ -3056,7 +3080,6 @@ var subscribeToPlatform = async function (req, res) {
 
 		const subscriberData = {
 			IsSubscriber: true,
-			SubscriberStreamIds: streamIds,
 			SubscriberSince: subscriberSinceDate,
 			SubscriptionStatus: subscriptionStatus,
 			SubscriptionTrialEndsOn: subscriptionTrialEndsOn,
@@ -3064,8 +3087,9 @@ var subscribeToPlatform = async function (req, res) {
 				subscriptionStatus === "trial"
 					? subscriptionTrialEndsOn
 					: currentUser.SubscriptionLastTrialEndsOn || null,
-			SubscriptionExpiresOn:
-				subscriptionExpiresOn,
+			SubscriptionExpiresOn: subscriptionExpiresOn,
+			SubscriptionPrice: lockedSubscriptionPrice,
+			SubscriptionCurrency: subscriptionCurrency,
 		};
 
 		await user
@@ -3073,9 +3097,6 @@ var subscribeToPlatform = async function (req, res) {
 			.exec();
 
 		req.session.user.IsSubscriber = true;
-		req.session.user.SubscriberStreamIds = streamIds.map((id) =>
-			id.toString()
-		);
 		req.session.user.SubscriberSince = subscriberData.SubscriberSince;
 		req.session.user.SubscriptionStatus = subscriptionStatus;
 		req.session.user.SubscriptionTrialEndsOn = subscriptionTrialEndsOn;
@@ -3083,6 +3104,29 @@ var subscribeToPlatform = async function (req, res) {
 			subscriberData.SubscriptionLastTrialEndsOn || null;
 		req.session.user.SubscriptionExpiresOn =
 			subscriberData.SubscriptionExpiresOn || null;
+		req.session.user.SubscriptionPrice = lockedSubscriptionPrice;
+		req.session.user.SubscriptionCurrency = subscriptionCurrency;
+
+		if (!isPrivilegedRole && appSettings) {
+			try {
+				await AppSetting.updateOne(
+					{ _id: appSettings._id },
+					{
+						$set: {
+							PlatformSubscriptionIncrement: priceIncrement,
+						},
+						$inc: {
+							PlatformSubscriptionPrice: priceIncrement,
+						},
+					}
+				).exec();
+			} catch (priceUpdateError) {
+				console.error(
+					"⚠️ Failed to increment platform subscription price:",
+					priceUpdateError
+				);
+			}
+		}
 
 		// Fetch refreshed user data to include in response and JWT
 		let refreshedUserRecord = await user
@@ -3102,33 +3146,6 @@ var subscribeToPlatform = async function (req, res) {
 				: refreshedUserRecord
 			: null;
 
-		const normalizedStreamIds =
-			Array.isArray(
-				refreshedUserObject?.SubscriberStreamIds ||
-					refreshedUserObject?.subscriberStreamIds
-			)
-				? (
-						refreshedUserObject.SubscriberStreamIds ||
-						refreshedUserObject.subscriberStreamIds
-				  )
-						.map((id) => {
-							try {
-								if (!id) return null;
-								if (typeof id === "string") return id;
-								if (
-									typeof id === "object" &&
-									id !== null &&
-									typeof id.toString === "function"
-								) {
-									return id.toString();
-								}
-								return String(id);
-							} catch (error) {
-								return null;
-							}
-						})
-						.filter(Boolean)
-				: streamIds.map((id) => id.toString());
 
 		const subscriberSinceISO =
 			refreshedUserObject?.SubscriberSince ||
@@ -3183,6 +3200,16 @@ var subscribeToPlatform = async function (req, res) {
 			typeof refreshedUserObject?.IsSubscriber !== "undefined"
 				? Boolean(refreshedUserObject.IsSubscriber)
 				: true;
+		const subscriptionPriceValue =
+			typeof refreshedUserObject?.SubscriptionPrice !== "undefined"
+				? Number(
+						Number(refreshedUserObject.SubscriptionPrice || 0).toFixed(2)
+				  )
+				: lockedSubscriptionPrice;
+		const subscriptionCurrencyValue =
+			refreshedUserObject?.SubscriptionCurrency ||
+			req.session.user.SubscriptionCurrency ||
+			subscriptionCurrency;
 
 		const jwtPayload = {
 			userId: userId.toString(),
@@ -3212,12 +3239,13 @@ var subscribeToPlatform = async function (req, res) {
 				refreshedUserObject?.LastActiveTime ||
 				req.session.user.LastActiveTime,
 			isSubscriber: isSubscriberNormalized,
-			subscriberStreamIds: normalizedStreamIds,
 			subscriberSince: subscriberSinceISO,
 			subscriptionStatus: subscriptionStatusNormalized,
 			subscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
 			subscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
 			subscriptionExpiresOn: subscriptionExpiresOnISO,
+			subscriptionPrice: subscriptionPriceValue,
+			subscriptionCurrency: subscriptionCurrencyValue,
 			iat: Math.floor(Date.now() / 1000),
 		};
 
@@ -3238,35 +3266,37 @@ var subscribeToPlatform = async function (req, res) {
 			? {
 					...refreshedUserObject,
 					IsSubscriber: isSubscriberNormalized,
-					SubscriberStreamIds: normalizedStreamIds,
 					SubscriberSince: subscriberSinceISO,
 					SubscriptionStatus: subscriptionStatusNormalized,
 					SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
 					SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
 					SubscriptionExpiresOn: subscriptionExpiresOnISO,
+					SubscriptionPrice: subscriptionPriceValue,
+					SubscriptionCurrency: subscriptionCurrencyValue,
 			  }
 			: {
 					IsSubscriber: isSubscriberNormalized,
-					SubscriberStreamIds: normalizedStreamIds,
 					SubscriberSince: subscriberSinceISO,
 					SubscriptionStatus: subscriptionStatusNormalized,
 					SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
 					SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
 					SubscriptionExpiresOn: subscriptionExpiresOnISO,
+					SubscriptionPrice: subscriptionPriceValue,
+					SubscriptionCurrency: subscriptionCurrencyValue,
 			  };
 
 		return res.json({
 			status: 200,
 			message: "Platform subscription activated successfully.",
 			data: {
-				streamIds: normalizedStreamIds,
-				totalStreams: normalizedStreamIds.length,
 				amountCharged: amount > 0 ? amount : 0,
 				subscriptionStatus: subscriptionStatusNormalized,
 				subscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
 				subscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
 				subscriptionExpiresOn: subscriptionExpiresOnISO,
 				subscriberSince: subscriberSinceISO,
+				subscriptionPrice: subscriptionPriceValue,
+				subscriptionCurrency: subscriptionCurrencyValue,
 			},
 			token: refreshedToken,
 			sessionExpires: sessionExpiresISO,
@@ -3291,12 +3321,13 @@ var subscribeToPlatform = async function (req, res) {
 						? responseUserData.Status
 						: req.session.user.Status,
 				IsSubscriber: isSubscriberNormalized,
-				SubscriberStreamIds: normalizedStreamIds,
 				SubscriberSince: subscriberSinceISO,
 				SubscriptionStatus: subscriptionStatusNormalized,
 				SubscriptionTrialEndsOn: subscriptionTrialEndsOnISO,
 				SubscriptionLastTrialEndsOn: subscriptionLastTrialEndsOnISO,
 				SubscriptionExpiresOn: subscriptionExpiresOnISO,
+				SubscriptionPrice: subscriptionPriceValue,
+				SubscriptionCurrency: subscriptionCurrencyValue,
 			},
 		});
 	} catch (error) {
@@ -3311,6 +3342,223 @@ var subscribeToPlatform = async function (req, res) {
 };
 
 exports.subscribeToPlatform = subscribeToPlatform;
+
+/**
+ * Charge a user's saved card for subscription renewal
+ * This function is used by the cron job to automatically charge users when their trial/subscription expires
+ * 
+ * @param {String} userId - User ID
+ * @param {Number} amount - Amount to charge (in dollars)
+ * @param {String} currency - Currency code (default: 'USD')
+ * @returns {Object} - Result object with success status and charge details
+ */
+var chargeUserSubscription = async function (userId, amount, currency = 'USD') {
+	try {
+		var CardDetails = require('./../models/cardDetailsModel.js');
+		var ObjectId = require('mongodb').ObjectId;
+
+		// Get user's default card
+		var defaultCard = await CardDetails.findOne({
+			UserId: new ObjectId(userId),
+			IsDefault: true,
+			IsDeleted: false,
+			Status: true
+		}).exec();
+
+		if (!defaultCard) {
+			return {
+				success: false,
+				error: 'No default card found for user',
+				code: 'NO_CARD'
+			};
+		}
+
+		// Check if card is expired
+		const now = new Date();
+		const currentYear = now.getFullYear();
+		const currentMonth = now.getMonth() + 1;
+		if (defaultCard.ExpiryYear < currentYear || 
+			(defaultCard.ExpiryYear === currentYear && defaultCard.ExpiryMonth < currentMonth)) {
+			return {
+				success: false,
+				error: 'Card has expired',
+				code: 'CARD_EXPIRED'
+			};
+		}
+
+		const stripe = getStripeClient();
+		const amountInCents = Math.round(amount * 100);
+
+		if (amountInCents <= 0) {
+			return {
+				success: false,
+				error: 'Invalid amount',
+				code: 'INVALID_AMOUNT'
+			};
+		}
+
+		let charge = null;
+
+		// Try to use PaymentMethodId first (preferred for recurring payments)
+		if (defaultCard.PaymentMethodId) {
+			try {
+				// Create or retrieve customer
+				let customerId = defaultCard.CustomerId;
+				if (!customerId) {
+					// Get user email for customer creation
+					var userRecord = await user.findOne({ _id: new ObjectId(userId) }).exec();
+					if (!userRecord) {
+						return {
+							success: false,
+							error: 'User not found',
+							code: 'USER_NOT_FOUND'
+						};
+					}
+
+					// Create customer with payment method
+					const customer = await stripe.customers.create({
+						email: userRecord.Email,
+						payment_method: defaultCard.PaymentMethodId,
+						invoice_settings: {
+							default_payment_method: defaultCard.PaymentMethodId
+						}
+					});
+
+					customerId = customer.id;
+					// Update card with customer ID
+					await CardDetails.updateOne(
+						{ _id: defaultCard._id },
+						{ $set: { CustomerId: customerId } }
+					).exec();
+				}
+
+				// Create payment intent and confirm it
+				const paymentIntent = await stripe.paymentIntents.create({
+					amount: amountInCents,
+					currency: currency.toLowerCase(),
+					customer: customerId,
+					payment_method: defaultCard.PaymentMethodId,
+					confirmation_method: 'automatic',
+					confirm: true,
+					description: 'Scrpt Platform Subscription Renewal'
+				});
+
+				if (paymentIntent.status === 'succeeded') {
+					charge = {
+						id: paymentIntent.id,
+						paid: true,
+						amount: paymentIntent.amount,
+						currency: paymentIntent.currency
+					};
+				} else {
+					return {
+						success: false,
+						error: `Payment failed: ${paymentIntent.status}`,
+						code: 'PAYMENT_FAILED',
+						details: paymentIntent
+					};
+				}
+			} catch (stripeError) {
+				console.error('Stripe PaymentMethod charge error:', stripeError);
+				// Fall back to CardToken method
+			}
+		}
+
+		// Fallback: Use CardToken to create customer and charge
+		if (!charge && defaultCard.CardToken) {
+			try {
+				let customerId = defaultCard.CustomerId;
+				
+				if (!customerId) {
+					// Get user email for customer creation
+					var userRecord = await user.findOne({ _id: new ObjectId(userId) }).exec();
+					if (!userRecord) {
+						return {
+							success: false,
+							error: 'User not found',
+							code: 'USER_NOT_FOUND'
+						};
+					}
+
+					// Create customer with card token
+					const customer = await stripe.customers.create({
+						source: defaultCard.CardToken,
+						description: userRecord.Email
+					});
+
+					customerId = customer.id;
+					// Update card with customer ID
+					await CardDetails.updateOne(
+						{ _id: defaultCard._id },
+						{ $set: { CustomerId: customerId } }
+					).exec();
+				}
+
+				// Create charge
+				charge = await stripe.charges.create({
+					amount: amountInCents,
+					currency: currency.toLowerCase(),
+					customer: customerId,
+					description: 'Scrpt Platform Subscription Renewal'
+				});
+
+				if (!charge.paid || charge.failure_code) {
+					return {
+						success: false,
+						error: charge.failure_message || 'Payment failed',
+						code: charge.failure_code || 'PAYMENT_FAILED',
+						details: charge
+					};
+				}
+			} catch (stripeError) {
+				console.error('Stripe CardToken charge error:', stripeError);
+				return {
+					success: false,
+					error: stripeError.message || 'Payment processing failed',
+					code: 'STRIPE_ERROR',
+					details: stripeError
+				};
+			}
+		}
+
+		if (!charge || !charge.paid) {
+			return {
+				success: false,
+				error: 'Payment could not be processed',
+				code: 'PAYMENT_FAILED'
+			};
+		}
+
+		// Update card's last used date and transaction count
+		await CardDetails.updateOne(
+			{ _id: defaultCard._id },
+			{
+				$set: { LastUsedOn: new Date() },
+				$inc: { SuccessfulTransactions: 1 }
+			}
+		).exec();
+
+		return {
+			success: true,
+			charge: {
+				id: charge.id,
+				amount: charge.amount / 100, // Convert back to dollars
+				currency: charge.currency
+			},
+			code: 'SUCCESS'
+		};
+
+	} catch (error) {
+		console.error('chargeUserSubscription error:', error);
+		return {
+			success: false,
+			error: error.message || 'Failed to charge subscription',
+			code: 'UNKNOWN_ERROR'
+		};
+	}
+};
+
+exports.chargeUserSubscription = chargeUserSubscription;
 
 var __createDefaultJournal_BackgroundCall = async function (user_id, user_email) {
     try {

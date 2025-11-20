@@ -21,6 +21,8 @@ var axios = require('axios');
 var StreamCommentLikes = require('./../models/StreamCommentLikesModel.js');
 var ObjectId = mongoose.Types.ObjectId;
 const cheerio = require('cheerio');
+var userController = require('./../controllers/userController.js');
+var user = require('./../models/userModel.js');
 
 var updateMediaCountsPerGt = function () {
 	//console.log("---------------Cron job called successfully : updateMediaCountsPerGt-------------------");
@@ -2931,3 +2933,439 @@ exports.createTestSyncedPost = createTestSyncedPost;
 
 // exports.PreLaunch_GroupStreamTopicCron__API = PreLaunch_GroupStreamTopicCron__API; // Function not defined
 // exports.PreLaunch_GroupStreamTopicCron = PreLaunch_GroupStreamTopicCron; // Function not defined
+
+/**
+ * Cron job to automatically charge users for subscription renewal
+ * Runs daily to check for expired trials and subscriptions, then charges saved cards
+ */
+	var processSubscriptionRenewals = async function () {
+	console.log("---------------------------------processSubscriptionRenewals START----------------------------------------");
+	try {
+		const now = new Date();
+		const nowTime = now.getTime();
+
+		// Base conditions - don't require SubscriptionPrice here, we'll check it later
+		const baseConditions = {
+			IsDeleted: false,
+			Role: { $nin: ["admin", "subadmin"] }
+		};
+
+		// Find users with expired trials (including those already marked expired)
+		const trialDueConditions = {
+			...baseConditions,
+			$or: [
+				{ SubscriptionStatus: "trial", SubscriptionTrialEndsOn: { $lte: now } },
+				{ SubscriptionStatus: "expired", SubscriptionLastTrialEndsOn: { $ne: null, $lte: now } }
+			]
+		};
+
+		// Find users with expired active subscriptions (including those already marked expired)
+		const activeDueConditions = {
+			...baseConditions,
+			$or: [
+				{ SubscriptionStatus: "active", SubscriptionExpiresOn: { $lte: now } },
+				{ SubscriptionStatus: "expired", SubscriptionExpiresOn: { $ne: null, $lte: now } }
+			]
+		};
+
+		var trialDueUsers = await User.find(trialDueConditions).exec();
+		var activeDueUsers = await User.find(activeDueConditions).exec();
+
+		console.log(`🔍 Query results: ${trialDueUsers.length} trial due users, ${activeDueUsers.length} active due users`);
+		
+		// Debug: Log sample users found
+		if (trialDueUsers.length > 0) {
+			console.log(`📋 Sample trial due users:`, trialDueUsers.slice(0, 3).map(u => ({
+				id: u._id,
+				email: u.Email,
+				status: u.SubscriptionStatus,
+				trialEndsOn: u.SubscriptionTrialEndsOn,
+				lastTrialEndsOn: u.SubscriptionLastTrialEndsOn,
+				price: u.SubscriptionPrice
+			})));
+		}
+		if (activeDueUsers.length > 0) {
+			console.log(`📋 Sample active due users:`, activeDueUsers.slice(0, 3).map(u => ({
+				id: u._id,
+				email: u.Email,
+				status: u.SubscriptionStatus,
+				expiresOn: u.SubscriptionExpiresOn,
+				price: u.SubscriptionPrice
+			})));
+		}
+
+		const usersMap = new Map();
+		const addUserToMap = (userRecord, reason) => {
+			if (!userRecord) return;
+			const key = userRecord._id.toString();
+			const userObject = typeof userRecord.toObject === "function" ? userRecord.toObject() : userRecord;
+			if (!usersMap.has(key)) {
+				usersMap.set(key, {
+					...userObject,
+					__billingReason: reason
+				});
+			}
+		};
+
+		trialDueUsers.forEach((userRecord) => addUserToMap(userRecord, "trial"));
+		activeDueUsers.forEach((userRecord) => addUserToMap(userRecord, "active"));
+
+		const allExpiredUsers = Array.from(usersMap.values());
+		console.log(
+			`Found ${allExpiredUsers.length} users needing billing (trial due: ${trialDueUsers.length}, active due: ${activeDueUsers.length})`
+		);
+
+		var successCount = 0;
+		var failureCount = 0;
+		var noCardCount = 0;
+		var errors = [];
+
+		// Get current platform price for annual renewals
+		var AppSetting = require('./../models/appSettingModel.js');
+		var appSettings = await AppSetting.findOne({ isDeleted: false }).exec();
+		var currentPlatformPrice = null;
+		var priceIncrement = 0.01;
+		
+		if (appSettings) {
+			currentPlatformPrice = appSettings.PlatformSubscriptionPrice || 1;
+			priceIncrement = appSettings.PlatformSubscriptionIncrement || 0.01;
+		} else {
+			currentPlatformPrice = 1;
+		}
+
+		for (var i = 0; i < allExpiredUsers.length; i++) {
+			var expiredUser = allExpiredUsers[i];
+			var userId = expiredUser._id.toString();
+			var userEmail = expiredUser.Email || "unknown";
+
+			try {
+				var subscriptionPrice = null;
+				var subscriptionCurrency = expiredUser.SubscriptionCurrency || "USD";
+				var isTrialExpiry = expiredUser.__billingReason === "trial" || 
+					(expiredUser.SubscriptionStatus === "expired" && expiredUser.SubscriptionLastTrialEndsOn);
+				var isAnnualRenewal = expiredUser.__billingReason === "active" || 
+					(expiredUser.SubscriptionStatus === "active" && expiredUser.SubscriptionExpiresOn);
+
+				// Determine which price to use:
+				// 1. Trial expiry (first payment after 15 days): Use LOCKED price
+				// 2. Annual renewal (after 1 year): Use CURRENT platform price
+				if (isTrialExpiry) {
+					// First payment after trial - use the locked price from trial activation
+					subscriptionPrice = expiredUser.SubscriptionPrice;
+					if (!subscriptionPrice || subscriptionPrice <= 0) {
+						console.log(`⚠️ User ${userId} (${userEmail}) - trial expiry but no locked price found. Using current platform price as fallback.`);
+						subscriptionPrice = currentPlatformPrice;
+					} else {
+						console.log(`💰 User ${userId} (${userEmail}) - TRIAL EXPIRY: charging locked price: ${subscriptionCurrency} ${subscriptionPrice}`);
+					}
+				} else if (isAnnualRenewal) {
+					// Annual renewal - use current platform price
+					subscriptionPrice = currentPlatformPrice;
+					console.log(`💰 User ${userId} (${userEmail}) - ANNUAL RENEWAL: charging current platform price: ${subscriptionCurrency} ${subscriptionPrice} (previous locked price was: ${expiredUser.SubscriptionPrice || 'N/A'})`);
+				} else {
+					// Fallback: try locked price first, then current platform price
+					subscriptionPrice = expiredUser.SubscriptionPrice || currentPlatformPrice;
+					console.log(`💰 User ${userId} (${userEmail}) - using price: ${subscriptionCurrency} ${subscriptionPrice}`);
+				}
+
+				if (!subscriptionPrice || subscriptionPrice <= 0) {
+					console.log(`⚠️ User ${userId} (${userEmail}) - no valid price available. Skipping.`);
+					noCardCount++;
+					continue;
+				}
+
+				console.log(`Processing subscription renewal for user ${userId} (${userEmail}), amount: ${subscriptionCurrency} ${subscriptionPrice}`);
+
+				// Charge the user's saved card
+				var chargeResult = await userController.chargeUserSubscription(
+					userId,
+					subscriptionPrice,
+					subscriptionCurrency
+				);
+
+				if (chargeResult.success) {
+					console.log(`✅ Successfully charged user ${userId} (${userEmail}): ${chargeResult.charge.amount} ${chargeResult.charge.currency}`);
+
+					// Calculate new subscription expiry (1 year from now)
+					const annualDurationDays = Number(process.env.PLATFORM_SUBSCRIPTION_DURATION_DAYS || 365);
+					const newExpiresOn = new Date(nowTime + annualDurationDays * 24 * 60 * 60 * 1000);
+
+					// Determine new locked price:
+					// - For trial expiry: Keep the same locked price (already locked at trial start)
+					// - For annual renewal: Lock the new current platform price
+					var newLockedPrice = subscriptionPrice;
+					if (isAnnualRenewal) {
+						// Annual renewal: lock the current platform price for the next year
+						newLockedPrice = currentPlatformPrice;
+					} else {
+						// Trial expiry: keep the existing locked price
+						newLockedPrice = expiredUser.SubscriptionPrice || subscriptionPrice;
+					}
+
+					// Update user subscription status to active
+					await User.updateOne(
+						{ _id: expiredUser._id },
+						{
+							$set: {
+								IsSubscriber: true,
+								SubscriptionStatus: "active",
+								SubscriptionExpiresOn: newExpiresOn,
+								SubscriptionTrialEndsOn: null,
+								SubscriptionLastTrialEndsOn: expiredUser.SubscriptionTrialEndsOn || expiredUser.SubscriptionLastTrialEndsOn || null,
+								SubscriptionPrice: newLockedPrice, // Lock the price for this subscription period
+								SubscriptionCurrency: subscriptionCurrency
+							}
+						}
+					).exec();
+
+					// Increment platform price for next subscription (only after successful payment)
+					if (appSettings) {
+						try {
+							await AppSetting.updateOne(
+								{ _id: appSettings._id },
+								{
+									$set: {
+										PlatformSubscriptionIncrement: priceIncrement,
+									},
+									$inc: {
+										PlatformSubscriptionPrice: priceIncrement,
+									},
+								}
+							).exec();
+							console.log(`📈 Platform subscription price incremented to: ${currentPlatformPrice + priceIncrement}`);
+						} catch (priceUpdateError) {
+							console.error("⚠️ Failed to increment platform subscription price:", priceUpdateError);
+						}
+					}
+
+					successCount++;
+				} else {
+					console.error(`❌ Failed to charge user ${userId} (${userEmail}): ${chargeResult.error} (${chargeResult.code})`);
+
+					// Update user subscription status to expired (payment failed)
+					await User.updateOne(
+						{ _id: expiredUser._id },
+						{
+							$set: {
+								IsSubscriber: false,
+								SubscriptionStatus: "expired",
+								SubscriptionTrialEndsOn: null
+							}
+						}
+					).exec();
+
+					failureCount++;
+					errors.push({
+						userId: userId,
+						email: userEmail,
+						error: chargeResult.error,
+						code: chargeResult.code
+					});
+				}
+			} catch (userError) {
+				console.error(`❌ Error processing user ${userId} (${userEmail}):`, userError);
+				failureCount++;
+				errors.push({
+					userId: userId,
+					email: userEmail,
+					error: userError.message || "Unknown error",
+					code: "PROCESSING_ERROR"
+				});
+			}
+		}
+
+		console.log(`---------------------------------processSubscriptionRenewals COMPLETE----------------------------------------`);
+		console.log(`Summary: ${successCount} successful, ${failureCount} failed, ${noCardCount} skipped (no price)`);
+		if (errors.length > 0) {
+			console.log(`Errors:`, JSON.stringify(errors, null, 2));
+		}
+
+		return {
+			success: true,
+			processed: allExpiredUsers.length,
+			successful: successCount,
+			failed: failureCount,
+			skipped: noCardCount,
+			errors: errors
+		};
+
+	} catch (error) {
+		console.error("❌ processSubscriptionRenewals error:", error);
+		return {
+			success: false,
+			error: error.message || "Unknown error"
+		};
+	}
+};
+
+exports.processSubscriptionRenewals = processSubscriptionRenewals;
+/**
+ * Cron job to expire subscriptions whose trial/active periods have ended
+ * This ensures statuses are updated before attempting renewals
+ */
+var expireDueSubscriptions = async function () {
+	console.log("---------------------------------expireDueSubscriptions START----------------------------------------");
+	try {
+		const now = new Date();
+
+		const trialFilter = {
+			IsDeleted: false,
+			SubscriptionStatus: "trial",
+			SubscriptionTrialEndsOn: { $lte: now },
+			Role: { $nin: ["admin", "subadmin"] }
+		};
+
+		const activeFilter = {
+			IsDeleted: false,
+			SubscriptionStatus: "active",
+			SubscriptionExpiresOn: { $lte: now },
+			Role: { $nin: ["admin", "subadmin"] }
+		};
+
+		const expiredTrialUsers = await user.find(trialFilter).exec();
+		const expiredActiveUsers = await user.find(activeFilter).exec();
+
+		let trialUpdates = 0;
+		let activeUpdates = 0;
+		let errors = [];
+
+		for (let i = 0; i < expiredTrialUsers.length; i++) {
+			const trialUser = expiredTrialUsers[i];
+			try {
+				const updatePayload = {
+					IsSubscriber: false,
+					SubscriptionStatus: "expired",
+					SubscriptionTrialEndsOn: null,
+					SubscriptionExpiresOn: null,
+					SubscriptionLastTrialEndsOn: trialUser.SubscriptionTrialEndsOn || trialUser.SubscriptionLastTrialEndsOn || null
+				};
+
+				await user.updateOne(
+					{ _id: trialUser._id },
+					{ $set: updatePayload }
+				).exec();
+
+				trialUpdates++;
+			} catch (trialErr) {
+				console.error(`❌ Failed to expire trial user ${trialUser._id}:`, trialErr);
+				errors.push({
+					userId: trialUser._id,
+					type: "trial",
+					error: trialErr.message || "Unknown error"
+				});
+			}
+		}
+
+		for (let i = 0; i < expiredActiveUsers.length; i++) {
+			const activeUser = expiredActiveUsers[i];
+			try {
+				const updatePayload = {
+					IsSubscriber: false,
+					SubscriptionStatus: "expired",
+					SubscriptionTrialEndsOn: null,
+					SubscriptionExpiresOn: activeUser.SubscriptionExpiresOn || now
+				};
+
+				await user.updateOne(
+					{ _id: activeUser._id },
+					{ $set: updatePayload }
+				).exec();
+
+				activeUpdates++;
+			} catch (activeErr) {
+				console.error(`❌ Failed to expire active user ${activeUser._id}:`, activeErr);
+				errors.push({
+					userId: activeUser._id,
+					type: "active",
+					error: activeErr.message || "Unknown error"
+				});
+			}
+		}
+
+		const summary = {
+			success: true,
+			expiredTrials: trialUpdates,
+			expiredActives: activeUpdates,
+			totalProcessed: trialUpdates + activeUpdates,
+			trialCandidates: expiredTrialUsers.length,
+			activeCandidates: expiredActiveUsers.length,
+			errors: errors
+		};
+
+		console.log("---------------------------------expireDueSubscriptions COMPLETE----------------------------------------");
+		console.log(`Summary: Trials expired: ${trialUpdates}/${expiredTrialUsers.length}, Active expired: ${activeUpdates}/${expiredActiveUsers.length}`);
+
+		return summary;
+	} catch (error) {
+		console.error("❌ expireDueSubscriptions error:", error);
+		return {
+			success: false,
+			error: error.message || "Unknown error"
+		};
+	}
+};
+
+exports.expireDueSubscriptions = expireDueSubscriptions;
+
+/**
+ * API endpoint to manually trigger subscription renewal cron job
+ * Can be called from Postman or other API clients
+ */
+var processSubscriptionRenewalsApi = async function (req, res) {
+	console.log("🔔 processSubscriptionRenewalsApi called via API");
+	
+	try {
+		// Call the main cron function
+		var result = await processSubscriptionRenewals();
+		
+		// Return success response with results
+		res.json({
+			success: result.success !== false,
+			message: result.success !== false
+				? "Subscription renewal cron job executed successfully"
+				: "Subscription renewal cron job failed",
+			result: result,
+			timestamp: new Date().toISOString()
+		});
+	} catch (error) {
+		console.error("❌ processSubscriptionRenewalsApi error:", error);
+		res.json({
+			success: false,
+			message: "Subscription renewal cron job failed",
+			error: error.message,
+			timestamp: new Date().toISOString()
+		});
+	}
+};
+
+exports.processSubscriptionRenewalsApi = processSubscriptionRenewalsApi;
+
+/**
+ * API endpoint to manually trigger subscription expiry cron job
+ */
+var expireDueSubscriptionsApi = async function (req, res) {
+	console.log("🔔 expireDueSubscriptionsApi called via API");
+
+	try {
+		const result = await expireDueSubscriptions();
+
+		res.json({
+			success: result.success !== false,
+			message: result.success !== false
+				? "Subscription expiry cron job executed successfully"
+				: "Subscription expiry cron job failed",
+			result: result,
+			timestamp: new Date().toISOString()
+		});
+	} catch (error) {
+		console.error("❌ expireDueSubscriptionsApi error:", error);
+		res.json({
+			success: false,
+			message: "Subscription expiry cron job failed",
+			error: error.message,
+			timestamp: new Date().toISOString()
+		});
+	}
+};
+
+exports.expireDueSubscriptionsApi = expireDueSubscriptionsApi;

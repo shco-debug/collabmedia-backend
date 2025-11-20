@@ -133,6 +133,21 @@ CronEngine.schedule('* * * * *', function () {
 });*/
 
 //CronJobsModule.SynedPostEmailCron();
+
+//#) CronJobs to process subscription renewals (daily at 2:00 AM)
+CronEngine.schedule('0 2 * * *', function () {
+    console.log('@@@@@@@@---------------------------Running CronJobsModule.processSubscriptionRenewals-----------------------------@@@@@@@@@');
+    CronJobsModule.processSubscriptionRenewals();
+});
+console.log('processSubscriptionRenewals schedule set (daily at 2:00 AM).');
+
+//#) CronJobs to expire due subscriptions (daily at 1:30 AM)
+CronEngine.schedule('0 30 1 * * *', function () {
+    console.log('@@@@@@@@---------------------------Running CronJobsModule.expireDueSubscriptions-----------------------------@@@@@@@@@');
+    CronJobsModule.expireDueSubscriptions();
+});
+console.log('expireDueSubscriptions schedule set (daily at 1:30 AM).');
+
 function reportAdmin (message , emails) {
 	var message = message ? message : null;
 	var emails = emails ? emails : [];

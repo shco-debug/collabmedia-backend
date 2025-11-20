@@ -92,6 +92,8 @@ module.exports = function(req, res, next){
 			'/updateMediaCountsPerGt_API',
 			'/InvitationEngineCron__API',
 			'/WishHappyBirthdayCron__API',
+			'/processSubscriptionRenewalsApi',
+			'/expireDueSubscriptionsApi',
 			'/getUnsplashImages__API',
 			'/syncGdMjImage_INTERNAL_API',
 			'/syncGdTwoMjImage_INTERNAL_API',
@@ -248,6 +250,13 @@ module.exports = function(req, res, next){
 		var frontendApiPrefix = '/ebooks';
 		var unprotectedRoutes = [
 			// All e-book routes require authentication
+		];
+		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
+	}
+	else if(reqUrl.substring(0,6) == '/cards'){
+		var frontendApiPrefix = '/cards';
+		var unprotectedRoutes = [
+			// All card routes require authentication
 		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}
