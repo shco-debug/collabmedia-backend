@@ -3299,6 +3299,7 @@ const getUserPosts = async (req, res) => {
       dateFrom = null,
       dateTo = null,
       includeBlendSettings = false,
+      includeAllUsers = false, // For community tab - show posts from all users
     } = req.body;
 
     // Handle nested filters object (from frontend)
@@ -3307,6 +3308,7 @@ const getUserPosts = async (req, res) => {
     const finalMediaType = filters.mediaType || mediaType;
     const finalSortBy = filters.sortBy || sortBy;
     const finalSearchQuery = filters.searchQuery || searchQuery;
+    const finalIncludeAllUsers = req.body.includeAllUsers || includeAllUsers;
 
     // Validate pagination parameters
     const pageNum = Math.max(1, parseInt(page));
@@ -3317,14 +3319,28 @@ const getUserPosts = async (req, res) => {
     const userIdString = userObjectId.toString();
 
     // Build query conditions
+    // Filter out deleted posts - IsDeleted can be 1 (number) or true (boolean)
+    // Include records where IsDeleted is 0, false, null, or doesn't exist
     const conditions = {
-      PostedBy: userObjectId,
-      IsDeleted: { $ne: true },
+      $or: [
+        { IsDeleted: { $exists: false } },
+        { IsDeleted: 0 },
+        { IsDeleted: false },
+        { IsDeleted: null }
+      ]
     };
+
+    // Only filter by PostedBy if we're NOT including all users (community tab)
+    // For "myself" tab or when includeAllUsers is false, show only current user's posts
+    if (!finalIncludeAllUsers) {
+      conditions.PostedBy = userObjectId;
+    }
 
     // Privacy filtering
     switch (finalPrivacyFilter) {
       case "public":
+      case "PublicWithName":
+        // Show public posts (with or without name)
         conditions.PostPrivacySetting = {
           $in: ["PublicWithName", "PublicWithoutName"],
         };
@@ -3332,9 +3348,14 @@ const getUserPosts = async (req, res) => {
       case "private":
       case "OnlyForOwner":
         // Only include OnlyForOwner posts (truly private)
+        // For private posts, always filter by current user (can't see others' private posts)
         conditions.PostPrivacySetting = "OnlyForOwner";
+        if (!conditions.PostedBy) {
+          conditions.PostedBy = userObjectId;
+        }
         break;
       case "friends":
+      case "InvitedFriends":
         conditions.PostPrivacySetting = "InvitedFriends";
         break;
       case "all":
@@ -3956,10 +3977,11 @@ const getUserPosts = async (req, res) => {
     const getPostAudioFileData = CapsuleController.getPostAudioFileData;
 
     // Process posts and add audio file data
+    // Note: In getUserPosts, post._id is the Media document's _id (original post ID)
     const postsWithAudio = await Promise.all(formattedPosts.map(async (post) => {
-      const postIdForAudio = post._id || post.id;
-      if (postIdForAudio) {
-        const audioData = await getPostAudioFileData(postIdForAudio);
+      // ✅ Use Media document's _id ONLY (original post ID) - no fallback
+      if (post._id) {
+        const audioData = await getPostAudioFileData(post._id);
         if (audioData) {
           post.audioFile = audioData;
         } else {

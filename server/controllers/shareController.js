@@ -103,12 +103,33 @@ const getPublicPost = async (req, res) => {
 
     let media = null;
     if (post.PostId) {
+      console.log('🔍 [ShareController] Fetching Media document for PostId:', post.PostId);
       media = await Media.findOne({
         _id: new ObjectId(post.PostId),
         IsDeleted: { $ne: true },
       })
         .select('-__v')
         .lean();
+      
+      console.log('📦 [ShareController] Media document fetched:', {
+        found: !!media,
+        hasLocation: !!media?.Location,
+        locationLength: media?.Location?.length || 0,
+        MediaType: media?.MediaType,
+        ContentType: media?.ContentType,
+        thumbnail: media?.thumbnail,
+        locationSample: media?.Location?.[0] ? {
+          URL: media.Location[0].URL,
+          url: media.Location[0].url,
+          Type: media.Location[0].Type,
+          Size: media.Location[0].Size
+        } : null
+      });
+    } else {
+      console.log('⚠️ [ShareController] No PostId found in SyncedPost:', {
+        postId: post._id,
+        hasPostId: !!post.PostId
+      });
     }
 
     let capsule = null;
@@ -127,7 +148,16 @@ const getPublicPost = async (req, res) => {
 
     // Prepare media data for sharing
     const mediaData = media ? { ...media } : {};
+    console.log('🔄 [ShareController] Preparing mediaData:', {
+      hasMedia: !!media,
+      hasLocation: !!mediaData.Location,
+      locationIsArray: Array.isArray(mediaData.Location),
+      locationLength: mediaData.Location?.length || 0,
+      MediaType: mediaData.MediaType
+    });
+    
     if (mediaData.Location && Array.isArray(mediaData.Location)) {
+      console.log('✅ [ShareController] Processing Location array with', mediaData.Location.length, 'items');
       mediaData.Location = mediaData.Location.map((item) => ({
         ...item,
         URL: toAbsoluteMediaUrl(item.URL || item.url),
@@ -136,6 +166,16 @@ const getPublicPost = async (req, res) => {
           item.thumbnail || (mediaData.thumbnail ? mediaData.thumbnail : null)
         ),
       }));
+      console.log('✅ [ShareController] Location array processed. First item:', {
+        URL: mediaData.Location[0]?.URL,
+        url: mediaData.Location[0]?.url,
+        thumbnail: mediaData.Location[0]?.thumbnail
+      });
+    } else {
+      console.log('⚠️ [ShareController] Location array is missing or not an array:', {
+        Location: mediaData.Location,
+        isArray: Array.isArray(mediaData.Location)
+      });
     }
 
     const emailDataSetsRaw = Array.isArray(post.EmailEngineDataSets) ? post.EmailEngineDataSets : [];
@@ -225,9 +265,12 @@ const getPublicPost = async (req, res) => {
       EmailTemplate: post.EmailTemplate || null,
       EmailSubject: post.EmailSubject || null,
       MediaType: mediaData?.MediaType,
+      mediaType: mediaData?.MediaType ? mediaData.MediaType.toLowerCase() : null,
       Content: mediaData?.Content,
+      ContentType: mediaData?.ContentType,
       BlendSettings: blendSettings || null,
       Location: mediaData?.Location || [],
+      thumbnail: mediaData?.thumbnail || null,
       images,
       blendConfig,
       capsule: capsule
@@ -260,6 +303,17 @@ const getPublicPost = async (req, res) => {
       selectedEmailDataSet,
       hexcode_blendedImage: selectedEmailDataSet?.hexcode_blendedImage || null,
     };
+
+    console.log('📤 [ShareController] Sending response:', {
+      hasLocation: !!publicPost.Location,
+      locationLength: publicPost.Location?.length || 0,
+      MediaType: publicPost.MediaType,
+      mediaType: publicPost.mediaType,
+      ContentType: publicPost.ContentType,
+      thumbnail: publicPost.thumbnail,
+      postId: publicPost._id,
+      mediaPostId: publicPost.PostId
+    });
 
     return res.status(200).json({
       code: '200',

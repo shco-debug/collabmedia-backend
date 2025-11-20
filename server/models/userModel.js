@@ -74,10 +74,6 @@ var userSchema = new mongoose.Schema({
 	IsPostLaunchVideoSeen: {type: Boolean, default: false},
 	SpeechToTextMediaId: {type: mongoose.Schema.Types.ObjectId, default: null},
 	IsSubscriber: {type: Boolean, default: false},
-	SubscriberStreamIds: [{
-		type: mongoose.Schema.Types.ObjectId,
-		ref: 'Capsule'
-	}],
 	SubscriberSince: {type: Date, default: null},
 	SubscriptionExpiresOn: {type: Date, default: null},
 	SubscriptionStatus: {
@@ -88,6 +84,8 @@ var userSchema = new mongoose.Schema({
 	SubscriptionTrialEndsOn: { type: Date, default: null },
 	SubscriptionLastTrialEndsOn: { type: Date, default: null },
 	SubscriptionExpiresOn: { type: Date, default: null },
+	SubscriptionPrice: { type: Number, default: null },
+	SubscriptionCurrency: { type: String, default: 'USD' },
 	Role: {type: String, enum: ["user", "subadmin", "admin"], default: "user"},
 	
 	// Admin/SubAdmin specific fields (only used when Role is "admin" or "subadmin")

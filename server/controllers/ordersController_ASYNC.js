@@ -3817,15 +3817,11 @@ var buyNow = async function (req, res) {
       const subscriberInfo = {
         isSubscriber:
           req.session.user && req.session.user.IsSubscriber === true,
-        streamIds: Array.isArray(req.session.user?.SubscriberStreamIds)
-          ? req.session.user.SubscriberStreamIds.map((id) => String(id))
-          : [],
       };
       if (subscriberInfo.isSubscriber) {
-        console.log("[Subscription] Subscriber detected", {
+        console.log("[Subscription] Subscriber detected - access to ALL published streams", {
           userId: req.session.user?._id,
           userEmail: req.session.user?.Email,
-          totalSavedStreams: subscriberInfo.streamIds.length,
         });
       } else {
         console.log("[Subscription] User is not marked as a platform subscriber", {

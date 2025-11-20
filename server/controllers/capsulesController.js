@@ -1072,6 +1072,7 @@ var findAllPaginated = async function (req, res) {
       CreaterId: 1,
       OwnerId: 1,
       Origin: 1,
+      OriginatedFrom: 1, // ✅ Added for e-book redirect logic
       IsPublished: 1,
       Status: 1,
       IsDeleted: 1,
@@ -1495,6 +1496,7 @@ var ownedByMe = async function (req, res) {
       CreaterId: 1,
       OwnerId: 1,
       Origin: 1,
+      OriginatedFrom: 1, // ✅ Added for e-book redirect logic
       IsPublished: 1,
       IsLaunched: 1,
       Status: 1,
@@ -11003,35 +11005,59 @@ var getUserMixedFeedPosts = async function (req, res) {
       {
         $lookup: {
           from: "StreamLikes",
-          localField: "_id",
-          foreignField: "SocialPostId",
-          as: "likes",
-        },
-      },
-      
-      // Filter out deleted likes (handle both boolean and numeric)
-      {
-        $addFields: {
-          likes: {
-            $filter: {
-              input: "$likes",
-              as: "like",
-              cond: { 
-                $and: [
-                  { $ne: ["$$like.IsDeleted", true] },
-                  { $ne: ["$$like.IsDeleted", 1] }
-                ]
+          let: { syncedPostId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$SocialPostId", "$$syncedPostId"] },
+                    { $ne: ["$IsDeleted", true] },
+                    { $ne: ["$IsDeleted", 1] }
+                  ]
+                }
+              }
+            },
+            // Lookup user details for each like
+            {
+              $lookup: {
+                from: "users",
+                localField: "UserId",
+                foreignField: "_id",
+                as: "user"
+              }
+            },
+            {
+              $unwind: {
+                path: "$user",
+                preserveNullAndEmptyArrays: true
+              }
+            },
+            {
+              $project: {
+                UserId: 1,
+                CreatedOn: 1,
+                UpdatedOn: 1,
+                IsDeleted: 1,
+                user: {
+                  _id: "$user._id",
+                  Name: "$user.Name",
+                  UserName: "$user.UserName",
+                  ProfilePic: "$user.ProfilePic",
+                  Email: "$user.Email"
+                }
               }
             }
-          }
-        }
+          ],
+          as: "likes",
+        },
       },
       // ⚡ Lookup comments with PRIVACY FILTERING
       {
         $lookup: {
           from: "StreamComments",
           let: { 
-            postId: "$PostId",
+            syncedPostId: "$_id",  // Use SyncedPost _id (not PostId) since comments use SyncedPost._id as SocialPostId
             capsuleId: "$capsuleId"
           },
           pipeline: [
@@ -11042,7 +11068,7 @@ var getUserMixedFeedPosts = async function (req, res) {
                   {
                     $expr: { 
                       $and: [
-                        { $eq: ["$SocialPostId", "$$postId"] },
+                        { $eq: ["$SocialPostId", "$$syncedPostId"] },
                         { $ne: ["$IsDeleted", true] },
                         { $ne: ["$IsDeleted", 1] }
                       ]
@@ -11838,10 +11864,10 @@ var addAudioFileDataToPosts = async function (posts) {
   
   // Process posts and check for audio files
   const postsWithAudio = await Promise.all(posts.map(async (post) => {
-    // ✅ Check for audio file using PostId (from SyncedPost.PostId which references Media._id)
-    const postIdForAudio = post.PostId || post._id;
-    if (postIdForAudio) {
-      const audioData = await getPostAudioFileData(postIdForAudio);
+    // ✅ Check for audio file using PostId ONLY (from SyncedPost.PostId which references Media._id)
+    // Audio files are named after the original Media document's _id, not SyncedPost's _id
+    if (post.PostId) {
+      const audioData = await getPostAudioFileData(post.PostId);
       if (audioData) {
         post.audioFile = audioData;
       } else {
@@ -11880,6 +11906,7 @@ var getUserFeedPosts = async function (req, res) {
     const skip = req.body.skip || 0;
     const type = req.body.type || null;
     const selectedKeyword = req.body.selectedKeyword || null;
+    const loadOlderPosts = req.body.loadOlderPosts || false;  // Flag to specifically load older posts
     const loginUserId = req.session.user._id;
 
     const SyncedPost = require('./../models/syncedpostModel.js');
@@ -11943,19 +11970,115 @@ var getUserFeedPosts = async function (req, res) {
       });
     }
     
-    const syncedPostConditions = {
+    // Calculate today's date range (start and end of day) - Same as getStreamPostsOptimized
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    console.log(`📅 Filtering posts for today: ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
+    console.log(`📅 Local time: ${todayStart.toString()} to ${todayEnd.toString()}`);
+    
+    // First, try to get posts for today
+    let syncedPostConditionsToday = {
       CapsuleId: { $in: userCapsuleIds },
       IsDeleted: false,
       Status: true,
-      'EmailEngineDataSets.Delivered': false
+      'EmailEngineDataSets.DateOfDelivery': {
+        $gte: todayStart,
+        $lte: todayEnd
+      }
     };
     
-    // ⚡ CRITICAL: First check if any documents match before running expensive aggregation
+    // Count total matching posts for today
     const t_count = Date.now();
-    const matchCount = await SyncedPost.countDocuments(syncedPostConditions).maxTimeMS(5000);
-    console.log(`📊 getUserFeedPosts: matchedSyncedPosts=${matchCount} [${Date.now() - t_count}ms]`);
+    let totalCountResult = await SyncedPost.aggregate([
+      { $match: syncedPostConditionsToday },
+      { $count: "total" }
+    ], { maxTimeMS: 5000, allowDiskUse: true });
     
-    if (matchCount === 0) {
+    let totalCountToday = totalCountResult[0]?.total || 0;
+    let usePastPosts = false;
+    let syncedPostConditions = syncedPostConditionsToday;
+    
+    // If loadOlderPosts flag is set, directly load past posts
+    if (loadOlderPosts) {
+      console.log(`📅 Load older posts flag is set, loading past posts only`);
+      usePastPosts = true;
+      
+      // Update conditions to get posts from past days (DateOfDelivery < todayStart)
+      syncedPostConditions = {
+        CapsuleId: { $in: userCapsuleIds },
+        IsDeleted: false,
+        Status: true,
+        'EmailEngineDataSets.DateOfDelivery': {
+          $lt: todayStart
+        }
+      };
+      
+      // Count past posts
+      totalCountResult = await SyncedPost.aggregate([
+        { $match: syncedPostConditions },
+        { $count: "total" }
+      ], { maxTimeMS: 5000, allowDiskUse: true });
+      
+      totalCount = totalCountResult[0]?.total || 0;
+      console.log(`📊 Found ${totalCount} past posts [${Date.now() - t_count}ms]`);
+    } else if (totalCountToday === 0) {
+      // If no posts for today, fallback to past posts
+      console.log(`📅 No posts found for today, falling back to past posts`);
+      usePastPosts = true;
+      
+      // Update conditions to get posts from past days (DateOfDelivery < todayStart)
+      syncedPostConditions = {
+        CapsuleId: { $in: userCapsuleIds },
+        IsDeleted: false,
+        Status: true,
+        'EmailEngineDataSets.DateOfDelivery': {
+          $lt: todayStart
+        }
+      };
+      
+      // Count past posts
+      totalCountResult = await SyncedPost.aggregate([
+        { $match: syncedPostConditions },
+        { $count: "total" }
+      ], { maxTimeMS: 5000, allowDiskUse: true });
+      
+      totalCount = totalCountResult[0]?.total || 0;
+      console.log(`📊 Found ${totalCount} past posts [${Date.now() - t_count}ms]`);
+    } else {
+      totalCount = totalCountToday;
+      console.log(`📊 Found ${totalCount} posts for today [${Date.now() - t_count}ms]`);
+      
+      // If we have very few posts for today (less than the limit), also include past posts
+      if (totalCountToday < limit) {
+        console.log(`📅 Only ${totalCountToday} posts for today (less than limit ${limit}), including past posts`);
+        usePastPosts = true;
+        
+        // Update conditions to include both today's and past posts
+        syncedPostConditions = {
+          CapsuleId: { $in: userCapsuleIds },
+          IsDeleted: false,
+          Status: true,
+          'EmailEngineDataSets.DateOfDelivery': {
+            $lte: todayEnd  // Include all posts up to end of today (today's + past)
+          }
+        };
+        
+        // Re-count with new conditions
+        totalCountResult = await SyncedPost.aggregate([
+          { $match: syncedPostConditions },
+          { $count: "total" }
+        ], { maxTimeMS: 5000, allowDiskUse: true });
+        
+        totalCount = totalCountResult[0]?.total || 0;
+        console.log(`📊 Found ${totalCount} total posts (today + past) [${Date.now() - t_count}ms]`);
+      }
+    }
+    
+    if (totalCount === 0) {
       console.log('❌ No SyncedPost documents found, returning empty result');
       return res.json({
         code: 200,
@@ -11971,51 +12094,71 @@ var getUserFeedPosts = async function (req, res) {
     const pipeline = [
       { $match: syncedPostConditions },
       
-      // ⚡ CRITICAL FIX: Sort and paginate BEFORE unwinding to reduce row count
-      { $sort: { CreatedOn: -1, _id: -1 } },
-      { $skip: skip },
-      { $limit: limit * 10 },  // Get 10× limit to account for duplicates after unwind
-      
-      // NOW unwind EmailEngineDataSets (only on limited docs!)
-      { $unwind: { path: "$EmailEngineDataSets", preserveNullAndEmptyArrays: false } },
-      
-      // NOW deduplicate by PostId
+      // Extract DateOfDelivery first for sorting (same as getStreamPostsOptimized)
       {
-        $group: {
-          _id: "$PostId",
-          // Keep first occurrence of all fields
-          doc_id: { $first: "$_id" },
-          CapsuleId: { $first: "$CapsuleId" },
-          PageId: { $first: "$PageId" },
-          PostId: { $first: "$PostId" },
-          PostStatement: { $first: "$PostStatement" },
-          PostOwnerId: { $first: "$PostOwnerId" },
-          SyncedBy: { $first: "$SyncedBy" },
-          ReceiverEmails: { $first: "$ReceiverEmails" },
-          CreatedOn: { $first: "$CreatedOn" },
-          Delivered: { $first: "$EmailEngineDataSets.Delivered" },
-          VisualUrls: { $first: "$EmailEngineDataSets.VisualUrls" },
-          SoundFileUrl: { $first: "$EmailEngineDataSets.SoundFileUrl" },
-          TextAboveVisual: { $first: "$EmailEngineDataSets.TextAboveVisual" },
-          TextBelowVisual: { $first: "$EmailEngineDataSets.TextBelowVisual" },
-          DateOfDelivery: { $first: "$EmailEngineDataSets.DateOfDelivery" },
-          BlendMode: { $first: "$EmailEngineDataSets.BlendMode" },
-          EmailTemplate: { $first: "$EmailTemplate" },
-          Subject: { $first: "$EmailSubject" },
-          IsOnetimeStream: { $first: "$IsOnetimeStream" },
-          IsOnlyPostImage: { $first: "$IsOnlyPostImage" },
-          hexcode_blendedImage_temp: { $first: "$EmailEngineDataSets.hexcode_blendedImage" },
-          UploaderID: { $first: "$UploaderID" },
+        $addFields: {
+          firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] }
+        }
+      },
+      {
+        $addFields: {
+          DateOfDeliveryForSort: "$firstDataSet.DateOfDelivery"
+        }
+      },
+      
+      // Sort by DateOfDelivery (most recent first for past posts, or CreatedOn for today's posts)
+      { $sort: usePastPosts 
+          ? { DateOfDeliveryForSort: -1, _id: -1 }  // Most recent past posts first
+          : { CreatedOn: -1, _id: -1 }              // Today's posts by creation date
+      },
+      { $skip: skip },
+      { $limit: limit },
+      
+      // Extract remaining EmailEngineDataSets fields (firstDataSet already extracted above)
+      {
+        $addFields: {
+          Delivered: "$firstDataSet.Delivered",
+          VisualUrls: "$firstDataSet.VisualUrls",
+          SoundFileUrl: "$firstDataSet.SoundFileUrl",
+          TextAboveVisual: "$firstDataSet.TextAboveVisual",
+          TextBelowVisual: "$firstDataSet.TextBelowVisual",
+          DateOfDelivery: "$firstDataSet.DateOfDelivery",
+          BlendMode: "$firstDataSet.BlendMode",
+          hexcode_blendedImage_temp: "$firstDataSet.hexcode_blendedImage",
         },
       },
       
-      // Limit again after grouping to get exactly what we need
-      { $limit: limit },
+      // Filter by date based on whether we're using today's posts or past posts
+      // (Additional check after extracting DateOfDelivery field)
+      // If usePastPosts is true, we're showing past posts only OR today's + past posts
+      {
+        $match: usePastPosts
+          ? {
+              DateOfDelivery: {
+                $lte: todayEnd  // Include all posts up to end of today (past + today)
+              }
+            }
+          : {
+              DateOfDelivery: {
+                $gte: todayStart,
+                $lte: todayEnd
+              }
+            }
+      },
       
-      // Project to restore field structure
+      // Add flag to indicate if this is an old post (not from current day)
+      {
+        $addFields: {
+          isOldPost: {
+            $lt: ["$DateOfDelivery", todayStart]
+          }
+        }
+      },
+      
+      // Project fields
       {
         $project: {
-          _id: "$doc_id",
+          _id: 1,
           CapsuleId: 1,
           PageId: 1,
           PostId: 1,
@@ -12032,11 +12175,12 @@ var getUserFeedPosts = async function (req, res) {
           DateOfDelivery: 1,
           BlendMode: 1,
           EmailTemplate: 1,
-          Subject: 1,
+          Subject: "$EmailSubject",
           IsOnetimeStream: 1,
           IsOnlyPostImage: 1,
           hexcode_blendedImage_temp: 1,
           UploaderID: 1,
+          isOldPost: 1,
         },
       },
       
@@ -12200,52 +12344,63 @@ var getUserFeedPosts = async function (req, res) {
       // Sort by upload date (newest first)
       { $sort: { UploadedOn: -1, _id: -1 } },
       
-      // ⚡ CRITICAL FIX: Group by PostId IMMEDIATELY after media lookup to deduplicate
-      {
-        $group: {
-          _id: "$PostId",
-          firstDoc: { $first: "$$ROOT" }
-        }
-      },
-      
-      // Restore document structure
-      {
-        $replaceRoot: { newRoot: "$firstDoc" }
-      },
-      
-      // NOW lookup interactions on deduplicated posts
+      // NOW lookup interactions on posts
       {
         $lookup: {
           from: "StreamLikes",
-          localField: "_id",
-          foreignField: "SocialPostId",
-          as: "likes",
-        },
-      },
-      
-      // Filter out deleted likes (handle both boolean and numeric)
-      {
-        $addFields: {
-          likes: {
-            $filter: {
-              input: "$likes",
-              as: "like",
-              cond: { 
-                $and: [
-                  { $ne: ["$$like.IsDeleted", true] },
-                  { $ne: ["$$like.IsDeleted", 1] }
-                ]
+          let: { syncedPostId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$SocialPostId", "$$syncedPostId"] },
+                    { $ne: ["$IsDeleted", true] },
+                    { $ne: ["$IsDeleted", 1] }
+                  ]
+                }
+              }
+            },
+            // Lookup user details for each like
+            {
+              $lookup: {
+                from: "users",
+                localField: "UserId",
+                foreignField: "_id",
+                as: "user"
+              }
+            },
+            {
+              $unwind: {
+                path: "$user",
+                preserveNullAndEmptyArrays: true
+              }
+            },
+            {
+              $project: {
+                UserId: 1,
+                CreatedOn: 1,
+                UpdatedOn: 1,
+                IsDeleted: 1,
+                user: {
+                  _id: "$user._id",
+                  Name: "$user.Name",
+                  UserName: "$user.UserName",
+                  ProfilePic: "$user.ProfilePic",
+                  Email: "$user.Email"
+                }
               }
             }
-          }
-        }
+          ],
+          as: "likes",
+        },
       },
       // ⚡ Lookup comments with PRIVACY FILTERING
       {
         $lookup: {
           from: "StreamComments",
           let: { 
-            postId: "$PostId",
+            syncedPostId: "$_id",  // Use SyncedPost _id (not PostId) since comments use SyncedPost._id as SocialPostId
             capsuleId: "$capsuleId"
           },
           pipeline: [
@@ -12256,7 +12411,7 @@ var getUserFeedPosts = async function (req, res) {
                   {
                     $expr: { 
                       $and: [
-                        { $eq: ["$SocialPostId", "$$postId"] },
+                        { $eq: ["$SocialPostId", "$$syncedPostId"] },
                         { $ne: ["$IsDeleted", true] },
                         { $ne: ["$IsDeleted", 1] }
                       ]
@@ -12696,7 +12851,8 @@ var getUserFeedPosts = async function (req, res) {
       },
       {
         $project: {
-          _id: "$PostId",
+          _id: 1,  // Keep SyncedPost's _id
+          PostId: 1,  // ✅ Include original post ID (Media document's _id) for audio lookup
           MediaType: 1,
           LinkType: 1,
           Content: 1,
@@ -12727,7 +12883,9 @@ var getUserFeedPosts = async function (req, res) {
           likes: 1,
           comments: 1,
           likeCount: 1,
-          commentCount: 1
+          commentCount: 1,
+          DateOfDelivery: 1,
+          isOldPost: 1  // Flag indicating if post is from past day (not current day)
         }
       },
       { $sort: { UploadedOn: -1, _id: -1 } },
@@ -12774,9 +12932,9 @@ var getUserFeedPosts = async function (req, res) {
       });
     }
 
-    // ⚡ SIMPLIFIED COUNT: Just count matching SyncedPosts
+    // ⚡ Use the totalCount we already calculated earlier (with date filtering)
     const t4 = Date.now();
-    const totalCount = await SyncedPost.countDocuments(syncedPostConditions).exec();
+    // totalCount is already calculated above with date filtering logic
     perfLog.step4_count_aggregation = Date.now() - t4;
 
     // Calculate hexcode_blendedImage and clean BlendSettings
@@ -12822,10 +12980,10 @@ var getUserFeedPosts = async function (req, res) {
         post.BlendSettings = cleanedBlendSettings;
       }
       
-      // ✅ Check for audio file using PostId (from SyncedPost.PostId which references Media._id)
-      const postIdForAudio = post.PostId || post._id;
-      if (postIdForAudio) {
-        const audioData = await getPostAudioFileData(postIdForAudio);
+      // ✅ Check for audio file using PostId ONLY (from SyncedPost.PostId which references Media._id)
+      // Audio files are named after the original Media document's _id, not SyncedPost's _id
+      if (post.PostId) {
+        const audioData = await getPostAudioFileData(post.PostId);
         if (audioData) {
           post.audioFile = audioData;
         } else {
@@ -12838,13 +12996,106 @@ var getUserFeedPosts = async function (req, res) {
       return post;
     }));
 
+    // ✅ Calculate remaining older posts count
+    const t_older_count = Date.now();
+    
+    // Count total older posts (DateOfDelivery < todayStart) that match user's capsules
+    const olderPostsConditions = {
+      CapsuleId: { $in: userCapsuleIds },
+      IsDeleted: false,
+      Status: true,
+      'EmailEngineDataSets.DateOfDelivery': {
+        $lt: todayStart
+      }
+    };
+    
+    // Build aggregation pipeline to count older posts with same filters
+    const olderPostsCountPipeline = [
+      { $match: olderPostsConditions },
+      {
+        $addFields: {
+          firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] }
+        }
+      },
+      {
+        $lookup: {
+          from: "media",
+          let: { postId: "$PostId" },
+          pipeline: [
+            {
+              $match: {
+                $expr: { $eq: ["$_id", { $toObjectId: "$$postId" }] }
+              }
+            }
+          ],
+          as: "mediaDoc"
+        }
+      },
+      { $unwind: { path: "$mediaDoc", preserveNullAndEmptyArrays: true } }
+    ];
+    
+    // Apply media type filter if specified
+    if (type && type !== "all") {
+      olderPostsCountPipeline.push({
+        $match: {
+          $or: [
+            { "mediaDoc.MediaType": type },
+            ...(type === "Image"
+              ? [
+                  { "mediaDoc.MediaType": "Link", "mediaDoc.LinkType": "image" },
+                  { "mediaDoc.MediaType": "1MJPost" },
+                  { "mediaDoc.MediaType": "2MJPost" },
+                  { "mediaDoc.MediaType": "1UnsplashPost" },
+                  { "mediaDoc.MediaType": "2UnsplashPost" },
+                ]
+              : []),
+            ...(type === "Video"
+              ? [
+                  { "mediaDoc.MediaType": "Link", "mediaDoc.LinkType": { $ne: "image" } },
+                  { "mediaDoc.MediaType": "Video" },
+                  { "mediaDoc.MediaType": "Audio" },
+                ]
+              : []),
+          ],
+        }
+      });
+    }
+    
+    // Count total older posts
+    olderPostsCountPipeline.push({ $count: "total" });
+    
+    const olderPostsCountResult = await SyncedPost.aggregate(
+      olderPostsCountPipeline,
+      { maxTimeMS: 5000, allowDiskUse: true }
+    );
+    
+    const totalOlderPosts = olderPostsCountResult[0]?.total || 0;
+    
+    // Calculate how many older posts have been fetched
+    // If loadOlderPosts is true, skip represents older posts already fetched
+    // Otherwise, count older posts in current response
+    let olderPostsFetched = 0;
+    if (loadOlderPosts) {
+      // We're loading older posts directly, skip represents already fetched older posts
+      olderPostsFetched = skip;
+    } else {
+      // Count older posts in current response
+      olderPostsFetched = cleanedPosts.filter(post => post.isOldPost === true).length;
+    }
+    
+    // Calculate remaining older posts
+    const olderPostsRemaining = Math.max(0, totalOlderPosts - olderPostsFetched);
+    
+    console.log(`📊 Older posts: total=${totalOlderPosts}, fetched=${olderPostsFetched}, remaining=${olderPostsRemaining} [${Date.now() - t_older_count}ms]`);
+
     console.log('📤 [BACKEND] getUserFeedPosts - Sending response', {
       endpoint: '/capsules/getUserFeedPosts',
       postsCount: cleanedPosts.length,
       totalCount: totalCount,
       userCapsules: userCapsules.length,
       skip,
-      limit
+      limit,
+      olderPostsRemaining: olderPostsRemaining
     });
 
     res.json({
@@ -12858,6 +13109,7 @@ var getUserFeedPosts = async function (req, res) {
         limit: limit,
         hasMore: skip + limit < totalCount,
       },
+      olderPostsRemaining: olderPostsRemaining, // ✅ Count of older posts still available in DB
       filters: {
         type: type,
         selectedKeyword: selectedKeyword,
@@ -14950,39 +15202,62 @@ var getStreamPostsOptimized = async function (req, res) {
     const memberCapsuleIds = userMemberships.map(m => new mongoose.Types.ObjectId(m.StreamId));
     console.log(`📊 User is member of ${memberCapsuleIds.length} streams`);
 
-    // Query SyncedPost for THIS specific capsule only
-    const syncedPostConditions = {
+    // Calculate today's date range (start and end of day)
+    const todayStart = new Date();
+    todayStart.setHours(0, 0, 0, 0);
+    
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    
+    console.log(`📅 Filtering posts for today: ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
+
+    // First, try to get posts for today
+    let syncedPostConditions = {
       CapsuleId: new mongoose.Types.ObjectId(capsuleId),
       IsDeleted: false,
       Status: true,
-      'EmailEngineDataSets.Delivered': false
+      'EmailEngineDataSets.DateOfDelivery': {
+        $gte: todayStart,
+        $lte: todayEnd
+      }
     };
     
-    // Count total matching posts - count unique PostIds, not SyncedPost documents
+    // Count total matching posts for today - no duplication, so count documents directly
     const t_count = Date.now();
-    const totalCountResult = await SyncedPost.aggregate([
+    let totalCountResult = await SyncedPost.aggregate([
       { $match: syncedPostConditions },
-      { $unwind: { path: "$EmailEngineDataSets", preserveNullAndEmptyArrays: false } },
-      {
-        $match: {
-          $or: [
-            { "EmailEngineDataSets.Delivered": false },
-            { "EmailEngineDataSets.Delivered": 0 },
-            { "EmailEngineDataSets.Delivered": { $exists: false } },
-            { "EmailEngineDataSets.Delivered": null }
-          ]
-        }
-      },
-      {
-        $group: {
-          _id: "$PostId"
-        }
-      },
       { $count: "total" }
     ], { maxTimeMS: 5000, allowDiskUse: true });
     
-    const totalCount = totalCountResult[0]?.total || 0;
-    console.log(`📊 Found ${totalCount} unique posts in stream [${Date.now() - t_count}ms]`);
+    let totalCount = totalCountResult[0]?.total || 0;
+    let usePastPosts = false;
+    
+    // If no posts for today, fallback to past posts
+    if (totalCount === 0) {
+      console.log(`📅 No posts found for today, falling back to past posts`);
+      usePastPosts = true;
+      
+      // Update conditions to get posts from past days (DateOfDelivery < todayStart)
+      syncedPostConditions = {
+        CapsuleId: new mongoose.Types.ObjectId(capsuleId),
+        IsDeleted: false,
+        Status: true,
+        'EmailEngineDataSets.DateOfDelivery': {
+          $lt: todayStart
+        }
+      };
+      
+      // Count past posts
+      totalCountResult = await SyncedPost.aggregate([
+        { $match: syncedPostConditions },
+        { $count: "total" }
+      ], { maxTimeMS: 5000, allowDiskUse: true });
+      
+      totalCount = totalCountResult[0]?.total || 0;
+      console.log(`📊 Found ${totalCount} past posts in stream [${Date.now() - t_count}ms]`);
+    } else {
+      console.log(`📊 Found ${totalCount} posts for today [${Date.now() - t_count}ms]`);
+    }
     
     if (totalCount === 0) {
       return res.json({
@@ -14995,79 +15270,78 @@ var getStreamPostsOptimized = async function (req, res) {
       });
     }
 
-    // Build aggregation pipeline (same as getUserMixedFeedPosts)
+    // Build aggregation pipeline - no unwind needed since no duplication
     const pipeline = [
       { $match: syncedPostConditions },
       
-      // Sort and paginate BEFORE unwinding
-      { $sort: { CreatedOn: -1, _id: -1 } },
-      { $skip: skip },
-      { $limit: limit * 10 },
-      
-      // Unwind EmailEngineDataSets
-      // ⚠️ CRITICAL: preserveNullAndEmptyArrays: false will REMOVE posts without EmailEngineDataSets
-      // This might be why posts are being lost!
-      { $unwind: { path: "$EmailEngineDataSets", preserveNullAndEmptyArrays: false } },
-      
-      // ⚠️ CRITICAL FIX: Filter to only keep EmailEngineDataSets with Delivered: false
-      // The initial $match finds documents with at least one undelivered dataset,
-      // but after $unwind, we get ALL datasets (including delivered ones).
-      // We need to filter to only keep the undelivered ones!
-      {
-        $match: {
-          $or: [
-            { "EmailEngineDataSets.Delivered": false },
-            { "EmailEngineDataSets.Delivered": 0 },
-            { "EmailEngineDataSets.Delivered": { $exists: false } },
-            { "EmailEngineDataSets.Delivered": null }
-          ]
-        }
-      },
-      
-      // Sort by Delivered status (false first) to ensure we pick undelivered datasets when grouping
+      // Extract DateOfDelivery first for sorting
       {
         $addFields: {
-          _deliveredSort: { $cond: [{ $eq: ["$EmailEngineDataSets.Delivered", false] }, 0, 1] }
+          firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] }
         }
       },
-      { $sort: { _deliveredSort: 1, CreatedOn: -1, _id: -1 } },
-      
-      // Deduplicate by PostId (will pick first, which should be undelivered due to sort above)
       {
-        $group: {
-          _id: "$PostId",
-          doc_id: { $first: "$_id" },
-          CapsuleId: { $first: "$CapsuleId" },
-          PageId: { $first: "$PageId" },
-          PostId: { $first: "$PostId" },
-          PostStatement: { $first: "$PostStatement" },
-          PostOwnerId: { $first: "$PostOwnerId" },
-          SyncedBy: { $first: "$SyncedBy" },
-          ReceiverEmails: { $first: "$ReceiverEmails" },
-          CreatedOn: { $first: "$CreatedOn" },
-          Delivered: { $first: "$EmailEngineDataSets.Delivered" },
-          VisualUrls: { $first: "$EmailEngineDataSets.VisualUrls" },
-          SoundFileUrl: { $first: "$EmailEngineDataSets.SoundFileUrl" },
-          TextAboveVisual: { $first: "$EmailEngineDataSets.TextAboveVisual" },
-          TextBelowVisual: { $first: "$EmailEngineDataSets.TextBelowVisual" },
-          DateOfDelivery: { $first: "$EmailEngineDataSets.DateOfDelivery" },
-          BlendMode: { $first: "$EmailEngineDataSets.BlendMode" },
-          EmailTemplate: { $first: "$EmailTemplate" },
-          Subject: { $first: "$EmailSubject" },
-          IsOnetimeStream: { $first: "$IsOnetimeStream" },
-          IsOnlyPostImage: { $first: "$IsOnlyPostImage" },
-          hexcode_blendedImage_temp: { $first: "$EmailEngineDataSets.hexcode_blendedImage" },
-          UploaderID: { $first: "$UploaderID" },
+        $addFields: {
+          DateOfDeliveryForSort: "$firstDataSet.DateOfDelivery"
+        }
+      },
+      
+      // Sort by DateOfDelivery (most recent first for past posts, or CreatedOn for today's posts)
+      { $sort: usePastPosts 
+          ? { DateOfDeliveryForSort: -1, _id: -1 }  // Most recent past posts first
+          : { CreatedOn: -1, _id: -1 }              // Today's posts by creation date
+      },
+      { $skip: skip },
+      { $limit: limit },
+      
+      // Extract remaining EmailEngineDataSets fields (firstDataSet already extracted above)
+      {
+        $addFields: {
+          Delivered: "$firstDataSet.Delivered",
+          VisualUrls: "$firstDataSet.VisualUrls",
+          SoundFileUrl: "$firstDataSet.SoundFileUrl",
+          TextAboveVisual: "$firstDataSet.TextAboveVisual",
+          TextBelowVisual: "$firstDataSet.TextBelowVisual",
+          DateOfDelivery: "$firstDataSet.DateOfDelivery",
+          BlendMode: "$firstDataSet.BlendMode",
+          hexcode_blendedImage_temp: "$firstDataSet.hexcode_blendedImage",
         },
       },
       
-      // Limit again after grouping
-      { $limit: limit },
+      // Filter by date based on whether we're using today's posts or past posts
+      // (Additional check after extracting DateOfDelivery field)
+      // Using JavaScript date variables directly in $match (MongoDB supports this)
+      {
+        $match: usePastPosts
+          ? {
+              DateOfDelivery: {
+                $lt: todayStart
+              }
+            }
+          : {
+              DateOfDelivery: {
+                $gte: todayStart,
+                $lte: todayEnd
+              }
+            }
+      },
       
-      // Project to restore field structure
+      // Add flag to indicate if this is an old post (not from current day)
+      // Compare DateOfDelivery with today's date range
+      {
+        $addFields: {
+          todayStartForCheck: todayStart,
+          todayEndForCheck: todayEnd,
+          isOldPost: {
+            $lt: ["$DateOfDelivery", todayStart]
+          }
+        }
+      },
+      
+      // Project fields (exclude temporary fields by not including them)
       {
         $project: {
-          _id: "$doc_id",
+          _id: 1,
           CapsuleId: 1,
           PageId: 1,
           PostId: 1,
@@ -15084,11 +15358,14 @@ var getStreamPostsOptimized = async function (req, res) {
           DateOfDelivery: 1,
           BlendMode: 1,
           EmailTemplate: 1,
-          Subject: 1,
+          Subject: "$EmailSubject",
           IsOnetimeStream: 1,
           IsOnlyPostImage: 1,
           hexcode_blendedImage_temp: 1,
           UploaderID: 1,
+          isOldPost: 1, // Flag indicating if post is from past day (not current day)
+          // Note: firstDataSet, DateOfDeliveryForSort, todayStartForCheck, and todayEndForCheck 
+          // are automatically excluded since we're using inclusion projection
         },
       },
       
@@ -15283,45 +15560,56 @@ var getStreamPostsOptimized = async function (req, res) {
       // Sort by upload date
       { $sort: { UploadedOn: -1, _id: -1 } },
       
-      // Group by PostId to deduplicate (after all lookups)
-      {
-        $group: {
-          _id: "$PostId",
-          firstDoc: { $first: "$$ROOT" }
-        }
-      },
-      
-      // Restore document structure
-      {
-        $replaceRoot: { newRoot: "$firstDoc" }
-      },
-      
-      // Lookup StreamLikes
+      // Lookup StreamLikes with user details
       {
         $lookup: {
           from: "StreamLikes",
-          localField: "_id",
-          foreignField: "SocialPostId",
-          as: "likes",
-        },
-      },
-      
-      // Filter deleted likes
-      {
-        $addFields: {
-          likes: {
-            $filter: {
-              input: "$likes",
-              as: "like",
-              cond: { 
-                $and: [
-                  { $ne: ["$$like.IsDeleted", true] },
-                  { $ne: ["$$like.IsDeleted", 1] }
-                ]
+          let: { syncedPostId: "$_id" },
+          pipeline: [
+            {
+              $match: {
+                $expr: {
+                  $and: [
+                    { $eq: ["$SocialPostId", "$$syncedPostId"] },
+                    { $ne: ["$IsDeleted", true] },
+                    { $ne: ["$IsDeleted", 1] }
+                  ]
+                }
+              }
+            },
+            // Lookup user details for each like
+            {
+              $lookup: {
+                from: "users",
+                localField: "UserId",
+                foreignField: "_id",
+                as: "user"
+              }
+            },
+            {
+              $unwind: {
+                path: "$user",
+                preserveNullAndEmptyArrays: true
+              }
+            },
+            {
+              $project: {
+                UserId: 1,
+                CreatedOn: 1,
+                UpdatedOn: 1,
+                IsDeleted: 1,
+                user: {
+                  _id: "$user._id",
+                  Name: "$user.Name",
+                  UserName: "$user.UserName",
+                  ProfilePic: "$user.ProfilePic",
+                  Email: "$user.Email"
+                }
               }
             }
-          }
-        }
+          ],
+          as: "likes",
+        },
       },
       
       // Lookup comments with privacy filtering (SAME AS FEED PAGE)
@@ -15419,7 +15707,7 @@ var getStreamPostsOptimized = async function (req, res) {
                     $match: {
                       $expr: {
                         $and: [
-                          { $eq: ["$ParentId", { $toString: "$$commentId" }] },
+                          { $eq: ["$ParentId", "$$commentId"] },
                           { $ne: ["$IsDeleted", true] },
                           { $ne: ["$IsDeleted", 1] }
                         ]
@@ -15448,6 +15736,7 @@ var getStreamPostsOptimized = async function (req, res) {
                       ]
                     }
                   },
+                  { $sort: { CreatedOn: 1 } },
                   { $limit: 2 },
                   {
                     $lookup: {
@@ -15463,21 +15752,102 @@ var getStreamPostsOptimized = async function (req, res) {
                   {
                     $lookup: {
                       from: "StreamCommentLikes",
-                      let: { commentId: "$_id" },
+                      let: { replyId: "$_id" },
                       pipeline: [
                         {
                           $match: {
                             $expr: {
                               $and: [
-                                { $eq: ["$CommentId", "$$commentId"] },
+                                { $eq: ["$CommentId", "$$replyId"] },
                                 { $ne: ["$IsDeleted", true] },
                                 { $ne: ["$IsDeleted", 1] }
                               ]
                             }
                           }
+                        },
+                        {
+                          $lookup: {
+                            from: "users",
+                            localField: "LikedById",
+                            foreignField: "_id",
+                            as: "likedByUser"
+                          }
+                        },
+                        { $unwind: { path: "$likedByUser", preserveNullAndEmptyArrays: true } },
+                        {
+                          $project: {
+                            _id: 1,
+                            CommentId: 1,
+                            SocialPageId: 1,
+                            LikedById: 1,
+                            CreatedOn: 1,
+                            likedByUser: {
+                              _id: "$likedByUser._id",
+                              Name: "$likedByUser.Name",
+                              UserName: "$likedByUser.UserName",
+                              ProfilePic: "$likedByUser.ProfilePic",
+                              Email: "$likedByUser.Email"
+                            }
+                          }
                         }
                       ],
-                      as: "commentLikes"
+                      as: "replyLikes"
+                    }
+                  },
+                  {
+                    $addFields: {
+                      replyLikes: {
+                        $filter: {
+                          input: "$replyLikes",
+                          cond: { $ne: ["$$this", null] }
+                        }
+                      },
+                      CommentLikeCount: { $size: "$replyLikes" },
+                      likedByCurrentUser: {
+                        $gt: [
+                          {
+                            $size: {
+                              $filter: {
+                                input: "$replyLikes",
+                                cond: {
+                                  $and: [
+                                    { $ne: ["$$this", null] },
+                                    { $eq: [{ $toString: "$$this.LikedById" }, String(loginUserId)] }
+                                  ]
+                                }
+                              }
+                            }
+                          },
+                          0
+                        ]
+                      }
+                    }
+                  },
+                  {
+                    $project: {
+                      _id: 1,
+                      UserId: 1,
+                      ParentId: 1,
+                      Comment: 1,
+                      CreatedOn: 1,
+                      PrivacySetting: 1,
+                      user: { $arrayElemAt: ["$user", 0] },
+                      CommentLikeCount: 1,
+                      likedByCurrentUser: { $ifNull: ["$likedByCurrentUser", false] },
+                      likes: {
+                        $map: {
+                          input: "$replyLikes",
+                          as: "like",
+                          in: {
+                            _id: "$$like._id",
+                            CommentId: "$$like.CommentId",
+                            SocialPageId: "$$like.SocialPageId",
+                            LikedById: "$$like.LikedById",
+                            CreatedOn: "$$like.CreatedOn",
+                            likedByUser: "$$like.likedByUser"
+                          }
+                        }
+                      }
                     }
                   }
                 ],
@@ -15494,7 +15864,7 @@ var getStreamPostsOptimized = async function (req, res) {
                     $match: {
                       $expr: {
                         $and: [
-                          { $eq: ["$ParentId", { $toString: "$$commentId" }] },
+                          { $eq: ["$ParentId", "$$commentId"] },
                           { $ne: ["$IsDeleted", true] },
                           { $ne: ["$IsDeleted", 1] }
                         ]
@@ -15525,11 +15895,12 @@ var getStreamPostsOptimized = async function (req, res) {
         }
       },
       
-      // Calculate counts
+      // Calculate counts and isLikedByMe
       {
         $addFields: {
           likeCount: { $size: "$likes" },
           commentCount: { $size: "$comments" },
+          // ✅ Check if current user liked this post (StreamLikes uses UserId, not LikedById)
           isLikedByMe: {
             $in: [
               String(loginUserId),
@@ -15537,7 +15908,7 @@ var getStreamPostsOptimized = async function (req, res) {
                 $map: {
                   input: "$likes",
                   as: "like",
-                  in: { $toString: "$$like.LikedById" }
+                  in: { $toString: "$$like.UserId" }
                 }
               }
             ]
@@ -15545,14 +15916,15 @@ var getStreamPostsOptimized = async function (req, res) {
         }
       },
       
-      // Final projection
+      // Final projection (exclude temporary lookup fields, keep likes/comments/interactions)
       {
         $project: {
           mediaDoc: 0,
           capsuleData: 0,
           uploaderData: 0,
-          likes: 0,
           GroupTags: 0  // Remove GroupTags from response
+          // ✅ likes, comments, likeCount, commentCount, isLikedByMe are automatically included
+          // since we're using exclusion projection (fields not excluded are included)
         }
       }
     ];
@@ -15566,111 +15938,11 @@ var getStreamPostsOptimized = async function (req, res) {
       { $match: syncedPostConditions },
       { $sort: { CreatedOn: -1, _id: -1 } },
       { $skip: skip },
-      { $limit: limit * 10 },
+      { $limit: limit },
       { $count: "total" }
     ];
     const count1 = await SyncedPost.aggregate(debugPipeline1).allowDiskUse(true);
     console.log(`📊 After initial match+limit: ${count1[0]?.total || 0} documents`);
-    
-    const debugPipeline2 = [
-      { $match: syncedPostConditions },
-      { $sort: { CreatedOn: -1, _id: -1 } },
-      { $skip: skip },
-      { $limit: limit * 10 },
-      { $unwind: { path: "$EmailEngineDataSets", preserveNullAndEmptyArrays: false } },
-      { $count: "total" }
-    ];
-    const count2 = await SyncedPost.aggregate(debugPipeline2).allowDiskUse(true);
-    console.log(`📊 After unwind: ${count2[0]?.total || 0} documents`);
-    
-    const debugPipeline3 = [
-      { $match: syncedPostConditions },
-      { $sort: { CreatedOn: -1, _id: -1 } },
-      { $skip: skip },
-      { $limit: limit * 10 },
-      { $unwind: { path: "$EmailEngineDataSets", preserveNullAndEmptyArrays: false } },
-      {
-        $match: {
-          $or: [
-            { "EmailEngineDataSets.Delivered": false },
-            { "EmailEngineDataSets.Delivered": 0 },
-            { "EmailEngineDataSets.Delivered": { $exists: false } },
-            { "EmailEngineDataSets.Delivered": null }
-          ]
-        }
-      },
-      { $count: "total" }
-    ];
-    const count3 = await SyncedPost.aggregate(debugPipeline3).allowDiskUse(true);
-    console.log(`📊 After filtering for Delivered=false: ${count3[0]?.total || 0} documents`);
-    
-    const debugPipeline4 = [
-      { $match: syncedPostConditions },
-      { $sort: { CreatedOn: -1, _id: -1 } },
-      { $skip: skip },
-      { $limit: limit * 10 },
-      { $unwind: { path: "$EmailEngineDataSets", preserveNullAndEmptyArrays: false } },
-      {
-        $match: {
-          $or: [
-            { "EmailEngineDataSets.Delivered": false },
-            { "EmailEngineDataSets.Delivered": 0 },
-            { "EmailEngineDataSets.Delivered": { $exists: false } },
-            { "EmailEngineDataSets.Delivered": null }
-          ]
-        }
-      },
-      {
-        $group: {
-          _id: "$PostId",
-          count: { $sum: 1 },
-          postIds: { $push: "$PostId" }
-        }
-      },
-      {
-        $project: {
-          postId: "$_id",
-          count: 1,
-          samplePostId: { $arrayElemAt: ["$postIds", 0] }
-        }
-      }
-    ];
-    const count4 = await SyncedPost.aggregate(debugPipeline4).allowDiskUse(true);
-    console.log(`📊 After grouping by PostId: ${count4.length} unique posts`);
-    console.log(`📊 PostId breakdown:`, count4.map(p => ({ postId: p.postId, count: p.count })));
-    
-    // Check if PostId is null or missing
-    const nullPostIdCheck = [
-      { $match: syncedPostConditions },
-      { $sort: { CreatedOn: -1, _id: -1 } },
-      { $skip: skip },
-      { $limit: limit * 10 },
-      { $unwind: { path: "$EmailEngineDataSets", preserveNullAndEmptyArrays: false } },
-      {
-        $match: {
-          $or: [
-            { "EmailEngineDataSets.Delivered": false },
-            { "EmailEngineDataSets.Delivered": 0 },
-            { "EmailEngineDataSets.Delivered": { $exists: false } },
-            { "EmailEngineDataSets.Delivered": null }
-          ]
-        }
-      },
-      {
-        $group: {
-          _id: { $ifNull: ["$PostId", "NULL_POST_ID"] },
-          count: { $sum: 1 },
-          sampleDocs: { $push: { PostId: "$PostId", _id: "$_id", CapsuleId: "$CapsuleId" } }
-        }
-      },
-      { $limit: 5 }
-    ];
-    const nullCheck = await SyncedPost.aggregate(nullPostIdCheck).allowDiskUse(true);
-    console.log(`📊 PostId null check (first 5 groups):`, nullCheck.map(g => ({ 
-      postId: g._id, 
-      count: g.count,
-      sample: g.sampleDocs[0]
-    })));
     
     const t_agg = Date.now();
     const posts = await SyncedPost.aggregate(pipeline).allowDiskUse(true);
@@ -15696,10 +15968,10 @@ var getStreamPostsOptimized = async function (req, res) {
         post.BlendSettings = cleanedBlendSettings;
       }
       
-      // ✅ Check for audio file using PostId (from SyncedPost.PostId which references Media._id)
-      const postIdForAudio = post.PostId || post._id;
-      if (postIdForAudio) {
-        const audioData = await getPostAudioFileData(postIdForAudio);
+      // ✅ Check for audio file using PostId ONLY (from SyncedPost.PostId which references Media._id)
+      // Audio files are named after the original Media document's _id, not SyncedPost's _id
+      if (post.PostId) {
+        const audioData = await getPostAudioFileData(post.PostId);
         if (audioData) {
           post.audioFile = audioData;
         } else {
@@ -15890,3 +16162,5 @@ exports.getStreamPostsOptimized = getStreamPostsOptimized;
 exports.getCapsuleDetails = getCapsuleDetails;
 // Export the generic audio file helper function
 exports.getPostAudioFileData = getPostAudioFileData;
+
+
