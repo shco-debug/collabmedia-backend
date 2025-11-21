@@ -4746,3 +4746,39 @@ var promoteUserToSubAdmin = async function(req, res) {
 };
 
 exports.promoteUserToSubAdmin = promoteUserToSubAdmin;
+
+// Get app settings
+var getAppSettings = async function (req, res) {
+    try {
+        const appSettings = await AppSetting.findOne({ isDeleted: false }).exec();
+        
+        if (!appSettings) {
+            // Create default app settings if none exist
+            const defaultSettings = await AppSetting.create({
+                PlatformSubscriptionPrice: 1,
+                PlatformSubscriptionIncrement: 0.01,
+                ReferralDiscount: 0,
+                isDeleted: false
+            });
+            return res.status(200).json({
+                code: 200,
+                msg: "Success",
+                data: defaultSettings
+            });
+        }
+        
+        return res.status(200).json({
+            code: 200,
+            msg: "Success",
+            data: appSettings
+        });
+    } catch (error) {
+        console.error('Error fetching app settings:', error);
+        return res.status(500).json({
+            code: 500,
+            msg: "Internal server error",
+            error: error.message
+        });
+    }
+};
+exports.getAppSettings = getAppSettings;

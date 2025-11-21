@@ -90,24 +90,21 @@ var addCard = async function(req, res) {
 			IsDeleted: false
 		});
 
-		// If this is set as default, unset other cards
-		if (IsDefault) {
-			await CardDetails.updateMany(
-				{ UserId: userId, _id: { $ne: newCard._id } },
-				{ $set: { IsDefault: false } }
-			);
-		} else {
-			// If user has no cards, make this the default
-			var userCardCount = await CardDetails.countDocuments({
-				UserId: userId,
-				IsDeleted: false,
-				Status: true
-			});
-
-			if (userCardCount === 0) {
-				newCard.IsDefault = true;
+		// Deactivate all old cards and set new card as default
+		// When adding a new card, deactivate all existing cards and make the new one default
+		await CardDetails.updateMany(
+			{ UserId: userId, _id: { $ne: newCard._id } },
+			{ 
+				$set: { 
+					IsDefault: false,
+					Status: false  // Deactivate old cards
+				}
 			}
-		}
+		);
+		
+		// Always set the new card as default and active
+		newCard.IsDefault = true;
+		newCard.Status = true;
 
 		await newCard.save();
 

@@ -1,0 +1,28 @@
+{
+  "bundle_version": "2025-02-13T00:00:00Z",
+  "shared_path": "shared",
+  "titles": [
+    {
+      "id": "691ec863530983c098aeb26d",
+      "title": "The ABCs (Gem-Inspiring)",
+      "vibe": "UES",
+      "chapter_count": 7,
+      "words": 7290,
+      "source_slug": "the-abcs-gem-inspiring-20251120030429",
+      "content_path": "691ec863530983c098aeb26d/content.json",
+      "route": "/ebooks/691ec863530983c098aeb26d/",
+      "created_at": "2025-11-20T03:04:29.778971"
+    },
+    {
+      "id": "691edc863530983c098aeb245",
+      "title": "The Way of Self Trusting Itself - ChatGPT (Multi-Prompt)",
+      "vibe": null,
+      "chapter_count": 7,
+      "words": 8127,
+      "source_slug": "the-way-of-self-trusting-itself-chatgpt-multi-prompt-20251114220013",
+      "content_path": "691edc863530983c098aeb245/content.json",
+      "route": "/ebooks/691edc863530983c098aeb245/",
+      "created_at": "2025-11-14T22:00:13.131879"
+    }
+  ]
+}

@@ -41,7 +41,8 @@ module.exports = function(req, res, next){
 				'/getDataBySubdomain',
 				'/createAdmin',
 				'/createSubAdmin',
-				'/promoteUserToSubAdmin'
+				'/promoteUserToSubAdmin',
+				'/appsettings'
 
 		];
 
@@ -152,7 +153,8 @@ module.exports = function(req, res, next){
 		var unprotectedRoutes = [
 			'/createPostsOnEventDay_INTERNAL_API',
 			'/unsubscribe_changeSettings',
-			'/getStreamPriceMap'
+			'/getStreamPriceMap',
+			'/getPlatformStreamTitles'
 		];
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}

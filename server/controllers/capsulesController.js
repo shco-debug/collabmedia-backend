@@ -6,6 +6,7 @@ var User = require("./../models/userModel.js");
 var Friend = require("./../models/friendsModel.js");
 var Admin = require("./../models/adminModel.js");
 var SubAdmin = require("./../models/subAdminModel.js");
+var AppSetting = require("./../models/appSettingModel.js");
 
 var Order = require("./../models/orderModel.js");
 var mongoose = require("mongoose");
@@ -1601,6 +1602,164 @@ var ownedByMe = async function (req, res) {
       results: null,
     };
     res.json(response);
+  }
+};
+
+/*________________________________________________________________________
+   * @Date:      		January 2025
+   * @Method :   		getPlatformStreamTitles
+   * Created By: 		AI Assistant
+   * Modified On:		-
+   * @Purpose:   		Get stream titles for platform subscription display
+   *                  Returns only Title and _id for streams that:
+   *                  - Created by admin or subadmin
+   *                  - Origin: "created"
+   *                  - LaunchSettings.Audience: "BUYERS"
+   *                  - IsLaunched: true
+   *                  - IsPublished: true
+   * @Param:     		None (public endpoint)
+   * @Return:    	 	yes
+   * @Access Category:	"PUBLIC"
+_________________________________________________________________________
+*/
+
+var getPlatformStreamTitles = async function (req, res) {
+  try {
+    // Get all admin and subadmin IDs from User collection only (Role field)
+    const adminUsers = await User.find({ 
+      $or: [
+        { Role: 'admin' },
+        { Role: 'subadmin' }
+      ],
+      IsDeleted: false 
+    }).select('_id').lean().exec();
+    
+    const adminSubAdminIds = adminUsers.map(u => u._id);
+    
+    console.log('🔍 getPlatformStreamTitles - Admin/SubAdmin users found:', adminSubAdminIds.length);
+    console.log('🔍 getPlatformStreamTitles - Sample IDs:', adminSubAdminIds.slice(0, 3).map(id => String(id)));
+    
+    if (adminSubAdminIds.length === 0) {
+      console.log('⚠️ getPlatformStreamTitles - No admin/subadmin found in User collection');
+      return res.status(200).json({
+        code: 200,
+        msg: "Success",
+        data: []
+      });
+    }
+    
+    // Query conditions - step by step debugging
+    // First, let's check if there are any streams created by admin/subadmin
+    var baseConditions = {
+      CreaterId: { $in: adminSubAdminIds },
+      Status: true,
+      IsDeleted: false
+    };
+    
+    const baseCount = await Capsule.countDocuments(baseConditions).exec();
+    console.log('🔍 getPlatformStreamTitles - Streams created by admin/subadmin:', baseCount);
+    
+    // Check with Origin
+    var originConditions = {
+      ...baseConditions,
+      Origin: "created"
+    };
+    const originCount = await Capsule.countDocuments(originConditions).exec();
+    console.log('🔍 getPlatformStreamTitles - With Origin="created":', originCount);
+    
+    // Check with Audience
+    var audienceConditions = {
+      ...originConditions,
+      "LaunchSettings.Audience": "BUYERS"
+    };
+    const audienceCount = await Capsule.countDocuments(audienceConditions).exec();
+    console.log('🔍 getPlatformStreamTitles - With Audience="BUYERS":', audienceCount);
+    
+    // Check with IsLaunched
+    var launchedConditions = {
+      ...audienceConditions,
+      IsLaunched: true
+    };
+    const launchedCount = await Capsule.countDocuments(launchedConditions).exec();
+    console.log('🔍 getPlatformStreamTitles - With IsLaunched=true:', launchedCount);
+    
+    // Final conditions
+    var conditions = {
+      ...launchedConditions,
+      IsPublished: true
+    };
+    
+    const finalCount = await Capsule.countDocuments(conditions).exec();
+    console.log('🔍 getPlatformStreamTitles - Final count (with IsPublished=true):', finalCount);
+    
+    // If no results, try without some strict conditions to see what we have
+    if (finalCount === 0) {
+      // Try without IsPublished requirement
+      const withoutPublished = await Capsule.find({
+        ...launchedConditions
+      }).select('_id Title IsPublished LaunchSettings.Audience Origin IsLaunched').limit(5).lean().exec();
+      
+      console.log('🔍 getPlatformStreamTitles - Sample streams (without IsPublished filter):', 
+        withoutPublished.map(s => ({
+          id: s._id,
+          title: s.Title,
+          isPublished: s.IsPublished,
+          audience: s.LaunchSettings?.Audience,
+          origin: s.Origin,
+          isLaunched: s.IsLaunched
+        }))
+      );
+    }
+    
+    // Only select Title and _id
+    var fields = {
+      _id: 1,
+      Title: 1
+    };
+    
+    var sortObj = {
+      ModifiedOn: -1
+    };
+    
+    const results = await Capsule.find(conditions, fields)
+      .sort(sortObj)
+      .exec();
+    
+    console.log('✅ getPlatformStreamTitles - Found', results.length, 'streams');
+    
+    // Fetch platform subscription price from AppSettings
+    let platformPrice = 1; // Default price
+    try {
+      const appSettings = await AppSetting.findOne({ isDeleted: false }).exec();
+      if (appSettings && typeof appSettings.PlatformSubscriptionPrice === 'number') {
+        platformPrice = appSettings.PlatformSubscriptionPrice;
+      }
+    } catch (error) {
+      console.error('⚠️ getPlatformStreamTitles - Error fetching app settings:', error);
+      // Continue with default price
+    }
+    
+    // Map to simple format with platform price
+    const titles = results.map(capsule => ({
+      id: capsule._id,
+      title: capsule.Title || 'Untitled Stream'
+    }));
+    
+    return res.status(200).json({
+      code: 200,
+      msg: "Success",
+      data: {
+        titles: titles,
+        platformPrice: platformPrice
+      }
+    });
+  } catch (error) {
+    console.error('❌ Error in getPlatformStreamTitles:', error);
+    return res.status(500).json({
+      code: 500,
+      msg: "Internal server error",
+      error: error.message
+    });
   }
 };
 
@@ -13475,6 +13634,7 @@ exports.findAllPaginated = findAllPaginated;
 exports.createdByMe = createdByMe;
 exports.ownedByMe = ownedByMe;
 exports.activeLaunched = activeLaunched;
+exports.getPlatformStreamTitles = getPlatformStreamTitles;
 exports.sharedWithMe = sharedWithMe;
 exports.byTheHouse = byTheHouse;
 exports.populateCapsuleWithGroupTags = populateCapsuleWithGroupTags;

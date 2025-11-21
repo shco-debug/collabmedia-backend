@@ -1,0 +1,238 @@
+/* Christmas Template Styling - Magical & Non-Obtrusive */
+
+:root {
+  --christmas-snow-end: 20vh;
+}
+
+/* === GENTLE SNOWFALL === */
+.christmas-sky {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: max(140px, var(--christmas-snow-end, 20vh));
+  pointer-events: none;
+  z-index: 15;
+}
+
+.christmas-star {
+  position: absolute;
+  color: rgba(176, 23, 47, 0.9);
+  font-size: 14px;
+  opacity: 0;
+  animation: starTwinkle 12s cubic-bezier(0.65, 0, 0.35, 1) infinite;
+  text-shadow: 0 0 12px rgba(176, 23, 47, 0.6);
+}
+
+.shooting-star {
+  position: absolute;
+  top: 30px;
+  left: -20%;
+  width: 160px;
+  height: 2px;
+  background: linear-gradient(90deg, rgba(15, 76, 58, 0.85), transparent);
+  opacity: 0;
+  animation: shootingStar 14s ease-in-out infinite;
+  border-radius: 50%;
+  box-shadow: 0 0 12px rgba(15, 76, 58, 0.35);
+}
+
+.christmas-snowfall {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  pointer-events: none;
+  z-index: 1800; /* Ensure flakes are above middle column/panels but below highest UI layers */
+  overflow: hidden;
+}
+
+.snowflake {
+  position: absolute;
+  color: rgba(245, 220, 174, 0.85);
+  top: -50px;
+  user-select: none;
+  pointer-events: none;
+  animation-name: snowfall;
+  animation-duration: 28s;
+  animation-timing-function: linear;
+  animation-iteration-count: infinite;
+  animation-fill-mode: forwards;
+  font-family: serif;
+  will-change: transform, opacity;
+  text-shadow: 0 0 4px rgba(212, 175, 55, 0.4);
+}
+
+.christmas-stars,
+.christmas-aurora {
+  width: 100%;
+  display: flex;
+  justify-content: center;
+}
+
+/* === ENHANCED CONTROLS === */
+
+/* === CHAPTER SYMBOL ENHANCEMENT === */
+.christmas-symbol-twinkle {
+  position: relative;
+}
+
+.christmas-symbol-twinkle::after {
+  content: '✨';
+  position: absolute;
+  top: -5px;
+  right: -15px;
+  font-size: 10px;
+  opacity: 0;
+  animation: symbolTwinkle 3s ease-in-out infinite;
+}
+
+@keyframes starTwinkle {
+  0% { opacity: 0; transform: scale(0.9); }
+  20% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.15); }
+  80% { opacity: 0.4; transform: scale(1); }
+  100% { opacity: 0; transform: scale(0.9); }
+}
+
+@keyframes shootingStar {
+  0% {
+    transform: translateX(0) translateY(0);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.9;
+  }
+  40% {
+    transform: translateX(140%) translateY(-20px);
+    opacity: 0;
+  }
+  100% {
+    opacity: 0;
+  }
+}
+
+@keyframes aurora {
+  0%, 100% { transform: translateX(-100%); }
+  50% { transform: translateX(100%); }
+}
+
+@keyframes snowfall {
+  0% {
+    transform: translateY(-60px) translateX(0px);
+    opacity: 0;
+  }
+  10% {
+    opacity: 0.85;
+  }
+  25% {
+    opacity: 0.9;
+    transform: translateY(calc(var(--snow-distance, var(--christmas-snow-end, 20vh)) * 0.25)) translateX(calc(var(--snow-drift, 40px) * 0.2));
+  }
+  60% {
+    opacity: 0.75;
+    transform: translateY(calc(var(--snow-distance, var(--christmas-snow-end, 20vh)) * 0.65)) translateX(calc(var(--snow-drift, 40px) * 0.6));
+  }
+  85% {
+    opacity: 0.4;
+  }
+  100% {
+    transform: translateY(var(--snow-distance, var(--christmas-snow-end, 20vh))) translateX(var(--snow-drift, 40px));
+    opacity: 0;
+  }
+}
+
+@keyframes gentleGlow {
+  0%, 100% { opacity: 0; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes controlGlow {
+  0%, 100% { opacity: 0; }
+  33% { opacity: 0.4; }
+  66% { opacity: 0; }
+}
+
+@keyframes symbolTwinkle {
+  0%, 100% { opacity: 0; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.1); }
+}
+
+/* === RESPONSIVE CONSIDERATIONS === */
+@media (max-width: 768px) {
+  .christmas-sky {
+    height: 90px;
+  }
+  
+  .christmas-star {
+    font-size: 11px;
+  }
+}
+
+/* === REDUCED MOTION SUPPORT === */
+@media (prefers-reduced-motion: reduce) {
+  .christmas-snowfall,
+  .christmas-sky,
+  .christmas-aurora {
+    display: none;
+  }
+  
+  .christmas-symbol-twinkle::after,
+  .shooting-star {
+    animation: none;
+  }
+}
+
+/* === HIGH CONTRAST MODE === */
+@media (prefers-contrast: high) {
+  .christmas-snowfall {
+    display: none;
+  }
+  
+  .christmas-sky {
+    opacity: 0.4;
+  }
+}
+
+/* Template Body Class Indicators */
+body.christmas-template {
+  /* Subtle indicator that Christmas template is active */
+  --christmas-active: true;
+}
+
+body.christmas-template .chapter-title,
+body.christmas-template .section-title {
+  color: var(--accent-wine);
+}
+
+body.christmas-template .font-control-btn,
+body.christmas-template #sound-toggle,
+body.christmas-template .chapter-nav-btn:not(.favorites-mode-btn):not(.active) {
+  border-color: rgba(212, 175, 55, 0.4);
+  color: var(--accent-gold);
+  background: var(--parchment-warm);
+}
+
+body.christmas-template .chapter-nav-btn.favorites-mode-btn {
+  border-color: rgba(176, 23, 47, 0.45) !important;
+  color: var(--accent-wine) !important;
+  background: var(--parchment-warm) !important;
+}
+
+body.christmas-template .chapter-nav-btn.favorites-mode-btn svg path {
+  stroke: currentColor;
+}
+
+body.christmas-template .chapter-nav-btn.favorites-mode-btn.active,
+body.christmas-template .chapter-nav-btn.favorites-mode-btn.font-control-btn.active {
+  border-color: rgba(176, 23, 47, 0.55) !important;
+  color: var(--accent-wine) !important;
+  background: var(--parchment-warm) !important;
+}
+
+body.christmas-template #bookmark-btn {
+  border-color: rgba(176, 23, 47, 0.55) !important;
+  color: var(--accent-wine) !important;
+  background: var(--parchment-warm) !important;
+}

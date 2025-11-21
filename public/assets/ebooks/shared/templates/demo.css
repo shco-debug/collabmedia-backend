@@ -1,0 +1,191 @@
+/* Template Demo Panel Styles */
+.template-demo-panel {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: rgba(255, 255, 255, 0.95);
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    padding: 16px;
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    font-size: 14px;
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+    backdrop-filter: blur(10px);
+    z-index: 10000;
+    min-width: 220px;
+    display: none; /* Hidden by default */
+}
+
+/* Show only in debug mode */
+body[data-debug="true"] .template-demo-panel {
+    display: block;
+}
+
+.template-demo-panel h3 {
+    margin: 0 0 12px 0;
+    font-size: 16px;
+    font-weight: 600;
+    color: #333;
+    border-bottom: 1px solid #eee;
+    padding-bottom: 8px;
+}
+
+.demo-controls {
+    display: grid;
+    gap: 8px;
+    margin-bottom: 16px;
+}
+
+.demo-controls button {
+    background: #f8f9fa;
+    border: 1px solid #dee2e6;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.demo-controls button:hover {
+    background: #e9ecef;
+    border-color: #adb5bd;
+}
+
+.demo-controls button:active {
+    background: #dee2e6;
+}
+
+.demo-controls button[data-template="christmas"] {
+    background: linear-gradient(135deg, #d4e5d4, #e8f5e8);
+    border-color: #28a745;
+    color: #155724;
+}
+
+.demo-controls button[data-template="christmas"]:hover {
+    background: linear-gradient(135deg, #c3d9c3, #d1e7dd);
+}
+
+.demo-info {
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 12px;
+    font-size: 12px;
+    color: #6c757d;
+}
+
+.demo-info p {
+    margin: 4px 0;
+}
+
+.demo-info span {
+    font-weight: 600;
+    color: #495057;
+}
+
+/* Christmas theme adjustments for demo panel */
+body.christmas-template .template-demo-panel {
+    background: rgba(248, 250, 248, 0.95);
+    border-color: #d4e5d4;
+}
+
+body.christmas-template .template-demo-panel h3 {
+    color: #2d4a2d;
+}
+
+/* High contrast mode support */
+@media (prefers-contrast: high) {
+    .template-demo-panel {
+        background: white;
+        border: 2px solid black;
+    }
+    
+    .demo-controls button {
+        background: white;
+        border: 2px solid black;
+        color: black;
+    }
+}
+
+/* Reduced motion support */
+@media (prefers-reduced-motion: reduce) {
+    .demo-controls button {
+        transition: none;
+    }
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+    .template-demo-panel {
+        top: 10px;
+        right: 10px;
+        left: 10px;
+        max-width: none;
+        min-width: auto;
+    }
+}
+
+/* Dark mode support */
+@media (prefers-color-scheme: dark) {
+    .template-demo-panel {
+        background: rgba(30, 30, 30, 0.95);
+        border-color: #555;
+        color: #e0e0e0;
+    }
+    
+    .template-demo-panel h3 {
+        color: #f0f0f0;
+        border-bottom-color: #555;
+    }
+    
+    .demo-controls button {
+        background: #404040;
+        border-color: #666;
+        color: #e0e0e0;
+    }
+    
+    .demo-controls button:hover {
+        background: #505050;
+        border-color: #777;
+    }
+    
+    .demo-info {
+        background: #353535;
+        color: #b0b0b0;
+    }
+    
+    .demo-info span {
+        color: #e0e0e0;
+    }
+}
+
+/* Subtle animation when appearing */
+.template-demo-panel {
+    animation: demoSlideIn 0.3s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+@keyframes demoSlideIn {
+    from {
+        opacity: 0;
+        transform: translateX(20px) translateY(-10px);
+    }
+    to {
+        opacity: 1;
+        transform: translateX(0) translateY(0);
+    }
+}
+
+/* Console indicator for debugging */
+body[data-debug="true"]::before {
+    content: "DEBUG MODE";
+    position: fixed;
+    top: 5px;
+    left: 20px;
+    background: #ff6b6b;
+    color: white;
+    padding: 4px 8px;
+    border-radius: 4px;
+    font-size: 10px;
+    font-weight: bold;
+    z-index: 10001;
+    opacity: 0.7;
+}
