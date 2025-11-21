@@ -245,4 +245,9 @@ module.exports = function(router){
 		user.promoteUserToSubAdmin(req, res);
 	});
 	
+	// Get app settings
+	router.get('/appsettings', function(req, res) {
+		user.getAppSettings(req, res);
+	});
+	
 }

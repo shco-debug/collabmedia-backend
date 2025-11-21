@@ -73,6 +73,9 @@ module.exports = function(router){
 				Capsule.allPublicCapsules(req,res);
 				break;
 			//Public Gallery Capsules Apis
+			case 'getPlatformStreamTitles' :
+				Capsule.getPlatformStreamTitles(req,res);
+				break;
 			default :
 				Capsule.findAllPaginated(req,res);
 		}
@@ -82,6 +85,11 @@ module.exports = function(router){
 
 	router.post('/getStreamPriceMap',function(req,res){
 		Capsule.getStreamPriceMap(req,res);
+	});
+
+	// Get platform stream titles (public endpoint - no auth required)
+	router.get('/getPlatformStreamTitles',function(req,res){
+		Capsule.getPlatformStreamTitles(req,res);
 	});
 
 	//Add a Capsule

@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Luxe Read - Immersive Reading Experience</title>
+    <link rel="icon" type="image/svg+xml" href="../shared/favicon.svg">
+    <link rel="stylesheet" href="../shared/style.css">
+    <link rel="stylesheet" href="../shared/templates/template-switcher.css">
+    <link rel="stylesheet" href="../shared/templates/demo.css">
+</head>
+<body>
+    <!-- Splash Screen -->
+    <div id="splash-screen" class="splash-screen">
+        <div class="splash-content">
+            <h1 class="splash-title">Luxe Read</h1>
+            <p class="splash-subtitle">An Immersive Reading Experience</p>
+            <button id="enter-experience" class="enter-button" aria-label="Begin immersive reading">Begin Reading</button>
+        </div>
+    </div>
+    
+    <div id="luxe-read-container" style="opacity: 0;">
+        <!-- Chapter Title Indicator -->
+        <div class="mode-indicator" id="mode-indicator">The Invisible Altars of the Everyday</div>
+        
+        <!-- Font Size Controls -->
+        <div class="font-controls">
+            <button id="font-increase" class="font-control-btn" data-tooltip="Increase text size" data-tooltip-placement="right" aria-label="Increase text size">+</button>
+            <button id="font-decrease" class="font-control-btn" data-tooltip="Decrease text size" data-tooltip-placement="right" aria-label="Decrease text size">-</button>
+            <button id="font-weight-toggle" class="font-control-btn font-weight-btn" data-weight="light" data-tooltip="Use regular weight" data-tooltip-placement="right" aria-label="Use regular weight">
+                <span class="weight-indicator">F</span>
+            </button>
+        </div>
+        
+        <!-- Sound Control -->
+        <div class="sound-control" id="sound-control">
+            <button id="sound-toggle" class="font-control-btn" data-playing="false" data-tooltip="Play sound" data-tooltip-placement="left" aria-label="Play sound">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <path d="M3 6v4M6 4v8M9 5v6M12 3v10" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <div id="sound-variants" class="sound-variants">
+                <button class="sound-variant-btn active" data-variant="1" data-variant-label="Gentle" data-tooltip="Gentle ambience (active)" data-tooltip-placement="left" aria-label="Gentle ambience">1</button>
+                <button class="sound-variant-btn" data-variant="2" data-variant-label="Warm" data-tooltip="Warm ambience" data-tooltip-placement="left" aria-label="Warm ambience">2</button>
+                <button class="sound-variant-btn" data-variant="3" data-variant-label="Airy" data-tooltip="Airy ambience" data-tooltip-placement="left" aria-label="Airy ambience">3</button>
+                <button class="sound-variant-btn" data-variant="4" data-variant-label="Deep" data-tooltip="Deep ambience" data-tooltip-placement="left" aria-label="Deep ambience">4</button>
+            </div>
+        </div>
+        
+        <!-- Chapter Symbol Indicator -->
+        <div class="chapter-symbol" id="chapter-symbol"></div>
+        
+        <!-- Chapter Navigator -->
+        <div class="chapter-nav" id="chapter-nav">
+            <button id="bookmark-btn" class="chapter-nav-btn favorites-mode-btn font-control-btn" aria-label="Bookmark">
+                <svg viewBox="0 0 16 16" aria-hidden="true">
+                    <path d="M3 2h10v12l-5-3-5 3V2z" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <button class="chapter-nav-btn font-control-btn" data-direction="up" aria-label="Previous chapter" data-tooltip="Previous chapter" data-tooltip-placement="left">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polyline points="4 10 8 6 12 10" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <button class="chapter-nav-btn font-control-btn" data-direction="down" aria-label="Next chapter" data-tooltip="Next chapter" data-tooltip-placement="left">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <polyline points="4 6 8 10 12 6" stroke-linecap="round" stroke-linejoin="round"/>
+                </svg>
+            </button>
+            <button class="chapter-nav-btn favorites-mode-btn font-control-btn" id="favorites-toggle-btn" aria-pressed="false" aria-label="Favorites unavailable" data-tooltip="Save favorites to enable" data-tooltip-placement="left" disabled>
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                    <path d="M12 3l2.9 5.88 6.5.95-4.7 4.58 1.1 6.49L12 17.8l-5.8 3.1 1.1-6.49-4.7-4.58 6.5-.95z"/>
+                </svg>
+            </button>
+        </div>
+        
+        <!-- Table of Contents -->
+        <div class="toc-control" id="toc-control">
+            <button id="toc-toggle" class="font-control-btn" aria-label="Open table of contents">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+                    <line x1="2" y1="4" x2="14" y2="4" stroke-linecap="round"/>
+                    <line x1="2" y1="8" x2="14" y2="8" stroke-linecap="round"/>
+                    <line x1="2" y1="12" x2="14" y2="12" stroke-linecap="round"/>
+                </svg>
+            </button>
+            <div id="toc-menu" class="toc-menu">
+                <!-- Chapters will be populated here -->
+            </div>
+        </div>
+        <div class="page-finish-progress" aria-hidden="true"></div>
+        <main class="content-canvas">
+            <!-- Content will be inserted here -->
+        </main>
+        
+        <aside class="ambient-layer"></aside>
+    </div>
+    <script src="../shared/tooltips.js"></script>
+    <script src="../shared/tooltip-panels.js"></script>
+    <script src="../shared/templates/template-manager.js"></script>
+    <script src="../shared/templates/vibe-manager.js"></script>
+    <script src="../shared/templates/christmas.js"></script>
+    <script src="../shared/templates/demo.js"></script>
+    <script src="../shared/ambient.js"></script>
+    <script src="../shared/content.js"></script>
+    <script src="../shared/script.js"></script>
+</body>
+</html>

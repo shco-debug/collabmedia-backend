@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100">
+  <defs>
+    <linearGradient id="luxeGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" style="stop-color:#8B6F4C;stop-opacity:1" />
+      <stop offset="100%" style="stop-color:#6B4423;stop-opacity:1" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Background circle with subtle glow -->
+  <circle cx="50" cy="50" r="48" fill="#FDF8F3" stroke="url(#luxeGradient)" stroke-width="2"/>
+  
+  <!-- Elegant book/altar symbol -->
+  <path d="M 35 40 L 35 70 L 50 65 L 65 70 L 65 40 Z" 
+        fill="none" 
+        stroke="url(#luxeGradient)" 
+        stroke-width="2.5" 
+        stroke-linecap="round" 
+        stroke-linejoin="round"/>
+  
+  <!-- Center spine -->
+  <line x1="50" y1="40" x2="50" y2="65" 
+        stroke="url(#luxeGradient)" 
+        stroke-width="1.5" 
+        opacity="0.5"/>
+  
+  <!-- Subtle sacred mark above -->
+  <circle cx="50" cy="28" r="3" fill="url(#luxeGradient)" opacity="0.7"/>
+</svg>

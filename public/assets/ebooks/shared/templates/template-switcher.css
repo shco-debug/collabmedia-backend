@@ -1,0 +1,374 @@
+/* Template Switcher Styling - Seamlessly integrated */
+
+/* === TEMPLATE SWITCHER CONTROL === */
+.template-switcher {
+  position: fixed;
+  right: var(--chapter-nav-offset, 30px);
+  bottom: 100px;
+  z-index: 150;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0;
+  margin: 0;
+  width: var(--nav-button-size, 44px);
+  overflow: visible;
+  pointer-events: auto;
+}
+
+.template-switcher.hidden-for-sound {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.2s ease;
+}
+
+.template-toggle-btn {
+  width: var(--nav-button-size, 44px);
+  height: var(--nav-button-size, 44px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid color-mix(in srgb, var(--accent-sage, #9aaba5) 65%, transparent);
+  background: var(--parchment-warm, #faf8f5);
+  color: var(--accent-sage, #9aaba5);
+  transition: opacity 0.3s ease, transform 0.3s ease, border-color 0.3s ease;
+  cursor: pointer;
+}
+
+.template-toggle-btn.hidden-by-sound {
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(-4px);
+}
+
+.template-menu {
+  position: absolute;
+  top: 50%;
+  right: calc(100% + 18px);
+  opacity: 0;
+  visibility: hidden;
+  transform: translateY(-50%) scale(0.95);
+  transition: all 0.4s cubic-bezier(0.19, 1, 0.22, 1);
+  pointer-events: none;
+  z-index: 200;
+}
+
+.template-menu.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateY(-50%) scale(1);
+  pointer-events: all;
+}
+
+.template-menu-card {
+  background: rgba(255, 255, 255, 0.96);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 16px;
+  box-shadow: 0 25px 60px rgba(0, 0, 0, 0.12);
+  padding: 1.1rem 1.35rem;
+  min-width: 260px;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.template-menu-header {
+  text-transform: uppercase;
+  font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 0.75rem;
+  letter-spacing: 0.18em;
+  color: rgba(47, 42, 38, 0.55);
+}
+
+/* Template Options */
+.template-options {
+  display: flex;
+  flex-direction: column;
+}
+
+.template-option {
+  width: 100%;
+  padding: 0.65rem 0;
+  border-bottom: 1px solid rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.75rem;
+}
+
+.template-option:last-child {
+  border-bottom: none;
+}
+
+.template-option-btn {
+  flex: 1;
+  text-align: left;
+  border: none;
+  background: none;
+  font-family: 'Inter', 'Helvetica Neue', Arial, sans-serif;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: rgba(47, 42, 38, 0.65);
+  cursor: pointer;
+  padding: 0.25rem 0 0.25rem 0;
+  position: relative;
+  transition: color 0.3s ease;
+}
+
+.template-option-btn::after {
+  content: '↗';
+  position: absolute;
+  right: -18px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.85rem;
+  color: rgba(47, 42, 38, 0.35);
+  transition: color 0.3s ease;
+}
+
+.template-option-btn:hover {
+  color: rgba(47, 42, 38, 0.85);
+}
+
+.template-option.active .template-option-btn {
+  color: var(--accent-wine, #8b5a5a);
+}
+
+.template-option.active .template-option-btn::after {
+  color: var(--accent-wine, #8b5a5a);
+}
+
+.template-option-meta {
+  display: block;
+  font-size: 0.7rem;
+  letter-spacing: 0.05em;
+  text-transform: none;
+  color: rgba(47, 42, 38, 0.45);
+  margin-top: 0.25rem;
+}
+
+.template-option--seasonal .template-option-btn {
+  padding-right: 0.5rem;
+}
+
+.season-inline-controls {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  background: rgba(248, 247, 245, 0.9);
+  border: 1px solid rgba(0, 0, 0, 0.08);
+  border-radius: 999px;
+  padding: 0.2rem 0.45rem;
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.5);
+}
+
+.season-inline-controls--active {
+  border-color: rgba(201, 168, 106, 0.6);
+  box-shadow: inset 0 0 0 1px rgba(201, 168, 106, 0.15);
+}
+
+.season-inline-controls .season-inline-btn {
+  width: 24px;
+  height: 24px;
+  border-radius: 50%;
+  border: 1px solid rgba(47, 42, 38, 0.28);
+  background: rgba(255, 255, 255, 0.9);
+  color: rgba(47, 42, 38, 0.75);
+  cursor: pointer;
+  font-size: 0.85rem;
+  line-height: 1;
+  transition: all 0.2s ease;
+}
+
+.season-inline-controls .season-inline-btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.season-inline-controls .season-inline-btn:not(:disabled):hover {
+  border-color: rgba(201, 168, 106, 0.8);
+  color: var(--accent-wine, #8b5a5a);
+}
+
+.season-inline-value {
+  min-width: 2.75rem;
+  text-align: center;
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: rgba(47, 42, 38, 0.65);
+}
+
+.season-inline-controls--active .season-inline-value {
+  color: var(--accent-wine, #8b5a5a);
+}
+
+.season-inline-hint {
+  margin: 0;
+  font-size: 0.7rem;
+  color: rgba(47, 42, 38, 0.45);
+  font-style: italic;
+  transition: opacity 0.3s ease;
+}
+
+.season-inline-hint::before {
+  content: 'Tip: ';
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-weight: 600;
+  margin-right: 0.25rem;
+  color: rgba(47, 42, 38, 0.5);
+}
+
+/* === TEMPLATE SUGGESTION === */
+.template-suggestion {
+  position: fixed;
+  top: 100px;
+  right: 30px;
+  background: var(--parchment-warm);
+  border: 1px solid var(--christmas-accent-warm, var(--accent-gold));
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 8px 30px rgba(212, 175, 55, 0.15);
+  z-index: 1000;
+  max-width: 280px;
+  opacity: 0;
+  visibility: hidden;
+  transform: translateX(20px) scale(0.9);
+  transition: all 0.6s cubic-bezier(0.19, 1, 0.22, 1);
+}
+
+.template-suggestion.visible {
+  opacity: 1;
+  visibility: visible;
+  transform: translateX(0) scale(1);
+}
+
+.suggestion-content {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.suggestion-text {
+  font-family: var(--font-sans);
+  font-size: 0.9rem;
+  color: var(--ink-primary);
+  line-height: 1.4;
+}
+
+.suggestion-buttons {
+  display: flex;
+  gap: 8px;
+  width: 100%;
+  justify-content: flex-end;
+}
+
+.suggestion-btn {
+  padding: 6px 12px;
+  font-family: var(--font-sans);
+  font-size: 0.8rem;
+  border: 1px solid var(--accent-sage);
+  border-radius: 4px;
+  background: var(--parchment-warm);
+  color: var(--ink-secondary);
+  cursor: pointer;
+  transition: all 0.3s var(--ease-luxe);
+  letter-spacing: 0.02em;
+}
+
+.suggestion-btn:hover {
+  background: var(--accent-sage);
+  color: var(--parchment-warm);
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(154, 171, 165, 0.3);
+}
+
+.suggestion-btn[data-action="accept"] {
+  background: var(--christmas-accent-warm, var(--accent-gold));
+  color: var(--parchment-warm);
+  border-color: var(--christmas-accent-warm, var(--accent-gold));
+}
+
+.suggestion-btn[data-action="accept"]:hover {
+  background: var(--christmas-accent-wine, var(--accent-wine));
+  border-color: var(--christmas-accent-wine, var(--accent-wine));
+}
+
+/* === RESPONSIVE DESIGN === */
+@media (max-width: 768px) {
+  .template-switcher {
+    right: 20px;
+    bottom: 80px;
+  }
+  
+  .template-suggestion {
+    top: 80px;
+    right: 20px;
+    left: 20px;
+    max-width: none;
+  }
+  
+  .template-menu {
+    right: -20px;
+    left: -20px;
+    margin-bottom: 8px;
+  }
+}
+
+/* === ACCESSIBILITY === */
+@media (prefers-reduced-motion: reduce) {
+  .template-menu,
+  .template-suggestion,
+  .template-option,
+  .suggestion-btn {
+    transition: none;
+  }
+  
+  .template-menu.visible {
+    transform: none;
+  }
+  
+  .template-suggestion.visible {
+    transform: none;
+  }
+}
+
+/* High contrast mode */
+@media (prefers-contrast: high) {
+  .template-menu {
+    border-width: 2px;
+    background: var(--parchment);
+  }
+  
+  .template-suggestion {
+    border-width: 2px;
+    background: var(--parchment);
+  }
+  
+  .template-option:hover {
+    background: var(--accent-sage);
+    color: var(--parchment);
+  }
+}
+
+/* === TEMPLATE-SPECIFIC STYLING === */
+
+/* Christmas template enhancements for the switcher */
+body.christmas-template .template-menu {
+  border-color: var(--christmas-accent-warm, var(--accent-gold));
+  box-shadow: 0 4px 20px rgba(212, 175, 55, 0.2);
+}
+
+/* Hover bridge for template menu */
+.template-menu::before {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  height: 12px;
+  background: transparent;
+}
