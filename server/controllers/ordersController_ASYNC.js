@@ -809,12 +809,17 @@ async function __streamPagePostNow(
       PostedBy: postObj.PostedBy
     });
     
+    // Get PostImage - for Audio/Video, use thumbnail or Location[0].URL
     var PostImage = postObj.thumbnail ? postObj.thumbnail : postObj.MediaURL;
+    if (!PostImage && postObj.Location && postObj.Location.length > 0 && postObj.Location[0].URL) {
+      PostImage = postObj.Location[0].URL;
+    }
     PostImage = PostImage ? PostImage : "";
+    // Only prepend URL if it's not already a full URL
     PostImage =
-      PostImage.indexOf("unsplash") >= 0
+      PostImage.indexOf("unsplash") >= 0 || PostImage.startsWith("http")
         ? PostImage
-        : "https://www.scrpt.com/assets/Media/img/300/" + PostImage;
+        : PostImage ? "https://www.scrpt.com/assets/Media/img/300/" + PostImage : "";
 
     var PostStatement =
       postObj.MediaType != "Notes" ? postObj.PostStatement : postObj.Content;
@@ -831,6 +836,7 @@ async function __streamPagePostNow(
       CapsuleId: CapsuleData._id ? CapsuleData._id : null,
       PageId: PageData._id ? PageData._id : null,
       PostId: postObj._id,
+      MediaType: postObj.MediaType || null, // ✅ Add MediaType from original Media post
       PostOwnerId: NewOwnerId || postObj.PostedBy, // Use new owner if provided (for purchased streams)
       ReceiverEmails: shareWithEmail ? [shareWithEmail] : [],
       PostImage: PostImage,
@@ -990,18 +996,32 @@ async function __streamPagePostNow(
           console.log(`⚠️ Post ${loop365 + 1}: Skipping due to missing required fields`);
         }
       } else {
-        // 🚀 OPTIMIZATION: Skip Audio/Video posts - they don't need blend image processing
+        // Check if this is Audio/Video/HTML post - they still need SyncedPost creation, just without blend processing
         const mediaType = postObj.MediaType || '';
         const isNonBlendableType = mediaType === 'Audio' || 
                                    mediaType === 'Video' || 
                                    mediaType === '1AudioPost' || 
-                                   mediaType === '1VideoPost';
+                                   mediaType === '1VideoPost' ||
+                                   mediaType === 'HTML' ||
+                                   mediaType === 'Notes';
         
         if (isNonBlendableType) {
-          console.log(`⏭️ Post ${loop365 + 1}: Skipping ${mediaType} - no blend processing needed`);
-          // Audio/Video posts don't need the expensive streamPost call
-          // They'll be delivered via the normal email flow without blend image selection
-          continue;
+          console.log(`📧 Post ${loop365 + 1}: ${mediaType} post - will create SyncedPost without blend processing`);
+          
+          // For Audio/Video/HTML posts, PostImage might be optional or use different sources
+          // Use thumbnail, Location[0].URL, or a placeholder
+          if (!inputObj.PostImage) {
+            if (postObj.thumbnail) {
+              inputObj.PostImage = postObj.thumbnail;
+            } else if (postObj.Location && postObj.Location.length > 0 && postObj.Location[0].URL) {
+              inputObj.PostImage = postObj.Location[0].URL;
+            } else if (postObj.MediaURL) {
+              inputObj.PostImage = postObj.MediaURL;
+            } else {
+              // For Audio/Video/HTML, PostImage can be empty - use a placeholder or empty string
+              inputObj.PostImage = "";
+            }
+          }
         }
         
         console.log(`📧 Post ${loop365 + 1}: NO SelectedBlendImages - checking streamPage API conditions`);
@@ -1016,18 +1036,21 @@ async function __streamPagePostNow(
           hasReceiverEmails: inputObj.ReceiverEmails && inputObj.ReceiverEmails.length > 0,
           receiverEmailsCount: inputObj.ReceiverEmails ? inputObj.ReceiverEmails.length : 0,
           hasPostImage: !!inputObj.PostImage,
-          PostImageValue: inputObj.PostImage || 'NULL'
+          PostImageValue: inputObj.PostImage || 'NULL',
+          MediaType: mediaType,
+          isNonBlendableType: isNonBlendableType
         };
         console.log(`🔍 Post ${loop365 + 1} conditions:`, JSON.stringify(conditionCheck, null, 2));
         
-        if (
-          inputObj.PageId &&
+        // For Audio/Video/HTML posts, PostImage is optional
+        const canCreateSyncedPost = inputObj.PageId &&
           inputObj.PostId &&
           inputObj.PostOwnerId &&
           inputObj.EmailEngineDataSets.length &&
           inputObj.ReceiverEmails.length &&
-          inputObj.PostImage
-        ) {
+          (inputObj.PostImage || isNonBlendableType); // PostImage optional for Audio/Video/HTML
+        
+        if (canCreateSyncedPost) {
           // Call function directly instead of HTTP
           const mockReq = { body: inputObj, session: req.session };
           const mockRes = { 
@@ -1056,12 +1079,17 @@ async function __streamPagePostNow(
   PagePosts_keyposts = PagePosts_keyposts ? PagePosts_keyposts : [];
   for (let loop366 = 0; loop366 < PagePosts_keyposts.length; loop366++) {
     var postObj = PagePosts_keyposts[loop366];
+    // Get PostImage - for Audio/Video, use thumbnail or Location[0].URL
     var PostImage = postObj.thumbnail ? postObj.thumbnail : postObj.MediaURL;
+    if (!PostImage && postObj.Location && postObj.Location.length > 0 && postObj.Location[0].URL) {
+      PostImage = postObj.Location[0].URL;
+    }
     PostImage = PostImage ? PostImage : "";
+    // Only prepend URL if it's not already a full URL
     PostImage =
-      PostImage.indexOf("unsplash") >= 0
+      PostImage.indexOf("unsplash") >= 0 || PostImage.startsWith("http")
         ? PostImage
-        : "https://www.scrpt.com/assets/Media/img/300/" + PostImage;
+        : PostImage ? "https://www.scrpt.com/assets/Media/img/300/" + PostImage : "";
 
     var PostStatement =
       postObj.MediaType != "Notes" ? postObj.PostStatement : postObj.Content;
@@ -1078,6 +1106,7 @@ async function __streamPagePostNow(
       CapsuleId: CapsuleData._id ? CapsuleData._id : null,
       PageId: PageData._id ? PageData._id : null,
       PostId: postObj._id,
+      MediaType: postObj.MediaType || null, // ✅ Add MediaType from original Media post
       PostOwnerId: NewOwnerId || postObj.PostedBy, // Use new owner if provided (for purchased streams)
       ReceiverEmails: shareWithEmail ? [shareWithEmail] : [],
       PostImage: PostImage,

@@ -202,6 +202,15 @@ module.exports = function(router){
 	router.post('/subscribeToPlatform', function (req, res) {
 		user.subscribeToPlatform(req, res);
 	});
+	router.post('/cancelSubscription', function (req, res) {
+		user.cancelSubscription(req, res);
+	});
+	router.post('/restartSubscription', function (req, res) {
+		user.restartSubscription(req, res);
+	});
+	router.post('/toggleAutoRenewal', function (req, res) {
+		user.toggleAutoRenewal(req, res);
+	});
 	router.post('/confirmOwnerBirthday', function (req, res) {
         user.confirmOwnerBirthday(req, res);
     });

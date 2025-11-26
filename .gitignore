@@ -3,13 +3,35 @@
 # Dependencies
 node_modules/
 
-# Environment variables
+# Environment variables - ALL variations
+# Ignore all .env files (but keep .env.example as template)
+.env
+.env.*
 *.env
+!.env.example
+
+# Common environment file patterns
 .env.local
-.env.development.local
-.env.test.local
-.env.production.local
+.env.*.local
+.env.development
+.env.production
+.env.vercel
+
+
+# Backup and temporary env files
 .env.backup
+.env.*.backup
+*.env.backup
+env.backup
+.env.tmp
+.env.temp
+
+# Root level env files (without dot prefix - less common but possible)
+env
+env.local
+env.development
+env.production
+env.staging
 
 # Logs
 logs/

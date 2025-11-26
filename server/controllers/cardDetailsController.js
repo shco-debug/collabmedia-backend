@@ -173,20 +173,36 @@ var getUserCards = async function(req, res) {
 
 		// Format response
 		var formattedCards = cards.map(card => ({
+			_id: card._id, // Keep original _id for compatibility
 			cardId: card._id,
 			maskedCardNumber: `****  ****  ****  ${card.Last4Digits}`,
+			Last4Digits: card.Last4Digits, // Keep original field for compatibility
+			CardBrand: card.CardBrand, // Keep original field for compatibility
 			cardBrand: card.CardBrand,
 			cardType: card.CardType,
+			CardType: card.CardType, // Keep original field for compatibility
+			CardNickname: card.CardNickname, // Keep original field for compatibility
 			cardNickname: card.CardNickname,
+			ExpiryMonth: card.ExpiryMonth, // Keep original field for compatibility
 			expiryMonth: card.ExpiryMonth,
+			ExpiryYear: card.ExpiryYear, // Keep original field for compatibility
 			expiryYear: card.ExpiryYear,
 			expiryDisplay: `${String(card.ExpiryMonth).padStart(2, '0')}/${String(card.ExpiryYear).slice(-2)}`,
+			CardHolderName: card.CardHolderName, // Keep original field for compatibility
 			cardHolderName: card.CardHolderName,
+			IsDefault: card.IsDefault, // Keep original field for compatibility
 			isDefault: card.IsDefault,
+			Status: card.Status, // Keep original field for compatibility
 			isVerified: card.IsVerified,
+			IsVerified: card.IsVerified, // Keep original field for compatibility
 			lastUsedOn: card.LastUsedOn,
+			LastUsedOn: card.LastUsedOn, // Keep original field for compatibility
 			addedOn: card.AddedOn,
-			paymentGateway: card.PaymentGateway
+			AddedOn: card.AddedOn, // Keep original field for compatibility
+			paymentGateway: card.PaymentGateway,
+			PaymentGateway: card.PaymentGateway, // Keep original field for compatibility
+			BillingAddress: card.BillingAddress || null, // Include billing address
+			billingAddress: card.BillingAddress || null
 		}));
 
 		return res.json({

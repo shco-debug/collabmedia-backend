@@ -12129,56 +12129,85 @@ var getUserFeedPosts = async function (req, res) {
       });
     }
     
-    // Calculate today's date range (start and end of day) - Same as getStreamPostsOptimized
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // ✅ Calculate today's date (DATE ONLY - ignore time) - Same as getStreamPostsOptimized
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     
-    const todayEnd = new Date();
+    const todayStart = new Date(today);
+    const todayEnd = new Date(today);
     todayEnd.setHours(23, 59, 59, 999);
     
-    console.log(`📅 Filtering posts for today: ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
-    console.log(`📅 Local time: ${todayStart.toString()} to ${todayEnd.toString()}`);
+    // ✅ Get date string for comparison (YYYY-MM-DD format)
+    const todayDateStr = today.toISOString().split('T')[0]; // e.g., "2025-11-25"
     
-    // First, try to get posts for today
-    let syncedPostConditionsToday = {
-      CapsuleId: { $in: userCapsuleIds },
-      IsDeleted: false,
-      Status: true,
-      'EmailEngineDataSets.DateOfDelivery': {
-        $gte: todayStart,
-        $lte: todayEnd
-      }
-    };
+    console.log(`📅 Today's date (date only): ${todayDateStr}`);
+    console.log(`📅 Current date/time: ${new Date().toISOString()}`);
     
-    // Count total matching posts for today
+    // ✅ Count posts for today using date-only comparison (ignores time)
     const t_count = Date.now();
     let totalCountResult = await SyncedPost.aggregate([
-      { $match: syncedPostConditionsToday },
+      { 
+        $match: {
+          CapsuleId: { $in: userCapsuleIds },
+          IsDeleted: false,
+          Status: true
+        }
+      },
+      {
+        $addFields: {
+          firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] },
+          DateOfDeliveryDateOnly: {
+            $dateToString: { 
+              format: "%Y-%m-%d", 
+              date: { $arrayElemAt: ["$EmailEngineDataSets.DateOfDelivery", 0] },
+              timezone: "UTC"
+            }
+          }
+        }
+      },
+      {
+        $match: {
+          DateOfDeliveryDateOnly: todayDateStr
+        }
+      },
       { $count: "total" }
     ], { maxTimeMS: 5000, allowDiskUse: true });
     
     let totalCountToday = totalCountResult[0]?.total || 0;
     let usePastPosts = false;
-    let syncedPostConditions = syncedPostConditionsToday;
+    let totalCount = totalCountToday;
     
     // If loadOlderPosts flag is set, directly load past posts
     if (loadOlderPosts) {
       console.log(`📅 Load older posts flag is set, loading past posts only`);
       usePastPosts = true;
       
-      // Update conditions to get posts from past days (DateOfDelivery < todayStart)
-      syncedPostConditions = {
-        CapsuleId: { $in: userCapsuleIds },
-        IsDeleted: false,
-        Status: true,
-        'EmailEngineDataSets.DateOfDelivery': {
-          $lt: todayStart
-        }
-      };
-      
-      // Count past posts
+      // ✅ Count past posts using date-only comparison
       totalCountResult = await SyncedPost.aggregate([
-        { $match: syncedPostConditions },
+        { 
+          $match: {
+            CapsuleId: { $in: userCapsuleIds },
+            IsDeleted: false,
+            Status: true
+          }
+        },
+        {
+          $addFields: {
+            firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] },
+            DateOfDeliveryDateOnly: {
+              $dateToString: { 
+                format: "%Y-%m-%d", 
+                date: { $arrayElemAt: ["$EmailEngineDataSets.DateOfDelivery", 0] },
+                timezone: "UTC"
+              }
+            }
+          }
+        },
+        {
+          $match: {
+            DateOfDeliveryDateOnly: { $lt: todayDateStr }
+          }
+        },
         { $count: "total" }
       ], { maxTimeMS: 5000, allowDiskUse: true });
       
@@ -12189,19 +12218,32 @@ var getUserFeedPosts = async function (req, res) {
       console.log(`📅 No posts found for today, falling back to past posts`);
       usePastPosts = true;
       
-      // Update conditions to get posts from past days (DateOfDelivery < todayStart)
-      syncedPostConditions = {
-        CapsuleId: { $in: userCapsuleIds },
-        IsDeleted: false,
-        Status: true,
-        'EmailEngineDataSets.DateOfDelivery': {
-          $lt: todayStart
-        }
-      };
-      
-      // Count past posts
+      // ✅ Count past posts using date-only comparison
       totalCountResult = await SyncedPost.aggregate([
-        { $match: syncedPostConditions },
+        { 
+          $match: {
+            CapsuleId: { $in: userCapsuleIds },
+            IsDeleted: false,
+            Status: true
+          }
+        },
+        {
+          $addFields: {
+            firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] },
+            DateOfDeliveryDateOnly: {
+              $dateToString: { 
+                format: "%Y-%m-%d", 
+                date: { $arrayElemAt: ["$EmailEngineDataSets.DateOfDelivery", 0] },
+                timezone: "UTC"
+              }
+            }
+          }
+        },
+        {
+          $match: {
+            DateOfDeliveryDateOnly: { $lt: todayDateStr }
+          }
+        },
         { $count: "total" }
       ], { maxTimeMS: 5000, allowDiskUse: true });
       
@@ -12216,19 +12258,32 @@ var getUserFeedPosts = async function (req, res) {
         console.log(`📅 Only ${totalCountToday} posts for today (less than limit ${limit}), including past posts`);
         usePastPosts = true;
         
-        // Update conditions to include both today's and past posts
-        syncedPostConditions = {
-          CapsuleId: { $in: userCapsuleIds },
-          IsDeleted: false,
-          Status: true,
-          'EmailEngineDataSets.DateOfDelivery': {
-            $lte: todayEnd  // Include all posts up to end of today (today's + past)
-          }
-        };
-        
-        // Re-count with new conditions
+        // ✅ Count all posts (today + past) using date-only comparison
         totalCountResult = await SyncedPost.aggregate([
-          { $match: syncedPostConditions },
+          { 
+            $match: {
+              CapsuleId: { $in: userCapsuleIds },
+              IsDeleted: false,
+              Status: true
+            }
+          },
+          {
+            $addFields: {
+              firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] },
+              DateOfDeliveryDateOnly: {
+                $dateToString: { 
+                  format: "%Y-%m-%d", 
+                  date: { $arrayElemAt: ["$EmailEngineDataSets.DateOfDelivery", 0] },
+                  timezone: "UTC"
+                }
+              }
+            }
+          },
+          {
+            $match: {
+              DateOfDeliveryDateOnly: { $lte: todayDateStr }  // Include all posts up to today (today's + past)
+            }
+          },
           { $count: "total" }
         ], { maxTimeMS: 5000, allowDiskUse: true });
         
@@ -12250,10 +12305,17 @@ var getUserFeedPosts = async function (req, res) {
       });
     }
 
+    // ✅ Build pipeline with date-only filtering (same as getStreamPostsOptimized)
     const pipeline = [
-      { $match: syncedPostConditions },
+      { 
+        $match: {
+          CapsuleId: { $in: userCapsuleIds },
+          IsDeleted: false,
+          Status: true
+        }
+      },
       
-      // Extract DateOfDelivery first for sorting (same as getStreamPostsOptimized)
+      // Extract DateOfDelivery first for sorting and date comparison
       {
         $addFields: {
           firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] }
@@ -12261,8 +12323,31 @@ var getUserFeedPosts = async function (req, res) {
       },
       {
         $addFields: {
-          DateOfDeliveryForSort: "$firstDataSet.DateOfDelivery"
+          DateOfDeliveryForSort: "$firstDataSet.DateOfDelivery",
+          // ✅ Extract date only (YYYY-MM-DD) for comparison - ignore time completely
+          DateOfDeliveryDateOnly: {
+            $dateToString: { 
+              format: "%Y-%m-%d", 
+              date: "$firstDataSet.DateOfDelivery",
+              timezone: "UTC"
+            }
+          }
         }
+      },
+      
+      // ✅ Filter by date only (not time) - compare date strings
+      {
+        $match: usePastPosts
+          ? (totalCountToday < limit && !loadOlderPosts && totalCountToday > 0)
+            ? {
+                DateOfDeliveryDateOnly: { $lte: todayDateStr }  // Include today + past
+              }
+            : {
+                DateOfDeliveryDateOnly: { $lt: todayDateStr }  // Past only
+              }
+          : {
+              DateOfDeliveryDateOnly: todayDateStr  // Today only
+            }
       },
       
       // Sort by DateOfDelivery (most recent first for past posts, or CreatedOn for today's posts)
@@ -12287,29 +12372,11 @@ var getUserFeedPosts = async function (req, res) {
         },
       },
       
-      // Filter by date based on whether we're using today's posts or past posts
-      // (Additional check after extracting DateOfDelivery field)
-      // If usePastPosts is true, we're showing past posts only OR today's + past posts
-      {
-        $match: usePastPosts
-          ? {
-              DateOfDelivery: {
-                $lte: todayEnd  // Include all posts up to end of today (past + today)
-              }
-            }
-          : {
-              DateOfDelivery: {
-                $gte: todayStart,
-                $lte: todayEnd
-              }
-            }
-      },
-      
-      // Add flag to indicate if this is an old post (not from current day)
+      // ✅ Add flag to indicate if this is an old post (compare by date only, not time)
       {
         $addFields: {
           isOldPost: {
-            $lt: ["$DateOfDelivery", todayStart]
+            $lt: ["$DateOfDeliveryDateOnly", todayDateStr]
           }
         }
       },
@@ -14266,8 +14333,8 @@ exports.updateCartForMyself = updateCartForMyself;
 exports.updateCartForGift = updateCartForGift;
 exports.updateCartForSurpriseGift = updateCartForSurpriseGift;
 exports.updateCartForMonth = updateCartForMonth;
-exports.updateCartForFrequency = updateCartForFrequency;
 //Buy Now From Public Gallery - Shoping Cart Apis
+// Note: updateCartForFrequency export is at the end of the file after function definition
 exports.getMyPurchases = getMyPurchases;
 exports.getUserPurchasedCapsulesPosts = getUserPurchasedCapsulesPosts;
 exports.getUserMixedFeedPosts = getUserMixedFeedPosts;
@@ -14607,6 +14674,9 @@ var updateCartForFrequency = async function (req, res) {
     return res.json(response);
   }
 };
+
+// Export updateCartForFrequency after function definition
+exports.updateCartForFrequency = updateCartForFrequency;
 
 /**
  * Update month/duration for active capsule (after purchase)
@@ -15334,10 +15404,12 @@ var getStreamPostsOptimized = async function (req, res) {
       });
     }
 
-    const limit = req.body.limit || 20;
+    const limit = req.body.limit || 10;  // ✅ Default to 10 posts per fetch
     const skip = req.body.skip || 0;
     const type = req.body.type || null;
     const selectedKeyword = req.body.selectedKeyword || null;
+    const loadOlderRaw = req.body.loadOlderPosts ?? req.query?.loadOlderPosts ?? false;
+    const loadOlderPosts = loadOlderRaw === true || loadOlderRaw === 'true' || loadOlderRaw === 1 || loadOlderRaw === '1';
     const loginUserId = req.session.user._id;
 
     const SyncedPost = require('./../models/syncedpostModel.js');
@@ -15362,61 +15434,69 @@ var getStreamPostsOptimized = async function (req, res) {
     const memberCapsuleIds = userMemberships.map(m => new mongoose.Types.ObjectId(m.StreamId));
     console.log(`📊 User is member of ${memberCapsuleIds.length} streams`);
 
-    // Calculate today's date range (start and end of day)
-    const todayStart = new Date();
-    todayStart.setHours(0, 0, 0, 0);
+    // ✅ Calculate today's date (DATE ONLY - ignore time)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
     
-    const todayEnd = new Date();
+    const todayEnd = new Date(today);
     todayEnd.setHours(23, 59, 59, 999);
     
-    console.log(`📅 Filtering posts for today: ${todayStart.toISOString()} to ${todayEnd.toISOString()}`);
+    // ✅ Get date string for comparison (YYYY-MM-DD format)
+    const todayDateStr = today.toISOString().split('T')[0]; // e.g., "2025-11-25"
+    
+    console.log(`📅 Today's date (date only): ${todayDateStr}`);
+    console.log(`📅 Current date/time: ${new Date().toISOString()}`);
 
-    // First, try to get posts for today
-    let syncedPostConditions = {
+    const t_count = Date.now();
+    const baseMatch = {
       CapsuleId: new mongoose.Types.ObjectId(capsuleId),
       IsDeleted: false,
-      Status: true,
-      'EmailEngineDataSets.DateOfDelivery': {
-        $gte: todayStart,
-        $lte: todayEnd
-      }
+      Status: true
     };
     
-    // Count total matching posts for today - no duplication, so count documents directly
-    const t_count = Date.now();
+    const basePipeline = [
+      { $match: baseMatch },
+      {
+        $addFields: {
+          firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] },
+          DateOfDeliveryDateOnly: {
+            $dateToString: { 
+              format: "%Y-%m-%d", 
+              date: { $arrayElemAt: ["$EmailEngineDataSets.DateOfDelivery", 0] },
+              timezone: "UTC"
+            }
+          }
+        }
+      }
+    ];
+    
+    // ✅ Count posts for the current mode (today or older)
+    const currentModeMatch = loadOlderPosts
+      ? { DateOfDeliveryDateOnly: { $lt: todayDateStr } }
+      : { DateOfDeliveryDateOnly: todayDateStr };
+    
     let totalCountResult = await SyncedPost.aggregate([
-      { $match: syncedPostConditions },
+      ...basePipeline,
+      { $match: currentModeMatch },
       { $count: "total" }
     ], { maxTimeMS: 5000, allowDiskUse: true });
     
     let totalCount = totalCountResult[0]?.total || 0;
-    let usePastPosts = false;
     
-    // If no posts for today, fallback to past posts
-    if (totalCount === 0) {
-      console.log(`📅 No posts found for today, falling back to past posts`);
-      usePastPosts = true;
-      
-      // Update conditions to get posts from past days (DateOfDelivery < todayStart)
-      syncedPostConditions = {
-        CapsuleId: new mongoose.Types.ObjectId(capsuleId),
-        IsDeleted: false,
-        Status: true,
-        'EmailEngineDataSets.DateOfDelivery': {
-          $lt: todayStart
-        }
-      };
-      
-      // Count past posts
-      totalCountResult = await SyncedPost.aggregate([
-        { $match: syncedPostConditions },
-        { $count: "total" }
-      ], { maxTimeMS: 5000, allowDiskUse: true });
-      
-      totalCount = totalCountResult[0]?.total || 0;
-      console.log(`📊 Found ${totalCount} past posts in stream [${Date.now() - t_count}ms]`);
-    } else {
+    // ✅ Always count older posts to determine button visibility
+    const olderCountResult = await SyncedPost.aggregate([
+      ...basePipeline,
+      { $match: { DateOfDeliveryDateOnly: { $lt: todayDateStr } } },
+      { $count: "total" }
+    ], { maxTimeMS: 5000, allowDiskUse: true });
+    const totalOlderPosts = olderCountResult[0]?.total || 0;
+    const hasOlderPostsAvailable = totalOlderPosts > 0;
+    
+    if (!loadOlderPosts) {
       console.log(`📊 Found ${totalCount} posts for today [${Date.now() - t_count}ms]`);
+      console.log(`📊 Older posts available: ${totalOlderPosts}`);
+    } else {
+      console.log(`📊 Loading older posts: ${totalCount} found [${Date.now() - t_count}ms]`);
     }
     
     if (totalCount === 0) {
@@ -15425,20 +15505,19 @@ var getStreamPostsOptimized = async function (req, res) {
         msg: "Success - No posts found in this stream",
         response: [],
         count: 0,
+        hasOlderPosts: loadOlderPosts ? false : hasOlderPostsAvailable,
         pagination: { skip: skip, limit: limit, hasMore: false },
         filters: { type: type, selectedKeyword: selectedKeyword },
       });
     }
 
-    // Build aggregation pipeline - no unwind needed since no duplication
+    // Build aggregation pipeline - reuse base stages, then filter by mode
     const pipeline = [
-      { $match: syncedPostConditions },
-      
-      // Extract DateOfDelivery first for sorting
+      ...basePipeline,
       {
-        $addFields: {
-          firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] }
-        }
+        $match: loadOlderPosts
+          ? { DateOfDeliveryDateOnly: { $lt: todayDateStr } }
+          : { DateOfDeliveryDateOnly: todayDateStr }
       },
       {
         $addFields: {
@@ -15447,7 +15526,7 @@ var getStreamPostsOptimized = async function (req, res) {
       },
       
       // Sort by DateOfDelivery (most recent first for past posts, or CreatedOn for today's posts)
-      { $sort: usePastPosts 
+      { $sort: loadOlderPosts 
           ? { DateOfDeliveryForSort: -1, _id: -1 }  // Most recent past posts first
           : { CreatedOn: -1, _id: -1 }              // Today's posts by creation date
       },
@@ -15468,32 +15547,11 @@ var getStreamPostsOptimized = async function (req, res) {
         },
       },
       
-      // Filter by date based on whether we're using today's posts or past posts
-      // (Additional check after extracting DateOfDelivery field)
-      // Using JavaScript date variables directly in $match (MongoDB supports this)
-      {
-        $match: usePastPosts
-          ? {
-              DateOfDelivery: {
-                $lt: todayStart
-              }
-            }
-          : {
-              DateOfDelivery: {
-                $gte: todayStart,
-                $lte: todayEnd
-              }
-            }
-      },
-      
-      // Add flag to indicate if this is an old post (not from current day)
-      // Compare DateOfDelivery with today's date range
+      // ✅ Add flag to indicate if this is an old post (compare by date only, not time)
       {
         $addFields: {
-          todayStartForCheck: todayStart,
-          todayEndForCheck: todayEnd,
           isOldPost: {
-            $lt: ["$DateOfDelivery", todayStart]
+            $lt: ["$DateOfDeliveryDateOnly", todayDateStr]
           }
         }
       },
@@ -16091,18 +16149,7 @@ var getStreamPostsOptimized = async function (req, res) {
 
     console.log(`⚡ Running aggregation pipeline...`);
     console.log(`📊 Pipeline params: limit=${limit}, skip=${skip}, type=${type}, selectedKeyword=${selectedKeyword}`);
-    console.log(`📊 SyncedPost conditions:`, JSON.stringify(syncedPostConditions));
-    
-    // DEBUG: Count documents at key stages
-    const debugPipeline1 = [
-      { $match: syncedPostConditions },
-      { $sort: { CreatedOn: -1, _id: -1 } },
-      { $skip: skip },
-      { $limit: limit },
-      { $count: "total" }
-    ];
-    const count1 = await SyncedPost.aggregate(debugPipeline1).allowDiskUse(true);
-    console.log(`📊 After initial match+limit: ${count1[0]?.total || 0} documents`);
+    console.log(`📊 Querying capsule: ${capsuleId}, Date filter: ${loadOlderPosts ? 'past posts' : 'today\'s posts'}`);
     
     const t_agg = Date.now();
     const posts = await SyncedPost.aggregate(pipeline).allowDiskUse(true);
@@ -16144,16 +16191,21 @@ var getStreamPostsOptimized = async function (req, res) {
       return post;
     }));
 
+    const responseHasOlderPosts = loadOlderPosts
+      ? (skip + cleanedPosts.length) < totalCount
+      : hasOlderPostsAvailable;
+
     const totalTime = Date.now() - startTime;
     console.log(`✅ Total time: ${totalTime}ms`);
     console.log(`📤 Sending response: ${cleanedPosts.length} posts, totalCount: ${totalCount}`);
-    console.log(`📤 Response details: skip=${skip}, limit=${limit}, hasMore=${skip + limit < totalCount}`);
+    console.log(`📤 Response details: skip=${skip}, limit=${limit}, hasMore=${skip + limit < totalCount}, hasOlderPosts=${responseHasOlderPosts}`);
 
     res.json({
       code: '200',
       msg: "Success",
       response: cleanedPosts,
       count: totalCount,
+      hasOlderPosts: responseHasOlderPosts,
       pagination: {
         skip: skip,
         limit: limit,

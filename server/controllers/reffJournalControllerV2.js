@@ -1023,13 +1023,9 @@ async function notifyMembers(users, UserName, Action, StreamId) {
 
     var _cId = memberObj.AllFoldersId ? memberObj.AllFoldersId : "";
     var _pId = memberObj.AllPagesId ? memberObj.AllPagesId : "";
-    var userStreamPageUrl =
-      "https://www.scrpt.com/streams/" +
-      _cId +
-      "/" +
-      _pId +
-      "?stream=" +
-      StreamId;
+    // Use environment variable for base URL, fallback to HOST_URL
+    const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+    var userStreamPageUrl = `${baseUrl}/streams/${_cId}/${_pId}?stream=${StreamId}`;
 
     var newHtml = results[0].description.replace(
       /{RecipientName}/g,
@@ -14616,9 +14612,12 @@ var addCommentOnSocialPost = async function (req, res) {
       UserId: req.session.user._id,
     };
 
-    var dataToUpdate = {
-      Comment: req.body.Comment ? req.body.Comment : null,
-    };
+      var dataToUpdate = {
+        Comment: req.body.Comment ? req.body.Comment : null,
+      };
+      if (req.body.PrivacySetting) {
+        dataToUpdate.PrivacySetting = req.body.PrivacySetting;
+      }
 
     StreamComments.update(
       conditions,
@@ -21833,7 +21832,12 @@ var setStreamMediaSelectionCriteria__INTERNAL_API = async function (req, res) {
 const addNewPost_INTERNAL_API = async (req, res) => {
   const startTime = Date.now();
 
-  console.log("🔍 addNewPost_INTERNAL_API - Processing request");
+  console.log("=".repeat(80));
+  console.log("🔍 addNewPost_INTERNAL_API - START - Processing request");
+  console.log("📥 Request body keys:", Object.keys(req.body || {}));
+  console.log("📥 pageId:", req.body?.pageId);
+  console.log("📥 postStreamType:", req.body?.postStreamObj?.type);
+  console.log("=".repeat(80));
 
   // Always use mongoose.Types.ObjectId to avoid conflicts with global ObjectId
   const ObjectIdConstructor = mongoose?.Types?.ObjectId;
@@ -21962,10 +21966,23 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       return res.json({ code: 500, message: "Page model not available" });
     }
 
+    console.log(`🔍 Fetching page with ID: ${objectId}`);
     let result = await Page.find({ _id: objectId });
     result = Array.isArray(result) ? result : [];
 
+    console.log(`📄 Page query result: Found ${result.length} page(s)`);
+    if (result.length > 0) {
+      console.log(`📄 Page data:`, {
+        _id: result[0]._id,
+        hasMedias: !!result[0].Medias,
+        MediasType: Array.isArray(result[0].Medias) ? 'array' : typeof result[0].Medias,
+        MediasLength: Array.isArray(result[0].Medias) ? result[0].Medias.length : 'N/A',
+        OwnerId: result[0].OwnerId
+      });
+    }
+
     if (result.length === 0) {
+      console.log(`❌ ERROR: Page not found with ID: ${objectId}`);
       return res.json({ code: 404, message: "Not Found" });
     }
 
@@ -22379,15 +22396,31 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     
     console.log("✅ Media saved with ID:", mediaId);
 
-    fields.Medias = result[0].Medias || [];
-    fields.Medias.push(mediaId);
+    // ✅ FIX: Handle case where Medias array doesn't exist in the page document
+    // If Medias field is missing, undefined, or null, initialize it as an empty array
+    const existingMedias = result[0].Medias;
+    if (!Array.isArray(existingMedias)) {
+      console.log(`⚠️ WARNING: Page Medias field is missing or not an array. Initializing as empty array.`);
+      fields.Medias = [mediaId];
+    } else {
+      fields.Medias = [...existingMedias, mediaId]; // Create new array to avoid mutation
+    }
+
+    console.log(`✅ Adding media ${mediaId} to page ${pageId}. Total medias: ${fields.Medias.length}`);
 
     const query = {
       _id: new ObjectIdConstructor(pageId),
     };
     var options = { multi: false };
 
-    await Page.updateOne(query, { $set: fields }, options);
+    // ✅ Use $set to ensure Medias array is created/updated even if field doesn't exist
+    const updateResult = await Page.updateOne(query, { $set: fields }, options);
+    
+    if (updateResult.modifiedCount === 0) {
+      console.log(`⚠️ WARNING: Page update returned modifiedCount: 0. Page may not exist or update failed.`);
+    } else {
+      console.log(`✅ Page updated successfully. Modified count: ${updateResult.modifiedCount}`);
+    }
     
     const outputArr = ["post added successfully"];
 

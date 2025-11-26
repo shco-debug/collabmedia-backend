@@ -4,15 +4,28 @@
  * Based on project_cluster_scrpt.js
  */
 
-// Performance monitoring
+// Load environment variables FIRST (before New Relic check)
+require("dotenv").config();
 
-// Environment setup - Force development mode for Vercel deployment
+// Environment setup - Set default NODE_ENV before New Relic loads
 process.env.NODE_ENV = process.env.NODE_ENV || "development";
+
+// ⚡ CRITICAL: New Relic MUST be loaded early (before other application modules)
+// This enables Application Performance Monitoring (APM)
+// Only loads if NEWRELIC_LICENSE_KEY environment variable is set
+if (process.env.NEWRELIC_LICENSE_KEY) {
+  require('newrelic');
+  console.log('✅ New Relic APM monitoring enabled');
+} else {
+  console.log('ℹ️  New Relic APM monitoring disabled (no license key found)');
+  console.log('   💡 Set NEWRELIC_LICENSE_KEY in .env to enable monitoring');
+}
 
 // Core Node.js modules
 const fs = require("fs");
 const tls = require("tls");
 const path = require("path");
+const https = require("https");
 
 // Third-party modules
 const express = require("express");
@@ -22,10 +35,8 @@ const mongoose = require("mongoose");
 const html2canvasProxy = require("html2canvas-proxy");
 const bodyParser = require("body-parser");
 
-// Load environment variables
-require("dotenv").config();
-
 // ⚡ CRITICAL: Load environment config BEFORE anything else
+// Note: dotenv already loaded at top of file for New Relic
 // This sets process.STRIPE_CONFIG, process.EMAIL_ENGINE, etc.
 require("./config/env/development.js")();
 
@@ -560,6 +571,48 @@ app.get("/health", (req, res) => {
 });
 
 
+// Load SSL certificates for HTTPS
+let httpsOptions = null;
+const certsDir = path.join(__dirname, "certs");
+
+// Try .pem first (standard), then .pen as fallback
+let keyPath = path.join(certsDir, "localhost-key.pem");
+let certPath = path.join(certsDir, "localhost.pem");
+
+// If .pem files don't exist, try .pen extension
+if (!fs.existsSync(keyPath)) {
+  const penKeyPath = path.join(certsDir, "localhost-key.pen");
+  if (fs.existsSync(penKeyPath)) {
+    keyPath = penKeyPath;
+  }
+}
+if (!fs.existsSync(certPath)) {
+  const penCertPath = path.join(certsDir, "localhost.pen");
+  if (fs.existsSync(penCertPath)) {
+    certPath = penCertPath;
+  }
+}
+
+try {
+  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+    httpsOptions = {
+      key: fs.readFileSync(keyPath, "utf8"),
+      cert: fs.readFileSync(certPath, "utf8"),
+    };
+    console.log(`✅ SSL certificates loaded from ${certsDir}`);
+    console.log(`   Key: ${path.basename(keyPath)}`);
+    console.log(`   Cert: ${path.basename(certPath)}`);
+  } else {
+    console.warn(`⚠️  SSL certificates not found. Expected files:`);
+    console.warn(`   - ${path.join(certsDir, "localhost-key.pem")} (or .pen)`);
+    console.warn(`   - ${path.join(certsDir, "localhost.pem")} (or .pen)`);
+    console.warn(`   Server will start with HTTP only.`);
+  }
+} catch (error) {
+  console.error(`❌ Error loading SSL certificates:`, error.message);
+  console.warn(`   Server will start with HTTP only.`);
+}
+
 // Start server for Local Development (skip for Vercel)
 if (process.env.VERCEL !== '1') {
   const httpPort = process.env.PORT || 3002;
@@ -567,11 +620,21 @@ if (process.env.VERCEL !== '1') {
   // Connect to MongoDB first, then start the server
   connectToMongoDB().then((connected) => {
     if (connected) {
-      app.listen(httpPort, () => {
-        console.log(`✅ Server running on port ${httpPort}`);
-        console.log(`✅ Local development at http://localhost:${httpPort}`);
-        console.log(`✅ MongoDB connection ready`);
-      });
+      // Use HTTPS if certificates are available, otherwise HTTP
+      if (httpsOptions) {
+        const httpsServer = https.createServer(httpsOptions, app);
+        httpsServer.listen(httpPort, () => {
+          console.log(`✅ HTTPS Server running on port ${httpPort}`);
+          console.log(`✅ Local development at https://localhost:${httpPort}`);
+          console.log(`✅ MongoDB connection ready`);
+        });
+      } else {
+        app.listen(httpPort, () => {
+          console.log(`✅ HTTP Server running on port ${httpPort}`);
+          console.log(`✅ Local development at http://localhost:${httpPort}`);
+          console.log(`✅ MongoDB connection ready`);
+        });
+      }
     } else {
       console.error(`❌ Server cannot start - MongoDB connection failed`);
       process.exit(1);

@@ -1258,13 +1258,9 @@ async function notifyMembers(users, UserName, Action, StreamId) {
 
     var _cId = memberObj.AllFoldersId ? memberObj.AllFoldersId : "";
     var _pId = memberObj.AllPagesId ? memberObj.AllPagesId : "";
-    var userStreamPageUrl =
-      "https://www.scrpt.com/streams/" +
-      _cId +
-      "/" +
-      _pId +
-      "?stream=" +
-      StreamId;
+    // Use environment variable for base URL, fallback to HOST_URL
+    const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+    var userStreamPageUrl = `${baseUrl}/streams/${_cId}/${_pId}?stream=${StreamId}`;
 
     var newHtml = results[0].description.replace(
       /{RecipientName}/g,
@@ -7659,6 +7655,7 @@ var streamPost_withEmailSync = function (req, res) {
   var dataRecord = {
     PageId: req.body.PageId ? req.body.PageId : null,
     PostId: req.body.PostId ? req.body.PostId : null,
+    MediaType: req.body.MediaType || null, // ✅ Use MediaType from request body if available
     PostImage: PostImage,
     PostStatement: PostStatement ? PostStatement : "",
     PostOwnerId: req.body.PostOwnerId ? req.body.PostOwnerId : null,
@@ -7695,22 +7692,29 @@ var streamPost_withEmailSync = function (req, res) {
     dataRecord.EmailEngineDataSets = addHexcode_blendedImage(
       dataRecord.EmailEngineDataSets
     );
-    SyncedPost(dataRecord).save(function (err, data) {
-      if (err) {
-        res.json({ code: "204", message: "error1" });
-      } else {
-        if (!dataRecord.Status) {
-          return res.json({ code: "200", message: "success" });
-        }
+    
+    // ✅ Fetch MediaType from Media collection using PostId (only if not already provided)
+    Media.findOne({ _id: dataRecord.PostId }, { MediaType: 1 }, function (mediaErr, mediaDoc) {
+      if (!dataRecord.MediaType && !mediaErr && mediaDoc && mediaDoc.MediaType) {
+        dataRecord.MediaType = mediaDoc.MediaType;
+      }
+      
+      SyncedPost(dataRecord).save(function (err, data) {
+        if (err) {
+          res.json({ code: "204", message: "error1" });
+        } else {
+          if (!dataRecord.Status) {
+            return res.json({ code: "200", message: "success" });
+          }
 
-        var condition = {};
-        condition.name = "Surprise__Post";
+          var condition = {};
+          condition.name = "Surprise__Post";
 
-        if (dataRecord.EmailTemplate == "PracticalThinker") {
-          condition.name = "Surprise__Post_2Image";
-        }
+          if (dataRecord.EmailTemplate == "PracticalThinker") {
+            condition.name = "Surprise__Post_2Image";
+          }
 
-        EmailTemplate.find(condition, {}, function (err, results) {
+          EmailTemplate.find(condition, {}, function (err, results) {
           if (!err) {
             if (results.length) {
               var SoundFileUrl = "";
@@ -7812,17 +7816,18 @@ var streamPost_withEmailSync = function (req, res) {
             }
           }
         });
-        res.json({
-          code: "200",
-          message: "success",
-          SurpriseImagesFrequencyWise: SurpriseImagesFrequencyWise,
-          finalMediaArr: req.body.finalMediaArr,
-          Set1: reverse(req.body.subsetByRank),
-          Set2: reverse(req.body.subsetByRank2),
-          Set1Obj: reverse(req.body.subsetByRankObj2),
-          Set2Obj: reverse(req.body.subsetByRankObj22),
-        });
-      }
+          res.json({
+            code: "200",
+            message: "success",
+            SurpriseImagesFrequencyWise: SurpriseImagesFrequencyWise,
+            finalMediaArr: req.body.finalMediaArr,
+            Set1: reverse(req.body.subsetByRank),
+            Set2: reverse(req.body.subsetByRank2),
+            Set1Obj: reverse(req.body.subsetByRankObj2),
+            Set2Obj: reverse(req.body.subsetByRankObj22),
+          });
+        }
+      });
     });
   } else {
     res.json({ code: "204", message: "error2" });
@@ -8632,6 +8637,7 @@ var streamPage__WithSelectedBlendCase = async function (req, res) {
   var dataRecord = {
     PageId: req.body.PageId ? req.body.PageId : null,
     PostId: req.body.PostId ? req.body.PostId : null,
+    MediaType: req.body.MediaType || null, // ✅ Use MediaType from request body if available
     PostImage: PostImage,
     PostStatement: PostStatement ? PostStatement : "",
     PostOwnerId: req.body.PostOwnerId ? req.body.PostOwnerId : null,
@@ -8673,6 +8679,19 @@ var streamPage__WithSelectedBlendCase = async function (req, res) {
     dataRecord.EmailEngineDataSets = addHexcode_blendedImage(
       dataRecord.EmailEngineDataSets
     );
+    
+    // ✅ Fetch MediaType from Media collection using PostId (only if not already provided)
+    if (!dataRecord.MediaType && dataRecord.PostId) {
+      try {
+        const mediaDoc = await Media.findOne({ _id: dataRecord.PostId }, { MediaType: 1 }).lean();
+        if (mediaDoc && mediaDoc.MediaType) {
+          dataRecord.MediaType = mediaDoc.MediaType;
+        }
+      } catch (mediaErr) {
+        console.log('⚠️ Error fetching MediaType:', mediaErr);
+      }
+    }
+    
     //save single record per schedule changes
     var tmpObj = Object.assign({}, dataRecord);
     
@@ -14918,6 +14937,9 @@ var addCommentOnSocialPost = async function (req, res) {
       var dataToUpdate = {
         Comment: req.body.Comment ? req.body.Comment : null,
       };
+      if (req.body.PrivacySetting) {
+        dataToUpdate.PrivacySetting = req.body.PrivacySetting;
+      }
 
       // Update comment using async/await
       await StreamComments.updateOne(conditions, { $set: dataToUpdate });
@@ -23761,9 +23783,17 @@ var setStreamMediaSelectionCriteria__INTERNAL_API = async function (req, res) {
 const addNewPost_INTERNAL_API = async (req, res) => {
   const startTime = Date.now();
 
+  console.log("=".repeat(80));
+  console.log("🔍 addNewPost_INTERNAL_API - START - Processing request");
+  console.log("📥 Request body keys:", Object.keys(req.body || {}));
+  console.log("📥 pageId:", req.body?.pageId);
+  console.log("📥 postStreamType:", req.body?.postStreamObj?.type);
+  console.log("=".repeat(80));
+
   // Always use mongoose.Types.ObjectId to avoid conflicts with global ObjectId
   const ObjectIdConstructor = mongoose?.Types?.ObjectId;
   if (!ObjectIdConstructor) {
+    console.log("❌ ERROR: mongoose.Types.ObjectId not available");
     return res.json({
       code: 500,
       message: "mongoose.Types.ObjectId not available",
@@ -23885,10 +23915,23 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       return res.json({ code: 500, message: "Page model not available" });
     }
 
+    console.log(`🔍 Fetching page with ID: ${objectId}`);
     let result = await Page.find({ _id: objectId });
     result = Array.isArray(result) ? result : [];
 
+    console.log(`📄 Page query result: Found ${result.length} page(s)`);
+    if (result.length > 0) {
+      console.log(`📄 Page data:`, {
+        _id: result[0]._id,
+        hasMedias: !!result[0].Medias,
+        MediasType: Array.isArray(result[0].Medias) ? 'array' : typeof result[0].Medias,
+        MediasLength: Array.isArray(result[0].Medias) ? result[0].Medias.length : 'N/A',
+        OwnerId: result[0].OwnerId
+      });
+    }
+
     if (result.length === 0) {
+      console.log(`❌ ERROR: Page not found with ID: ${objectId}`);
       return res.json({ code: 404, message: "Not Found" });
     }
 
@@ -23899,6 +23942,8 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     req.body.MediaSelectionCriteria1 = req.body.MediaSelectionCriteria || result[0].MediaSelectionCriteria1 || null;
     req.body.MediaSelectionCriteria2 = req.body.MediaSelectionCriteria || result[0].MediaSelectionCriteria2 || null;
 
+    console.log(`📋 Processing post type: ${postStreamType}, MJImageArr length: ${MJImageArr.length}`);
+    
     let incNum = 0;
     let data = await Counters.findOneAndUpdate(
       { _id: "userId" },
@@ -23909,8 +23954,11 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     incNum = data.seq || 0;
 
     if (!incNum) {
+      console.log(`❌ ERROR: Failed to get counter sequence number`);
       return res.json({ code: 501, message: "Something went wrong." });
     }
+
+    console.log(`✅ Got counter sequence number: ${incNum}`);
 
     let type = "Notes";
     let name = dateFormat();
@@ -23960,18 +24008,22 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     };
     
     if (postStreamType === "1MJPost" && MJImageArr && MJImageArr.length === 1) {
+      console.log(`🖼️ Processing 1MJPost with existing S3 URL`);
       // Handle 1MJ posts with payload structure - extract aspectfit URL directly (like 2MJ)
       const imageData = MJImageArr[0];
       
       // Extract aspectfit URL from payload (same structure as 2MJ)
       if (imageData && imageData.url) {
+        console.log(`✅ Found S3 URL in payload: ${imageData.url.substring(0, 50)}...`);
         locationArray.push({ 
           Size: "aspectfit", 
           URL: imageData.url,
           S3Key: imageData.key || "",
           FileSize: imageData.size || 0
         });
+        console.log(`✅ Added to locationArray. Total locations: ${locationArray.length}`);
       } else {
+        console.log(`⚠️ WARNING: No URL found in imageData, using empty URL`);
         // Fallback - empty URL
         locationArray.push({ Size: "aspectfit", URL: "" });
       }
@@ -24263,26 +24315,42 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     }
 
     // ✅ Validate OwnerId user exists before creating post
-    const uploaderID = result[0].OwnerId;
+    let uploaderID = result[0].OwnerId;
     
-    if (!uploaderID) {
-      return res.json({ 
-        code: 400, 
-        message: "Stream owner (OwnerId) is missing in PageStream document" 
-      });
-    }
+    console.log(`👤 Validating owner: ${uploaderID}`);
     
     // Check if the owner user exists in database
     const User = require('./../models/userModel.js');
-    const ownerExists = await User.findById(uploaderID).select('_id').lean();
+    let ownerExists = null;
     
-    if (!ownerExists) {
-      return res.json({ 
-        code: 404, 
-        message: `Stream owner user not found in database (OwnerId: ${uploaderID})`,
-        error: "Cannot create post - stream owner does not exist"
-      });
+    if (uploaderID) {
+      ownerExists = await User.findById(uploaderID).select('_id Email').lean();
     }
+    
+    // ✅ FALLBACK: If owner doesn't exist, use default stream owner (scrptcompany@gmail.com)
+    if (!ownerExists) {
+      const DEFAULT_STREAM_OWNER_ID = "690e5b885568be7dd02f1642"; // scrptcompany@gmail.com
+      console.log(`⚠️ WARNING: Owner user not found: ${uploaderID}`);
+      console.log(`🔄 Using fallback owner: ${DEFAULT_STREAM_OWNER_ID} (scrptcompany@gmail.com)`);
+      
+      // Verify the fallback owner exists
+      const fallbackOwner = await User.findById(DEFAULT_STREAM_OWNER_ID).select('_id Email').lean();
+      if (fallbackOwner) {
+        uploaderID = DEFAULT_STREAM_OWNER_ID;
+        ownerExists = fallbackOwner;
+        console.log(`✅ Fallback owner validated: ${uploaderID} (${fallbackOwner.Email || 'no email'})`);
+      } else {
+        console.log(`❌ ERROR: Fallback owner also not found: ${DEFAULT_STREAM_OWNER_ID}`);
+        return res.json({ 
+          code: 404, 
+          message: `Stream owner user not found in database (OwnerId: ${uploaderID}) and fallback owner also not found`,
+          error: "Cannot create post - no valid stream owner found"
+        });
+      }
+    } else {
+      console.log(`✅ Owner validated: ${uploaderID} (${ownerExists.Email || 'no email'})`);
+    }
+    console.log(`📦 Preparing media data with ${locationArray.length} location(s)`);
     
     const dataToUpload = {
       Location: locationArray,
@@ -24332,16 +24400,37 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     console.log("📋 MediaSelectionCriteria1:", req.body.MediaSelectionCriteria1);
     console.log("📋 MediaSelectionCriteria2:", req.body.MediaSelectionCriteria2);
 
+    console.log(`💾 Saving media to database...`);
+    console.log(`📋 Media data preview:`, {
+      MediaType: dataToUpload.MediaType,
+      LocationCount: dataToUpload.Location?.length || 0,
+      hasContent: !!dataToUpload.Content,
+      ContentLength: dataToUpload.Content?.length || 0
+    });
+    
     let mediaData = await Media(dataToUpload).save();
     mediaData = typeof mediaData === "object" ? mediaData : {};
     const mediaId = mediaData._id || null;
 
     if (!mediaId) {
       console.log("❌ ERROR: Failed to save media data");
+      console.log("❌ Media data that failed:", JSON.stringify(dataToUpload, null, 2));
       return res.json({ code: 501, message: "Failed to save media data" });
     }
     
     console.log("✅ Media saved with ID:", mediaId);
+
+    // ✅ FIX: Handle case where Medias array doesn't exist in the page document
+    // If Medias field is missing, undefined, or null, initialize it as an empty array
+    const existingMedias = result[0].Medias;
+    if (!Array.isArray(existingMedias)) {
+      console.log(`⚠️ WARNING: Page Medias field is missing or not an array. Initializing as empty array.`);
+      fields.Medias = [mediaId];
+    } else {
+      fields.Medias = [...existingMedias, mediaId]; // Create new array to avoid mutation
+    }
+
+    console.log(`✅ Adding media ${mediaId} to page ${pageId}. Total medias: ${fields.Medias.length}`);
 
     // Generate thumbnail for video posts (same as media/uploadfile)
     if (postStreamType === "Video" || postStreamType === "1VideoPost") {
@@ -24380,7 +24469,27 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     };
     var options = { multi: false };
 
-    await Page.updateOne(query, { $set: fields }, options);
+    // ✅ Use $set to ensure Medias array is created/updated even if field doesn't exist
+    console.log(`💾 Updating page ${pageId} with Medias array:`, {
+      mediasCount: fields.Medias.length,
+      mediaIds: fields.Medias.slice(0, 3).map(m => m.toString())
+    });
+    
+    const updateResult = await Page.updateOne(query, { $set: fields }, options);
+    
+    console.log(`📊 Update result:`, {
+      matchedCount: updateResult.matchedCount,
+      modifiedCount: updateResult.modifiedCount,
+      acknowledged: updateResult.acknowledged
+    });
+    
+    if (updateResult.modifiedCount === 0) {
+      console.log(`⚠️ WARNING: Page update returned modifiedCount: 0. Page may not exist or update failed.`);
+      console.log(`⚠️ Query used:`, JSON.stringify(query));
+      console.log(`⚠️ Fields to set:`, JSON.stringify({ Medias: fields.Medias.map(m => m.toString()) }));
+    } else {
+      console.log(`✅ Page updated successfully. Modified count: ${updateResult.modifiedCount}`);
+    }
     
     const outputArr = ["post added successfully"];
 
@@ -25007,6 +25116,11 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       }
     }
 
+    console.log("=".repeat(80));
+    console.log(`✅ addNewPost_INTERNAL_API - SUCCESS - Completed in ${Date.now() - startTime}ms`);
+    console.log(`📊 Final output:`, outputArr);
+    console.log("=".repeat(80));
+    
     return res.json({
       code: 200,
       message: "process completed",

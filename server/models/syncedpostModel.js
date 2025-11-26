@@ -11,6 +11,9 @@ var SyncedpostsSchema = new mongoose.Schema({
 	PostId : {
 		type : mongoose.Schema.Types.ObjectId
 	},
+	MediaType : {
+		type : String
+	},
 	PostImage : {
 		type : String
 	},

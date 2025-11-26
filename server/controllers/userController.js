@@ -59,49 +59,92 @@ async function normalizeSubscriptionState(userDocument, session) {
 		const now = Date.now();
 
 		// Handle active subscription expiry (annual subscription)
-		if (rawStatus === "active" && rawExpiresOn) {
+		// Also handle "set_to_cancel_at_period_end" - when period ends, cron job will handle it
+		// But we can check here too for consistency
+		if ((rawStatus === "active" || rawStatus === "set_to_cancel_at_period_end") && rawExpiresOn) {
 			const expiresOnDate =
 				rawExpiresOn instanceof Date ? rawExpiresOn : new Date(rawExpiresOn);
 
 			if (!Number.isNaN(expiresOnDate.getTime()) && expiresOnDate.getTime() <= now) {
-				const updatePayload = {
-					IsSubscriber: false,
-					SubscriptionStatus: "expired",
-					SubscriptionExpiresOn: expiresOnDate,
-					SubscriptionTrialEndsOn: null,
-				};
+				// If it's "set_to_cancel_at_period_end" and period has ended, set to expired
+				// (Cron job should handle this, but this is a safety check)
+				// Use "expired" status so middleware properly restricts access
+				if (rawStatus === "set_to_cancel_at_period_end") {
+					const updatePayload = {
+						IsSubscriber: false,
+						SubscriptionStatus: "expired",
+						SubscriptionExpiresOn: expiresOnDate,
+						SubscriptionTrialEndsOn: userDocument.SubscriptionTrialEndsOn || null,
+					};
 
-				await user
-					.updateOne(
-						{ _id: new ObjectId(userDocument._id) },
-						{ $set: updatePayload }
-					)
-					.exec();
+					await user
+						.updateOne(
+							{ _id: new ObjectId(userDocument._id) },
+							{ $set: updatePayload }
+						)
+						.exec();
 
-				userDocument.IsSubscriber = false;
-				userDocument.SubscriptionStatus = "expired";
-				userDocument.SubscriptionExpiresOn = expiresOnDate;
-				userDocument.SubscriptionTrialEndsOn = null;
-				// Keep SubscriptionPrice/Currency so we know what to charge on renewal attempts
+					userDocument.IsSubscriber = false;
+					userDocument.SubscriptionStatus = "expired";
+					userDocument.SubscriptionExpiresOn = expiresOnDate;
 
-				if (
-					session &&
-					session.user &&
-					session.user._id &&
-					String(session.user._id) === String(userDocument._id)
-				) {
-					session.user.IsSubscriber = false;
-					session.user.SubscriptionStatus = "expired";
-					session.user.SubscriptionExpiresOn = expiresOnDate;
-					session.user.SubscriptionTrialEndsOn = null;
+					if (
+						session &&
+						session.user &&
+						session.user._id &&
+						String(session.user._id) === String(userDocument._id)
+					) {
+						session.user.IsSubscriber = false;
+						session.user.SubscriptionStatus = "expired";
+						session.user.SubscriptionExpiresOn = expiresOnDate;
+					}
+				} else {
+					// Regular active subscription expiry
+					const updatePayload = {
+						IsSubscriber: false,
+						SubscriptionStatus: "expired",
+						SubscriptionExpiresOn: expiresOnDate,
+						SubscriptionTrialEndsOn: null,
+					};
+
+					await user
+						.updateOne(
+							{ _id: new ObjectId(userDocument._id) },
+							{ $set: updatePayload }
+						)
+						.exec();
+
+					userDocument.IsSubscriber = false;
+					userDocument.SubscriptionStatus = "expired";
+					userDocument.SubscriptionExpiresOn = expiresOnDate;
+					userDocument.SubscriptionTrialEndsOn = null;
+					// Keep SubscriptionPrice/Currency so we know what to charge on renewal attempts
+
+					if (
+						session &&
+						session.user &&
+						session.user._id &&
+						String(session.user._id) === String(userDocument._id)
+					) {
+						session.user.IsSubscriber = false;
+						session.user.SubscriptionStatus = "expired";
+						session.user.SubscriptionExpiresOn = expiresOnDate;
+						session.user.SubscriptionTrialEndsOn = null;
+					}
 				}
 			}
 
 			return userDocument;
 		}
 
-		// Handle trial expiry
-		if (rawStatus !== "trial" || !rawTrialEndsOn) {
+		// Handle trial expiry - check both "trial" and "cancelled" statuses
+		// Cancelled trials should also expire when trial_end is reached
+		if (!rawTrialEndsOn) {
+			return userDocument;
+		}
+
+		// Only check trial expiry for "trial" or "cancelled" statuses
+		if (rawStatus !== "trial" && rawStatus !== "cancelled") {
 			return userDocument;
 		}
 
@@ -114,10 +157,12 @@ async function normalizeSubscriptionState(userDocument, session) {
 			return userDocument;
 		}
 
+		// If trial hasn't ended yet, user still has access (even if cancelled)
 		if (trialEndsOnDate.getTime() > now) {
 			return userDocument;
 		}
 
+		// Trial has ended - move to expired state (no_active_plan)
 		const updatePayload = {
 			IsSubscriber: false,
 			SubscriptionStatus: "expired",
@@ -1805,7 +1850,9 @@ function sendmail(to, type, req, res) {
 
                             if (type == "reset") {
                                 var userHash = new Buffer(userToHash).toString('base64');
-                                var urlString = process.HOST_URL + '/changePassword/' + userHash;
+                                // Use environment variable for base URL, fallback to HOST_URL
+                                const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                                var urlString = baseUrl + '/changePassword/' + userHash;
                                 newHtml = results[0].description.replace(/{RecipientName}/g, RecipientName);
                                 newHtml = newHtml.replace(/{UrlString}/g, urlString);
                                 //console.log("Inside Send Mail function 1 = = == >", RecipientName, newHtml);
@@ -1815,7 +1862,7 @@ function sendmail(to, type, req, res) {
                                     from: process.EMAIL_ENGINE.info.senderLine,
                                     to: to, // list of receivers
                                     subject: results[0].subject ? results[0].subject : 'Scrpt - Reset password!',
-                                    text: process.HOST_URL + '/changePassword/' + userHash,
+                                    text: baseUrl + '/changePassword/' + userHash,
                                     html: newHtml
                                     //html: 'We have recieved a request to reset the password of your Scrpt account. If you made this request, click on the link below. If you did not make this request you can ignore this mail.<br /><a href="http://203.100.79.94:8888/#/changePassword/' + userHash + '">http://203.100.79.94:8888/#/changePassword/' + userHash + '</a><br /><br />Regards<br />collabmedia.scrpt@gmail.com'
                                 };
@@ -1824,7 +1871,9 @@ function sendmail(to, type, req, res) {
                                 //console.log(" * % * % * % * inside password Changed * % * %  * % * ", data)
                                 //var urlString = process.HOST_URL + '/#/forgotPassword';
                                 var userHash = new Buffer(userToHash).toString('base64');
-                                var urlString = process.HOST_URL + '/changePassword/' + userHash;
+                                // Use environment variable for base URL, fallback to HOST_URL
+                                const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                                var urlString = baseUrl + '/changePassword/' + userHash;
                                 newHtml = results[0].description.replace(/{RecipientName}/g, RecipientName);
                                 newHtml = newHtml.replace(/{UrlString}/g, urlString);
                                 //console.log("Inside Send Mail function = 2= == >", RecipientName, newHtml);
@@ -1834,14 +1883,15 @@ function sendmail(to, type, req, res) {
                                     from: process.EMAIL_ENGINE.info.senderLine,
                                     to: to, // list of receivers
                                     subject: results[0].subject ? results[0].subject : 'Scrpt - Password changed successfully!',
-                                    text: process.HOST_URL + '/login',
+                                    text: baseUrl + '/login',
                                     html: newHtml
                                 };
                             }
                             else if (type == "register") {
                                 //console.log(" * % * % * % * inside register * % * %  * % * ", data)
-
-                                var urlString = process.HOST_URL + '/confirm-email/' + data.resetPasswordToken;
+                                // Use environment variable for base URL, fallback to HOST_URL
+                                const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                                var urlString = baseUrl + '/confirm-email/' + data.resetPasswordToken;
                                 newHtml = results[0].description.replace(/{RecipientName}/g, RecipientName);
                                 newHtml = newHtml.replace(/{ConfirmEmailid}/g, urlString);
                                 //console.log("Inside Send Mail function = 3= == >", RecipientName, newHtml);
@@ -1851,13 +1901,14 @@ function sendmail(to, type, req, res) {
                                     from: process.EMAIL_ENGINE.info.senderLine,
                                     to: to, // list of receivers
                                     subject: results[0].subject ? results[0].subject : 'Scrpt - Your have successfully signed up',
-                                    text: process.HOST_URL + '/login',
+                                    text: baseUrl + '/login',
                                     html: newHtml
                                 };
                             }
                             else {
                                 //console.log(" * % * % * % * inside type = confirm_token else * % * %  * % * ", data)
-
+                                // Use environment variable for base URL, fallback to HOST_URL
+                                const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
                                 newHtml = results[0].description.replace(/{RecipientName}/g, RecipientName);
 
                                 var mailOptions = {
@@ -1865,7 +1916,7 @@ function sendmail(to, type, req, res) {
                                     from: process.EMAIL_ENGINE.info.senderLine,
                                     to: to, // list of receivers
                                     subject: results[0].subject ? results[0].subject : 'Scrpt - Your account has been verified',
-                                    text: process.HOST_URL + '/login',
+                                    text: baseUrl + '/login',
                                     html: newHtml
                                 };
                             }
@@ -1943,7 +1994,9 @@ function sendmail__requestInvitation(to, type, req, res) {
                             RecipientName = name[0];
 							data.resetPasswordToken = "mptest";
 
-							var urlString = process.HOST_URL + '/confirm-email/' + data.resetPasswordToken;
+							// Use environment variable for base URL, fallback to HOST_URL
+							const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+							var urlString = baseUrl + '/confirm-email/' + data.resetPasswordToken;
 							newHtml = results[0].description.replace(/{RecipientName}/g, RecipientName);
 							newHtml = newHtml.replace(/{ConfirmEmailid}/g, urlString);
 							//console.log("Inside Send Mail function = 3= == >", RecipientName, newHtml);
@@ -1953,7 +2006,7 @@ function sendmail__requestInvitation(to, type, req, res) {
 								from: process.EMAIL_ENGINE.info.senderLine,
 								to: to, // list of receivers
 								subject: results[0].subject ? results[0].subject : 'Scrpt - Your have successfully signed up',
-								text: process.HOST_URL + '/login',
+								text: baseUrl + '/login',
 								html: newHtml
 							};
 
@@ -2878,6 +2931,7 @@ var subscribeToPlatform = async function (req, res) {
 
 		const userId = req.session.user._id;
 		const providedToken = req.body.token || null;
+		const cardId = req.body.cardId || null;
 		const tokenEmail = req.body.tokenEmail || req.session.user.Email || null;
 		const normalizePrice = (value, fallback = 0) => {
 			const numericValue = Number(value);
@@ -2957,6 +3011,8 @@ var subscribeToPlatform = async function (req, res) {
 					SubscriptionStatus: 1,
 					SubscriptionTrialEndsOn: 1,
 					SubscriberSince: 1,
+					SubscriptionPrice: 1, // Get old locked price for expired users
+					SubscriptionCurrency: 1,
 				}
 			)
 			.exec();
@@ -2971,6 +3027,11 @@ var subscribeToPlatform = async function (req, res) {
 		const existingTrialEndsOn = currentUser.SubscriptionTrialEndsOn
 			? new Date(currentUser.SubscriptionTrialEndsOn)
 			: null;
+		const existingLastTrialEndsOn = currentUser.SubscriptionLastTrialEndsOn
+			? new Date(currentUser.SubscriptionLastTrialEndsOn)
+			: null;
+		const normalizedStatus = (currentUser.SubscriptionStatus || "").toString().toLowerCase();
+		
 		const isTrialActive =
 			currentUser.SubscriptionStatus === "trial" &&
 			existingTrialEndsOn &&
@@ -2979,6 +3040,21 @@ var subscribeToPlatform = async function (req, res) {
 			currentUser.SubscriptionStatus === "trial" &&
 			existingTrialEndsOn &&
 			existingTrialEndsOn.getTime() <= now.getTime();
+		
+		// Check if user has already had a trial (either current trial expired or previous trial ended)
+		const hasHadTrial = existingLastTrialEndsOn !== null || isTrialExpired;
+		
+		// Check if user is expired (payment failed or cancelled subscription period ended)
+		const isExpired = normalizedStatus === "expired";
+		const isCancelled = normalizedStatus === "cancelled";
+		
+		// Check if this is the first payment after trial (whether cancelled or expired)
+		// If user had a trial and is now paying, use locked price
+		// After this first payment, locked price will be cleared
+		const oldLockedPrice = currentUser.SubscriptionPrice;
+		const hadTrialAndIsPaying = (hasHadTrial || existingTrialEndsOn || existingLastTrialEndsOn) && 
+			(isExpired || isCancelled || isTrialExpired);
+		const useOldPrice = hadTrialAndIsPaying && oldLockedPrice && oldLockedPrice > 0 && !isTrialRequest;
 
 		if (isTrialActive || (currentUser.IsSubscriber && currentUser.SubscriptionStatus !== "trial")) {
 			return res.status(409).json({
@@ -2987,12 +3063,19 @@ var subscribeToPlatform = async function (req, res) {
 			});
 		}
 
+		// Determine if this is a trial request or a payment request
+		// If cardId is provided, it's a payment request (not a trial)
+		// If providedToken is "trial" or empty/null, it's a trial request
+		// If providedToken is a valid payment token, it's a payment request
 		const isTrialRequest =
-			!providedToken ||
-			typeof providedToken === "string" &&
-				providedToken.toLowerCase() === "trial";
+			!cardId && // No cardId means it might be a trial
+			(!providedToken ||
+				(typeof providedToken === "string" &&
+					providedToken.toLowerCase() === "trial"));
 
-		if (!isPrivilegedRole && isTrialExpired && isTrialRequest) {
+		// Prevent expired users or users who already had a trial from getting a new trial
+		// But allow them to pay to activate subscription
+		if (!isPrivilegedRole && (isTrialExpired || isExpired || hasHadTrial) && isTrialRequest) {
 			return res.status(402).json({
 				status: 402,
 				message: "Your free trial has already ended. Please add a payment method to continue.",
@@ -3000,7 +3083,8 @@ var subscribeToPlatform = async function (req, res) {
 		}
 
 		let token = providedToken;
-		let amount = configuredAmount;
+		// Use old locked price for expired users, otherwise use current platform price
+		let amount = useOldPrice ? oldLockedPrice : configuredAmount;
 		let subscriptionStatus = "active";
 		let subscriptionTrialEndsOn = null;
 		let subscriptionExpiresOn = null;
@@ -3025,16 +3109,18 @@ var subscribeToPlatform = async function (req, res) {
 		}
 
 		if (amount > 0) {
-			if (!token) {
+			// For payment, either token or cardId must be provided
+			if (!token && !cardId) {
 				return res.status(400).json({
 					status: 400,
 					message:
-						"Payment token is required to activate the subscription.",
+						"Payment method (token or cardId) is required to activate the subscription.",
 				});
 			}
 
 			const stripe = getStripeClient();
 			let stripeToken = token;
+			let customerId = null; // Declare customerId for saved card payments
 
 			if (token && token.toLowerCase && token.toLowerCase() === "trial") {
 				if (process.env.NODE_ENV === "production") {
@@ -3057,19 +3143,101 @@ var subscribeToPlatform = async function (req, res) {
 				stripeToken = tokenObj.id;
 			}
 
-			const customer = await stripe.customers.create({
-				source: stripeToken,
-				description: tokenEmail || req.session.user.Email,
-			});
+			// If using saved card, get card details and charge directly
+			if (cardId) {
+				const CardDetails = require('./../models/cardDetailsModel.js');
+				const savedCard = await CardDetails.findOne({
+					_id: new ObjectId(cardId),
+					UserId: new ObjectId(userId),
+					IsDeleted: false,
+					Status: true
+				}).exec();
 
-			const amountInCents = Math.round(amount * 100);
-			if (amountInCents > 0) {
-				await stripe.charges.create({
-					amount: amountInCents,
-					currency: "usd",
-					customer: customer.id,
-					description,
+				if (!savedCard) {
+					return res.status(404).json({
+						status: 404,
+						message: "Saved card not found.",
+					});
+				}
+
+				// Check if card is expired
+				const cardCheckNow = new Date();
+				const currentYear = cardCheckNow.getFullYear();
+				const currentMonth = cardCheckNow.getMonth() + 1;
+				if (savedCard.ExpiryYear < currentYear || 
+					(savedCard.ExpiryYear === currentYear && savedCard.ExpiryMonth < currentMonth)) {
+					return res.status(400).json({
+						status: 400,
+						message: "The selected card has expired. Please use a different card or add a new one.",
+					});
+				}
+
+				// Charge using saved card
+				customerId = savedCard.CustomerId;
+				if (!customerId && savedCard.CardToken) {
+					// Create customer if doesn't exist, or use existing
+					const existingCustomer = await stripe.customers.list({
+						email: tokenEmail || req.session.user.Email,
+						limit: 1
+					});
+					
+					if (existingCustomer.data.length > 0) {
+						customerId = existingCustomer.data[0].id;
+					} else {
+						const customer = await stripe.customers.create({
+							source: savedCard.CardToken,
+							description: tokenEmail || req.session.user.Email,
+						});
+						customerId = customer.id;
+					}
+					// Update card with customer ID for future use
+					await CardDetails.updateOne(
+						{ _id: savedCard._id },
+						{ $set: { CustomerId: customerId } }
+					).exec();
+				}
+
+				if (!customerId) {
+					return res.status(400).json({
+						status: 400,
+						message: "Saved card is missing payment information. Please use a different card.",
+					});
+				}
+
+				const amountInCents = Math.round(amount * 100);
+				if (amountInCents > 0) {
+					await stripe.charges.create({
+						amount: amountInCents,
+						currency: "usd",
+						customer: customerId,
+						description,
+					});
+				}
+
+				// Update card usage
+				await CardDetails.updateOne(
+					{ _id: savedCard._id },
+					{
+						$set: { LastUsedOn: new Date() },
+						$inc: { SuccessfulTransactions: 1 }
+					}
+				).exec();
+			} else {
+				// Use new token
+				const customer = await stripe.customers.create({
+					source: stripeToken,
+					description: tokenEmail || req.session.user.Email,
 				});
+
+				const amountInCents = Math.round(amount * 100);
+				if (amountInCents > 0) {
+					await stripe.charges.create({
+						amount: amountInCents,
+						currency: "usd",
+						customer: customer.id,
+						description,
+					});
+				}
 			}
 		}
 
@@ -3088,8 +3256,13 @@ var subscribeToPlatform = async function (req, res) {
 					? subscriptionTrialEndsOn
 					: currentUser.SubscriptionLastTrialEndsOn || null,
 			SubscriptionExpiresOn: subscriptionExpiresOn,
-			SubscriptionPrice: lockedSubscriptionPrice,
+			// For first payment after trial (cancelled or expired): use locked price, then clear it
+			// For new users or trials: use current platform price
+			// After first payment, set to null so future renewals use current platform price
+			SubscriptionPrice: useOldPrice ? null : lockedSubscriptionPrice,
 			SubscriptionCurrency: subscriptionCurrency,
+			// Set auto-renewal to true when starting trial
+			IsAutoRenewalEnabled: true,
 		};
 
 		await user
@@ -3104,8 +3277,10 @@ var subscribeToPlatform = async function (req, res) {
 			subscriberData.SubscriptionLastTrialEndsOn || null;
 		req.session.user.SubscriptionExpiresOn =
 			subscriberData.SubscriptionExpiresOn || null;
-		req.session.user.SubscriptionPrice = lockedSubscriptionPrice;
+		// After first payment after trial, locked price is cleared (set to null) so future renewals use current platform price
+		req.session.user.SubscriptionPrice = useOldPrice ? null : lockedSubscriptionPrice;
 		req.session.user.SubscriptionCurrency = subscriptionCurrency;
+		req.session.user.IsAutoRenewalEnabled = true; // Set auto-renewal to true when starting trial
 
 		if (!isPrivilegedRole && appSettings) {
 			try {
@@ -3342,6 +3517,543 @@ var subscribeToPlatform = async function (req, res) {
 };
 
 exports.subscribeToPlatform = subscribeToPlatform;
+
+var cancelSubscription = async function (req, res) {
+	try {
+		if (!req.session || !req.session.user || !req.session.user._id) {
+			return res.status(401).json({
+				status: 401,
+				message: "User not authenticated.",
+			});
+		}
+
+		const userId = req.session.user._id;
+		const userRecord = await user
+			.findOne({ _id: new ObjectId(userId), IsDeleted: false })
+			.exec();
+
+		if (!userRecord) {
+			return res.status(404).json({
+				status: 404,
+				message: "User not found.",
+			});
+		}
+
+		const normalizedStatus = (userRecord.SubscriptionStatus || "")
+			.toString()
+			.toLowerCase();
+		const hasActiveSubscription =
+			Boolean(userRecord.IsSubscriber) &&
+			(normalizedStatus === "active" || normalizedStatus === "trial");
+
+		if (!hasActiveSubscription) {
+			return res.status(409).json({
+				status: 409,
+				message: "You do not have an active subscription to cancel.",
+			});
+		}
+
+		const now = new Date();
+		
+		// Check if this is an active paid subscription (not trial)
+		const isActivePaidSubscription = normalizedStatus === "active" && userRecord.SubscriptionExpiresOn;
+		
+		let updatePayload;
+		
+		if (isActivePaidSubscription) {
+			// Active paid subscription: Set to cancel at period end
+			// User keeps access until SubscriptionExpiresOn
+			updatePayload = {
+				// Keep IsSubscriber=true - user still has access until period ends
+				IsSubscriber: true,
+				SubscriptionStatus: "set_to_cancel_at_period_end",
+				SubscriptionCancelledOn: now,
+				// Disable auto-renewal when subscription is cancelled
+				IsAutoRenewalEnabled: false,
+				// Preserve all dates - user keeps access until SubscriptionExpiresOn
+				SubscriptionTrialEndsOn: userRecord.SubscriptionTrialEndsOn || null,
+				SubscriptionExpiresOn: userRecord.SubscriptionExpiresOn || null,
+				SubscriptionLastTrialEndsOn: userRecord.SubscriptionLastTrialEndsOn || null,
+			};
+		} else {
+			// Trial subscription: Cancel immediately
+			// Preserve original end dates - don't change them on cancellation
+			// User should have access until the original end date
+			updatePayload = {
+				IsSubscriber: false,
+				SubscriptionStatus: "cancelled",
+				SubscriptionCancelledOn: now,
+				// Disable auto-renewal when trial is cancelled
+				IsAutoRenewalEnabled: false,
+				// Keep original end dates - don't null them
+				SubscriptionTrialEndsOn: userRecord.SubscriptionTrialEndsOn || null,
+				SubscriptionExpiresOn: userRecord.SubscriptionExpiresOn || null,
+				SubscriptionLastTrialEndsOn: userRecord.SubscriptionLastTrialEndsOn || null,
+			};
+		}
+
+		await user
+			.updateOne({ _id: new ObjectId(userId) }, { $set: updatePayload })
+			.exec();
+
+		// Update session with new status
+		req.session.user.IsSubscriber = updatePayload.IsSubscriber;
+		req.session.user.SubscriptionStatus = updatePayload.SubscriptionStatus;
+		req.session.user.SubscriptionCancelledOn = now;
+		req.session.user.IsAutoRenewalEnabled = false; // Disable auto-renewal in session
+		// Preserve original end dates in session
+		req.session.user.SubscriptionTrialEndsOn = updatePayload.SubscriptionTrialEndsOn;
+		req.session.user.SubscriptionLastTrialEndsOn = updatePayload.SubscriptionLastTrialEndsOn;
+		req.session.user.SubscriptionExpiresOn = updatePayload.SubscriptionExpiresOn;
+
+		let refreshedUserRecord = await user
+			.findOne({ _id: new ObjectId(userId) })
+			.exec();
+
+		if (refreshedUserRecord) {
+			refreshedUserRecord = await normalizeSubscriptionState(
+				refreshedUserRecord,
+				req.session
+			);
+		}
+
+		const responseUser =
+			refreshedUserRecord && typeof refreshedUserRecord.toObject === "function"
+				? refreshedUserRecord.toObject()
+				: refreshedUserRecord;
+
+		return res.json({
+			status: 200,
+			message: "Subscription cancelled successfully.",
+			result: {
+				user: responseUser,
+				userData: responseUser,
+			},
+		});
+	} catch (error) {
+		console.error("❌ cancelSubscription error:", error);
+		return res.status(500).json({
+			status: 500,
+			message: "Failed to cancel subscription.",
+			error: error.message,
+		});
+	}
+};
+
+exports.cancelSubscription = cancelSubscription;
+
+/**
+ * Restart a cancelled subscription
+ * If the original end date hasn't passed, reactivate without charging
+ * If the end date has passed, require payment to restart
+ */
+var restartSubscription = async function (req, res) {
+	try {
+		if (!req.session || !req.session.user || !req.session.user._id) {
+			return res.status(401).json({
+				status: 401,
+				message: "User not authenticated.",
+			});
+		}
+
+		const userId = req.session.user._id;
+		const userRecord = await user
+			.findOne({ _id: new ObjectId(userId), IsDeleted: false })
+			.exec();
+
+		if (!userRecord) {
+			return res.status(404).json({
+				status: 404,
+				message: "User not found.",
+			});
+		}
+
+		const normalizedStatus = (userRecord.SubscriptionStatus || "")
+			.toString()
+			.toLowerCase();
+
+		// Allow restart if subscription is cancelled or expired (as per requirement)
+		if (normalizedStatus !== "cancelled" && normalizedStatus !== "expired") {
+			return res.status(409).json({
+				status: 409,
+				message: "Subscription is not cancelled or expired. Only cancelled or expired subscriptions can be restarted.",
+			});
+		}
+
+		const now = new Date();
+		const providedToken = req.body.token || null;
+		const cardId = req.body.cardId || null;
+		const tokenEmail = req.body.tokenEmail || req.session.user.Email || null;
+
+		// Check original end dates
+		const originalTrialEndsOn = userRecord.SubscriptionTrialEndsOn
+			? new Date(userRecord.SubscriptionTrialEndsOn)
+			: null;
+		const originalExpiresOn = userRecord.SubscriptionExpiresOn
+			? new Date(userRecord.SubscriptionExpiresOn)
+			: null;
+
+		// Determine if we need to charge (end date has passed)
+		const trialEnded = originalTrialEndsOn && originalTrialEndsOn.getTime() <= now.getTime();
+		const subscriptionExpired = originalExpiresOn && originalExpiresOn.getTime() <= now.getTime();
+		const needsPayment = trialEnded || subscriptionExpired;
+
+		// If payment is needed, process it
+		if (needsPayment) {
+			if (!providedToken && !cardId) {
+				return res.status(400).json({
+					status: 400,
+					message: "Payment method is required. Your subscription period has ended.",
+				});
+			}
+
+			// Get subscription price
+			// For first payment after trial (cancelled or expired): use locked price if available
+			// After this payment, locked price will be cleared so future renewals use current platform price
+			const appSettings = await AppSetting.findOne({ isDeleted: false }).exec();
+			const currentPlatformPrice = appSettings?.PlatformSubscriptionPrice || 1;
+			const oldLockedPrice = userRecord.SubscriptionPrice;
+			// Check if user had a trial and this is their first payment after trial
+			const hadTrial = userRecord.SubscriptionLastTrialEndsOn || userRecord.SubscriptionTrialEndsOn;
+			const useOldPrice = (normalizedStatus === "expired" || normalizedStatus === "cancelled") && 
+				hadTrial && oldLockedPrice && oldLockedPrice > 0;
+			const subscriptionPrice = useOldPrice ? oldLockedPrice : currentPlatformPrice;
+			const subscriptionCurrency = userRecord.SubscriptionCurrency || "USD";
+
+			if (cardId) {
+				// Use saved card
+				const CardDetails = require('./../models/cardDetailsModel.js');
+				const savedCard = await CardDetails.findOne({
+					_id: new ObjectId(cardId),
+					UserId: new ObjectId(userId),
+					IsDeleted: false,
+					Status: true
+				}).exec();
+
+				if (!savedCard) {
+					return res.status(404).json({
+						status: 404,
+						message: "Saved card not found.",
+					});
+				}
+
+				// Check if card is expired
+				const currentYear = now.getFullYear();
+				const currentMonth = now.getMonth() + 1;
+				if (savedCard.ExpiryYear < currentYear || 
+					(savedCard.ExpiryYear === currentYear && savedCard.ExpiryMonth < currentMonth)) {
+					return res.status(400).json({
+						status: 400,
+						message: "The selected card has expired. Please use a different card.",
+					});
+				}
+
+				// Charge the specific saved card
+				const stripe = getStripeClient();
+				const amountInCents = Math.round(subscriptionPrice * 100);
+				let charge = null;
+
+				// Try PaymentMethodId first
+				if (savedCard.PaymentMethodId) {
+					try {
+						let customerId = savedCard.CustomerId;
+						if (!customerId) {
+							const customer = await stripe.customers.create({
+								email: req.session.user.Email,
+								payment_method: savedCard.PaymentMethodId,
+								invoice_settings: {
+									default_payment_method: savedCard.PaymentMethodId
+								}
+							});
+							customerId = customer.id;
+							await CardDetails.updateOne(
+								{ _id: savedCard._id },
+								{ $set: { CustomerId: customerId } }
+							).exec();
+						}
+
+						const paymentIntent = await stripe.paymentIntents.create({
+							amount: amountInCents,
+							currency: subscriptionCurrency.toLowerCase(),
+							customer: customerId,
+							payment_method: savedCard.PaymentMethodId,
+							confirmation_method: 'automatic',
+							confirm: true,
+							description: 'Scrpt Platform Subscription Restart'
+						});
+
+						if (paymentIntent.status === 'succeeded') {
+							charge = { id: paymentIntent.id, paid: true };
+						}
+					} catch (stripeError) {
+						console.error('Stripe PaymentMethod charge error:', stripeError);
+					}
+				}
+
+				// Fallback to CardToken
+				if (!charge && savedCard.CardToken) {
+					try {
+						let customerId = savedCard.CustomerId;
+						if (!customerId) {
+							const customer = await stripe.customers.create({
+								source: savedCard.CardToken,
+								description: req.session.user.Email
+							});
+							customerId = customer.id;
+							await CardDetails.updateOne(
+								{ _id: savedCard._id },
+								{ $set: { CustomerId: customerId } }
+							).exec();
+						}
+
+						charge = await stripe.charges.create({
+							amount: amountInCents,
+							currency: subscriptionCurrency.toLowerCase(),
+							customer: customerId,
+							description: 'Scrpt Platform Subscription Restart'
+						});
+					} catch (stripeError) {
+						console.error('Stripe CardToken charge error:', stripeError);
+						return res.status(402).json({
+							status: 402,
+							message: stripeError.message || "Payment failed.",
+							code: 'PAYMENT_FAILED',
+						});
+					}
+				}
+
+				if (!charge || !charge.paid) {
+					return res.status(402).json({
+						status: 402,
+						message: "Payment failed. Please try a different card.",
+						code: 'PAYMENT_FAILED',
+					});
+				}
+
+				// Update card usage
+				await CardDetails.updateOne(
+					{ _id: savedCard._id },
+					{
+						$set: { LastUsedOn: new Date() },
+						$inc: { SuccessfulTransactions: 1 }
+					}
+				).exec();
+
+				// Calculate new expiry date (1 year from now)
+				const annualDurationDays = Number(process.env.PLATFORM_SUBSCRIPTION_DURATION_DAYS || 365);
+				const newExpiresOn = new Date(now.getTime() + annualDurationDays * 24 * 60 * 60 * 1000);
+
+				// Update subscription
+				const updatePayload = {
+					IsSubscriber: true,
+					SubscriptionStatus: "active",
+					SubscriptionCancelledOn: null,
+					SubscriptionExpiresOn: newExpiresOn,
+					SubscriptionTrialEndsOn: null,
+				};
+
+				await user.updateOne({ _id: new ObjectId(userId) }, { $set: updatePayload }).exec();
+
+				req.session.user.IsSubscriber = true;
+				req.session.user.SubscriptionStatus = "active";
+				req.session.user.SubscriptionCancelledOn = null;
+				req.session.user.SubscriptionExpiresOn = newExpiresOn;
+				req.session.user.SubscriptionTrialEndsOn = null;
+			} else if (providedToken) {
+				// Use new token - similar to subscribeToPlatform
+				const stripe = getStripeClient();
+				const amountInCents = Math.round(subscriptionPrice * 100);
+
+				const customer = await stripe.customers.create({
+					source: providedToken,
+					description: tokenEmail || req.session.user.Email,
+				});
+
+				if (amountInCents > 0) {
+					await stripe.charges.create({
+						amount: amountInCents,
+						currency: "usd",
+						customer: customer.id,
+						description: "Scrpt Platform Subscription Restart",
+					});
+				}
+
+				// Calculate new expiry date
+				const annualDurationDays = Number(process.env.PLATFORM_SUBSCRIPTION_DURATION_DAYS || 365);
+				const newExpiresOn = new Date(now.getTime() + annualDurationDays * 24 * 60 * 60 * 1000);
+
+				const updatePayload = {
+					IsSubscriber: true,
+					SubscriptionStatus: "active",
+					SubscriptionCancelledOn: null,
+					SubscriptionExpiresOn: newExpiresOn,
+					SubscriptionTrialEndsOn: null,
+					// After first payment after trial, clear locked price (set to null)
+					// Future renewals will always use current platform price
+					SubscriptionPrice: useOldPrice ? null : subscriptionPrice,
+					SubscriptionCurrency: subscriptionCurrency,
+					// Set auto-renewal to true when restarting subscription
+					IsAutoRenewalEnabled: true,
+				};
+
+				await user.updateOne({ _id: new ObjectId(userId) }, { $set: updatePayload }).exec();
+
+				req.session.user.IsSubscriber = true;
+				req.session.user.SubscriptionStatus = "active";
+				req.session.user.SubscriptionCancelledOn = null;
+				req.session.user.SubscriptionExpiresOn = newExpiresOn;
+				req.session.user.SubscriptionTrialEndsOn = null;
+				// After first payment, locked price is cleared so future renewals use current platform price
+				req.session.user.SubscriptionPrice = useOldPrice ? null : subscriptionPrice;
+				req.session.user.SubscriptionCurrency = subscriptionCurrency;
+				req.session.user.IsAutoRenewalEnabled = true; // Set auto-renewal to true when restarting subscription
+			}
+		} else {
+			// No payment needed - just reactivate with original end dates
+			const updatePayload = {
+				IsSubscriber: true,
+				SubscriptionStatus: originalTrialEndsOn && originalTrialEndsOn.getTime() > now.getTime() 
+					? "trial" 
+					: "active",
+				SubscriptionCancelledOn: null,
+				// Keep original end dates
+				SubscriptionTrialEndsOn: originalTrialEndsOn,
+				SubscriptionExpiresOn: originalExpiresOn,
+				// Set auto-renewal to true when restarting subscription
+				IsAutoRenewalEnabled: true,
+			};
+
+			await user.updateOne({ _id: new ObjectId(userId) }, { $set: updatePayload }).exec();
+
+			req.session.user.IsSubscriber = true;
+			req.session.user.SubscriptionStatus = updatePayload.SubscriptionStatus;
+			req.session.user.SubscriptionCancelledOn = null;
+			req.session.user.SubscriptionTrialEndsOn = originalTrialEndsOn;
+			req.session.user.SubscriptionExpiresOn = originalExpiresOn;
+			req.session.user.IsAutoRenewalEnabled = true; // Set auto-renewal to true when restarting subscription
+		}
+
+		// Fetch refreshed user data
+		let refreshedUserRecord = await user
+			.findOne({ _id: new ObjectId(userId) })
+			.exec();
+
+		if (refreshedUserRecord) {
+			refreshedUserRecord = await normalizeSubscriptionState(
+				refreshedUserRecord,
+				req.session
+			);
+		}
+
+		const responseUser =
+			refreshedUserRecord && typeof refreshedUserRecord.toObject === "function"
+				? refreshedUserRecord.toObject()
+				: refreshedUserRecord;
+
+		return res.json({
+			status: 200,
+			message: needsPayment 
+				? "Subscription restarted successfully. Payment processed." 
+				: "Subscription restarted successfully. You still have access until your original end date.",
+			result: {
+				user: responseUser,
+				userData: responseUser,
+			},
+		});
+	} catch (error) {
+		console.error("❌ restartSubscription error:", error);
+		return res.status(500).json({
+			status: 500,
+			message: "Failed to restart subscription.",
+			error: error.message,
+		});
+	}
+};
+
+exports.restartSubscription = restartSubscription;
+
+/**
+ * Toggle auto-renewal for user's subscription
+ */
+var toggleAutoRenewal = async function (req, res) {
+	try {
+		if (!req.session || !req.session.user || !req.session.user._id) {
+			return res.status(401).json({
+				status: 401,
+				message: "User not authenticated.",
+			});
+		}
+
+		const userId = req.session.user._id;
+		const isEnabled = req.body.isEnabled !== undefined ? req.body.isEnabled : true;
+
+		const userRecord = await user
+			.findOne({ _id: new ObjectId(userId), IsDeleted: false })
+			.exec();
+
+		if (!userRecord) {
+			return res.status(404).json({
+				status: 404,
+				message: "User not found.",
+			});
+		}
+
+		// Allow toggling for trials and active subscriptions
+		const normalizedStatus = (userRecord.SubscriptionStatus || "")
+			.toString()
+			.toLowerCase();
+		
+		if (normalizedStatus !== "trial" && normalizedStatus !== "active" && normalizedStatus !== "grace_period") {
+			return res.status(409).json({
+				status: 409,
+				message: "Auto-renewal can only be toggled for trials or active subscriptions.",
+			});
+		}
+
+		await user
+			.updateOne(
+				{ _id: new ObjectId(userId) },
+				{ $set: { IsAutoRenewalEnabled: isEnabled } }
+			)
+			.exec();
+
+		req.session.user.IsAutoRenewalEnabled = isEnabled;
+
+		let refreshedUserRecord = await user
+			.findOne({ _id: new ObjectId(userId) })
+			.exec();
+
+		if (refreshedUserRecord) {
+			refreshedUserRecord = await normalizeSubscriptionState(
+				refreshedUserRecord,
+				req.session
+			);
+		}
+
+		const responseUser =
+			refreshedUserRecord && typeof refreshedUserRecord.toObject === "function"
+				? refreshedUserRecord.toObject()
+				: refreshedUserRecord;
+
+		return res.json({
+			status: 200,
+			message: `Auto-renewal ${isEnabled ? "enabled" : "disabled"} successfully.`,
+			result: {
+				user: responseUser,
+				userData: responseUser,
+			},
+		});
+	} catch (error) {
+		console.error("❌ toggleAutoRenewal error:", error);
+		return res.status(500).json({
+			status: 500,
+			message: "Failed to toggle auto-renewal.",
+			error: error.message,
+		});
+	}
+};
+
+exports.toggleAutoRenewal = toggleAutoRenewal;
 
 /**
  * Charge a user's saved card for subscription renewal
