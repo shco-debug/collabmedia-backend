@@ -10,7 +10,11 @@ module.exports = {
 	options : {
 		// Local development options
 		useNewUrlParser: true,
-		useUnifiedTopology: true
+		useUnifiedTopology: true,
+		// NO TIMEOUT for long-running operations like buyNow
+		// Process can take many minutes (capsule instance creation, email sending, etc.)
+		serverSelectionTimeoutMS: 3600000, // 1 hour (3600000ms) - long enough for buyNow operations
+		socketTimeoutMS: 3600000, // 1 hour (3600000ms) - long enough for buyNow operations
 	}
 
 }

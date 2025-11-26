@@ -364,8 +364,18 @@ module.exports = function(router){
 		Capsule.getScheduledPosts(req,res);
 	});
 
-	router.post('/buyNow',function(req,res){
-		LaunchSetting.buyNow(req,res);
+	// BuyNow route - NO TIMEOUTS (process can take many minutes)
+	// Set very long timeouts to allow long-running operations (capsule instance creation, etc.)
+	router.post('/buyNow', function(req, res) {
+		// Set very long HTTP timeouts (10 hours = 36000000ms) - process can take many minutes
+		req.setTimeout(36000000); // 10 hours timeout
+		res.setTimeout(36000000); // 10 hours timeout
+		
+		// Disable MongoDB query timeouts for this request
+		req.disableMongoTimeouts = true;
+		
+		console.log('🚀 buyNow route called - extended timeouts set for long-running operation (10 hours)');
+		LaunchSetting.buyNow(req, res);
 	});
 
 	router.post('/createCelebrityInstance',function(req,res){

@@ -84,7 +84,15 @@ module.exports = (app) => {
 	});
 	
 	//set cron job manager
-	//require('../../server/cron-jobs/cronJobs__Manager.js');
+	// ⚠️ IMPORTANT: Only enable cron jobs on long-running servers (EC2, etc.)
+	// DO NOT enable on serverless deployments (Lambda, Vercel)
+	// For serverless, use AWS EventBridge to trigger API endpoints instead
+	if (process.env.VERCEL !== '1' && process.env.ENABLE_CRON_JOBS === 'true') {
+		require('../../server/cron-jobs/cronJobs__Manager.js');
+		console.log('✅ Cron jobs enabled (long-running server mode)');
+	} else {
+		console.log('ℹ️  Cron jobs disabled (serverless mode - use API endpoints with EventBridge/cron services)');
+	}
 	/*
 	function requireHTTPS(req, res, next) {
 		//console.log(" --------------- req.secure -----------------", req.secure);

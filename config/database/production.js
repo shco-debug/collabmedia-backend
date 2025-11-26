@@ -10,8 +10,10 @@ module.exports = {
 		useNewUrlParser: true,
 		useUnifiedTopology: true,
 		maxPoolSize: 10,
-		serverSelectionTimeoutMS: 5000,
-		socketTimeoutMS: 45000,
+		// NO TIMEOUT for long-running operations like buyNow
+		// Process can take many minutes (capsule instance creation, email sending, etc.)
+		serverSelectionTimeoutMS: 3600000, // 1 hour (3600000ms) - long enough for buyNow operations
+		socketTimeoutMS: 3600000, // 1 hour (3600000ms) - long enough for buyNow operations
 		retryWrites: true,
 		retryReads: true
 	}

@@ -138,14 +138,16 @@ console.log(`Attempting to connect to MongoDB: ${dbURI_local}`);
 // Configure Mongoose to wait longer for connection
 // Allow buffering so initial requests queue until connection is ready
 mongoose.set('bufferCommands', true);
-mongoose.set('bufferTimeoutMS', 30000); // 30 seconds buffer timeout
+mongoose.set('bufferTimeoutMS', 3600000); // 1 hour (3600000ms) - long enough for buyNow operations
 
 // Modern Mongoose connection options
 const connectToMongoDB = async () => {
   try {
     await mongoose.connect(dbURI_local, {
-      serverSelectionTimeoutMS: 30000, // 30 seconds to select a server
-      socketTimeoutMS: 60000, // 60 seconds socket timeout
+      // NO TIMEOUT for long-running operations like buyNow
+      // Process can take many minutes (capsule instance creation, email sending, etc.)
+      serverSelectionTimeoutMS: 3600000, // 1 hour (3600000ms) - long enough for buyNow operations
+      socketTimeoutMS: 3600000, // 1 hour (3600000ms) - long enough for buyNow operations
       maxPoolSize: 10, // Maintain up to 10 socket connections
       minPoolSize: 2, // Maintain at least 2 socket connections
     });
@@ -643,16 +645,24 @@ if (process.env.VERCEL !== '1') {
       // Use HTTPS if certificates are available, otherwise HTTP
       if (httpsOptions) {
         const httpsServer = https.createServer(httpsOptions, app);
+        // Set very long timeout for buyNow operations (10 hours = 36000000ms)
+        httpsServer.timeout = 36000000; // 10 hours - allows buyNow to run for many minutes
+        httpsServer.keepAliveTimeout = 36000000; // 10 hours
         httpsServer.listen(httpPort, () => {
           console.log(`✅ HTTPS Server running on port ${httpPort}`);
           console.log(`✅ Local development at https://localhost:${httpPort}`);
           console.log(`✅ MongoDB connection ready`);
+          console.log(`⏱️  Server timeout set to 10 hours for long-running operations (buyNow)`);
         });
       } else {
-        app.listen(httpPort, () => {
+        const httpServer = app.listen(httpPort, () => {
+          // Set very long timeout for buyNow operations (10 hours = 36000000ms)
+          httpServer.timeout = 36000000; // 10 hours - allows buyNow to run for many minutes
+          httpServer.keepAliveTimeout = 36000000; // 10 hours
           console.log(`✅ HTTP Server running on port ${httpPort}`);
           console.log(`✅ Local development at http://localhost:${httpPort}`);
           console.log(`✅ MongoDB connection ready`);
+          console.log(`⏱️  Server timeout set to 10 hours for long-running operations (buyNow)`);
         });
       }
     } else {
