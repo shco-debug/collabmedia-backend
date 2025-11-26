@@ -1327,7 +1327,7 @@ const createCapsuleInstance = async (
                       // Re-throw to ensure unhandled rejection is caught
                       throw emailError;
                     }
-                })().catch(function(err) {
+                }).catch(function(err) {
                   // Catch any unhandled promise rejections in the async callback
                   console.error('❌ Unhandled error in email sending callback:', err.message);
                   console.error('   Stack:', err.stack);

@@ -2334,31 +2334,39 @@ var SynedPostEmailCron = async function (testMode = false) {
         // 🔍 Debug: Check what's actually in the database
         if (testMode) {
             console.log("🔍 DEBUG: Checking database for SyncedPosts...");
-            
-            const totalCount = await SyncedPost.countDocuments({});
-            console.log("📊 Total SyncedPosts in database:", totalCount);
-            
-            const withStatus = await SyncedPost.countDocuments({ Status: true });
-            console.log("📊 SyncedPosts with Status=true:", withStatus);
-            
-            const notDeleted = await SyncedPost.countDocuments({ IsDeleted: false });
-            console.log("📊 SyncedPosts with IsDeleted=false:", notDeleted);
-            
-            const hasEmailDatasets = await SyncedPost.countDocuments({ EmailEngineDataSets: { $exists: true, $ne: [] } });
-            console.log("📊 SyncedPosts with EmailEngineDataSets:", hasEmailDatasets);
-            
-            // Get a sample post to see its structure
-            const samplePost = await SyncedPost.findOne({}).limit(1);
-            if (samplePost) {
-                console.log("📄 Sample SyncedPost structure:");
-                console.log("  - _id:", samplePost._id);
-                console.log("  - Status:", samplePost.Status);
-                console.log("  - IsDeleted:", samplePost.IsDeleted);
-                console.log("  - EmailEngineDataSets count:", samplePost.EmailEngineDataSets?.length || 0);
-                if (samplePost.EmailEngineDataSets && samplePost.EmailEngineDataSets.length > 0) {
-                    console.log("  - First EmailEngineDataSets.Delivered:", samplePost.EmailEngineDataSets[0].Delivered);
-                    console.log("  - First EmailEngineDataSets.DateOfDelivery:", samplePost.EmailEngineDataSets[0].DateOfDelivery);
+            try {
+                const totalCount = await SyncedPost.countDocuments({});
+                console.log("📊 Total SyncedPosts in database:", totalCount);
+                
+                const withStatus = await SyncedPost.countDocuments({ Status: true });
+                console.log("📊 SyncedPosts with Status=true:", withStatus);
+                
+                const notDeleted = await SyncedPost.countDocuments({ IsDeleted: false });
+                console.log("📊 SyncedPosts with IsDeleted=false:", notDeleted);
+                
+                const hasEmailDatasets = await SyncedPost.countDocuments({ EmailEngineDataSets: { $exists: true, $ne: [] } });
+                console.log("📊 SyncedPosts with EmailEngineDataSets:", hasEmailDatasets);
+                
+                // Get a sample post to see its structure
+                const samplePost = await SyncedPost.findOne({}).limit(1);
+                if (samplePost) {
+                    console.log("📄 Sample SyncedPost structure:");
+                    console.log("  - _id:", samplePost._id);
+                    console.log("  - Status:", samplePost.Status);
+                    console.log("  - IsDeleted:", samplePost.IsDeleted);
+                    console.log("  - EmailEngineDataSets count:", samplePost.EmailEngineDataSets?.length || 0);
+                    if (samplePost.EmailEngineDataSets && samplePost.EmailEngineDataSets.length > 0) {
+                        console.log("  - First EmailEngineDataSets.Delivered:", samplePost.EmailEngineDataSets[0].Delivered);
+                        console.log("  - First EmailEngineDataSets.DateOfDelivery:", samplePost.EmailEngineDataSets[0].DateOfDelivery);
+                    }
+                } else {
+                    console.log("⚠️ No sample SyncedPost found in database");
                 }
+                console.log("✅ DEBUG checks completed successfully");
+            } catch (debugError) {
+                console.error("❌ DEBUG query failed:", debugError.message);
+                console.error("   Stack:", debugError.stack);
+                // Continue anyway - debug queries failing shouldn't stop the cron job
             }
         }
         
@@ -2434,15 +2442,32 @@ var SynedPostEmailCron = async function (testMode = false) {
             aggregatePipeline.push({ $limit: 1 }); // In test mode, only process 1 post
         }
         
-        const syncedPostsResults = await SyncedPost.aggregate(aggregatePipeline).allowDiskUse(true);
-            
-            console.log("Cron job query returned:", syncedPostsResults.length, "results");
+        console.log("🔍 Executing aggregation pipeline...");
+        console.log("   Pipeline stages:", aggregatePipeline.length);
+        let syncedPostsResults = [];
+        try {
+            syncedPostsResults = await SyncedPost.aggregate(aggregatePipeline).allowDiskUse(true);
+            console.log("✅ Cron job query returned:", syncedPostsResults.length, "results");
+        } catch (aggregateError) {
+            console.error("❌ Aggregation query failed:", aggregateError.message);
+            console.error("   Stack:", aggregateError.stack);
+            throw aggregateError; // Re-throw to be caught by outer try-catch
+        }
 
-            if (syncedPostsResults.length === 0) {
-                console.log("No SyncedPosts to process.");
+        if (syncedPostsResults.length === 0) {
+            console.log("⚠️ No SyncedPosts to process.");
+            console.log("   Conditions checked:");
+            console.log("   - IsDeleted: false");
+            console.log("   - Status: true");
+            console.log("   - EmailEngineDataSets.Delivered: false");
+            if (!testMode) {
+                console.log("   - DateOfDelivery: today");
+            }
             console.log("---------------------------------SynedPostEmailCron END----------------------------------------");
             return;
-            }
+        }
+        
+        console.log(`📧 Processing ${syncedPostsResults.length} post(s) for email delivery...`);
 
             for (let loop = 0; loop < syncedPostsResults.length; loop++) {
             const dataRecord = syncedPostsResults[loop];
@@ -2692,7 +2717,11 @@ var SynedPostEmailCron = async function (testMode = false) {
             console.log("---------------------------------SynedPostEmailCron END----------------------------------------");
     } catch (cronError) {
         console.error("SynedPostEmailCron CRITICAL Error:", cronError);
+        console.error("   Error message:", cronError.message);
+        console.error("   Error stack:", cronError.stack);
         console.log("---------------------------------SynedPostEmailCron END WITH CRITICAL ERROR----------------------------------------");
+        // Re-throw error so API endpoint can catch it and return proper error response
+        throw cronError;
     }
 }
 
@@ -2704,7 +2733,7 @@ exports.WishHappyBirthdayCron__API = WishHappyBirthdayCron__API; //not in use
 
 exports.SynedPostEmailCron = SynedPostEmailCron;
 
-var SynedPostEmailCronApi = function (req, res) {
+var SynedPostEmailCronApi = async function (req, res) {
     console.log("🔔 SynedPostEmailCronApi called via API");
     
     // Check if test mode is enabled via query parameter
@@ -2715,10 +2744,11 @@ var SynedPostEmailCronApi = function (req, res) {
     }
     
     try {
-        // Call the main cron function with test mode parameter
-        SynedPostEmailCron(testMode);
+        // ⚠️ CRITICAL: Await the async function to ensure emails are sent before response
+        // Without await, Vercel/serverless functions may terminate before async work completes
+        await SynedPostEmailCron(testMode);
         
-        // Return success response
+        // Return success response only after all emails have been sent
         res.json({
             success: true,
             message: testMode 
@@ -2729,7 +2759,8 @@ var SynedPostEmailCronApi = function (req, res) {
         });
     } catch (error) {
         console.error("❌ SynedPostEmailCronApi error:", error);
-        res.json({
+        console.error("   Error stack:", error.stack);
+        res.status(500).json({
             success: false,
             message: "Email delivery cron job failed",
             error: error.message,
