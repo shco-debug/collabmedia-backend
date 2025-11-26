@@ -19467,20 +19467,33 @@ async function sendMembersInvitationEmail(users, OwnerDetails, StreamId, OwnerId
     return;
   }
 
-  // Get base URL from request headers or environment
-  // Frontend runs on port 3000, backend on port 3002
+  // Get base URL from environment variables (NO hardcoded URLs)
+  // Priority: FRONTEND_URL > NEXT_PUBLIC_SITE_URL > HOST_URL > request headers > fallback
   var getBaseUrl = function() {
-    // In local dev, always use frontend port 3000
-    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-      return 'http://localhost:3000';
+    // ⚠️ CRITICAL: Always prioritize environment variables - NO hardcoded URLs
+    var frontendUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || process.env.HOST_URL || process.HOST_URL;
+    
+    if (frontendUrl) {
+      // Ensure HTTPS in production (except localhost)
+      var isLocalhost = frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1');
+      if (!isLocalhost && process.env.NODE_ENV === 'production' && frontendUrl.startsWith('http://')) {
+        frontendUrl = frontendUrl.replace(/^http:\/\//, 'https://');
+      }
+      return frontendUrl;
     }
     
+    // Fallback to request headers if no environment variable is set
     if (req && req.headers && req.headers.host) {
       var protocol = req.protocol || (req.headers['x-forwarded-proto'] || 'http');
       var host = req.headers.host;
       
       // If backend port is detected, change to frontend port
       if (host.includes('localhost:3002') || host.includes('127.0.0.1:3002')) {
+        // Even for localhost, try to use HTTPS if available from env
+        var localhostUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL;
+        if (localhostUrl && localhostUrl.includes('localhost')) {
+          return localhostUrl;
+        }
         return protocol + '://localhost:3000';
       }
       
@@ -19488,10 +19501,17 @@ async function sendMembersInvitationEmail(users, OwnerDetails, StreamId, OwnerId
       return (protocol === 'https' ? 'https' : 'http') + '://' + host;
     }
     
-    // Production fallback
-    return process.env.APP_BASE_URL || process.env.HOST_URL || process.env.FRONTEND_URL || 'https://www.scrpt.com';
+    // Last resort fallback (should never reach here if env vars are set)
+    console.warn('⚠️ No FRONTEND_URL environment variable set. Using fallback URL.');
+    return process.env.APP_BASE_URL || 'https://ahaday.com';
   };
   var baseUrl = getBaseUrl();
+  
+  // Debug logging to verify URL is being used correctly
+  console.log('🔗 sendMembersInvitationEmail - baseUrl:', baseUrl);
+  console.log('   - process.env.FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
+  console.log('   - process.FRONTEND_URL:', process.FRONTEND_URL || 'NOT SET');
+  console.log('   - process.env.NEXT_PUBLIC_SITE_URL:', process.env.NEXT_PUBLIC_SITE_URL || 'NOT SET');
 
   var conditionStrm = {};
   conditionStrm._id = new ObjectId(StreamId);
@@ -19711,20 +19731,33 @@ async function createMembersUserAccount(newUsers, OwnerDetails, StreamId, req = 
   console.log('🚀 createMembersUserAccount STARTED');
   console.log('📊 Input:', { newUsersCount: newUsers.length, OwnerDetails: OwnerDetails?.Name, StreamId });
   
-  // Get base URL from request headers or environment
-  // Frontend runs on port 3000, backend on port 3002
+  // Get base URL from environment variables (NO hardcoded URLs)
+  // Priority: FRONTEND_URL > NEXT_PUBLIC_SITE_URL > HOST_URL > request headers > fallback
   var getBaseUrl = function() {
-    // In local dev, always use frontend port 3000
-    if (process.env.NODE_ENV === 'development' || !process.env.NODE_ENV) {
-      return 'http://localhost:3000';
+    // ⚠️ CRITICAL: Always prioritize environment variables - NO hardcoded URLs
+    var frontendUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || process.env.HOST_URL || process.HOST_URL;
+    
+    if (frontendUrl) {
+      // Ensure HTTPS in production (except localhost)
+      var isLocalhost = frontendUrl.includes('localhost') || frontendUrl.includes('127.0.0.1');
+      if (!isLocalhost && process.env.NODE_ENV === 'production' && frontendUrl.startsWith('http://')) {
+        frontendUrl = frontendUrl.replace(/^http:\/\//, 'https://');
+      }
+      return frontendUrl;
     }
     
+    // Fallback to request headers if no environment variable is set
     if (req && req.headers && req.headers.host) {
       var protocol = req.protocol || (req.headers['x-forwarded-proto'] || 'http');
       var host = req.headers.host;
       
       // If backend port is detected, change to frontend port
       if (host.includes('localhost:3002') || host.includes('127.0.0.1:3002')) {
+        // Even for localhost, try to use HTTPS if available from env
+        var localhostUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL;
+        if (localhostUrl && localhostUrl.includes('localhost')) {
+          return localhostUrl;
+        }
         return protocol + '://localhost:3000';
       }
       
@@ -19732,10 +19765,17 @@ async function createMembersUserAccount(newUsers, OwnerDetails, StreamId, req = 
       return (protocol === 'https' ? 'https' : 'http') + '://' + host;
     }
     
-    // Production fallback
-    return process.env.APP_BASE_URL || process.env.HOST_URL || process.env.FRONTEND_URL || 'https://www.scrpt.com';
+    // Last resort fallback (should never reach here if env vars are set)
+    console.warn('⚠️ No FRONTEND_URL environment variable set. Using fallback URL.');
+    return process.env.APP_BASE_URL || 'https://ahaday.com';
   };
   var baseUrl = getBaseUrl();
+  
+  // Debug logging to verify URL is being used correctly
+  console.log('🔗 sendMembersInvitationEmail - baseUrl:', baseUrl);
+  console.log('   - process.env.FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
+  console.log('   - process.FRONTEND_URL:', process.FRONTEND_URL || 'NOT SET');
+  console.log('   - process.env.NEXT_PUBLIC_SITE_URL:', process.env.NEXT_PUBLIC_SITE_URL || 'NOT SET');
   
   var newUserAccountEmailIdMap = {};
   newUsers = Array.isArray(newUsers) ? newUsers : [];
@@ -20979,7 +21019,7 @@ var stream__updateMembers = async function (req, res) {
   }
 
   if (alreadyExistsUsers.length) {
-    sendMembersInvitationEmail(alreadyExistsUsers, OwnerDetails, StreamId);
+    sendMembersInvitationEmail(alreadyExistsUsers, OwnerDetails, StreamId, OwnerId, req);
   }
 
   //now add member ids in StreamMembers.
@@ -21079,7 +21119,7 @@ var stream__publicaddMembers = async function (req, res) {
   }
 
   if (alreadyExistsUsers.length) {
-    sendMembersInvitationEmail(alreadyExistsUsers, OwnerDetails, StreamId);
+    sendMembersInvitationEmail(alreadyExistsUsers, OwnerDetails, StreamId, OwnerId, req);
   }
 
   console.log("newUserAccountEmailIdMap - ", newUserAccountEmailIdMap);
