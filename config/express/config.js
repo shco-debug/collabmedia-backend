@@ -32,6 +32,57 @@ module.exports = (app) => {
 	
 	require('./../env/default_2.js')(app);
 	
+	// ============================================================================
+	// HTTPS URL Helper Function
+	// ============================================================================
+	// This function ensures all URLs use HTTPS when the request is secure
+	// or when in production environment
+	app.use((req, res, next) => {
+		// Helper to get base URL with correct protocol
+		req.getBaseUrl = function() {
+			// Check if request is secure (works with trust proxy)
+			const isSecure = req.secure || req.headers['x-forwarded-proto'] === 'https';
+			const protocol = isSecure ? 'https' : 'http';
+			const host = req.get('host') || 'localhost:3002';
+			
+			// In production, always use HTTPS (except localhost)
+			if (process.env.NODE_ENV === 'production' && !host.includes('localhost')) {
+				return `https://${host}`;
+			}
+			
+			return `${protocol}://${host}`;
+		};
+		
+		// Helper to get frontend URL with correct protocol
+		req.getFrontendUrl = function() {
+			const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
+			if (!frontendUrl) return '';
+			
+			// In production, always use HTTPS (except localhost)
+			if (process.env.NODE_ENV === 'production' && !frontendUrl.includes('localhost')) {
+				return frontendUrl.replace(/^http:\/\//, 'https://');
+			}
+			
+			return frontendUrl;
+		};
+		
+		// Helper to get site base URL (for assets, images, etc.)
+		// Uses environment variables only - no hardcoded fallbacks
+		req.getSiteBaseUrl = function() {
+			const siteUrl = process.env.SITE_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL;
+			if (!siteUrl) return '';
+			
+			// Ensure HTTPS in production
+			if (process.env.NODE_ENV === 'production' && !siteUrl.includes('localhost') && siteUrl.startsWith('http://')) {
+				return siteUrl.replace(/^http:\/\//, 'https://');
+			}
+			
+			return siteUrl;
+		};
+		
+		next();
+	});
+	
 	//set cron job manager
 	//require('../../server/cron-jobs/cronJobs__Manager.js');
 	/*
@@ -265,7 +316,9 @@ module.exports = (app) => {
 		  return res.send(JSON.stringify(err));
 		}
 		
-		data.link = typeof data.link==='string' ? 'https://www.scrpt.com'+data.link.replace('/media-assets', '') : '';
+		// Use environment variable for base URL, fallback to empty string if not set
+		const siteBaseUrl = req.getSiteBaseUrl ? req.getSiteBaseUrl() : (process.env.SITE_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || '');
+		data.link = typeof data.link==='string' ? (siteBaseUrl || '')+data.link.replace('/media-assets', '') : '';
 		res.send(data);
 	  });
 	});
@@ -300,7 +353,10 @@ module.exports = (app) => {
 		console.log('🔗 Referral route hit with capsule:', req.params.id, req.params.capsule_id);
 		const referralCode = req.params.id;
 		const capsuleId = req.params.capsule_id;
-		const frontendUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+		const frontendUrl = req.getFrontendUrl ? req.getFrontendUrl() : (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || '');
+		if (!frontendUrl) {
+			return res.status(500).send('Frontend URL not configured');
+		}
 		return res.redirect(`${frontendUrl}/auth/signup?ref=${referralCode}&capsule=${capsuleId}`);
 	})
 
@@ -308,7 +364,10 @@ module.exports = (app) => {
 	app.get('/referral/:id', (req, res) => {
 		console.log('🔗 Referral route hit:', req.params.id);
 		const referralCode = req.params.id;
-		const frontendUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || 'http://localhost:3000';
+		const frontendUrl = req.getFrontendUrl ? req.getFrontendUrl() : (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || '');
+		if (!frontendUrl) {
+			return res.status(500).send('Frontend URL not configured');
+		}
 		console.log('🔀 Redirecting to:', `${frontendUrl}/auth/signup?ref=${referralCode}`);
 		return res.redirect(`${frontendUrl}/auth/signup?ref=${referralCode}`);
 	});
@@ -337,9 +396,10 @@ module.exports = (app) => {
 							const newreferralData = {};
 							newreferralData.referralData = referralData;
 							newreferralData.metaDescription = `Scrpt publishes digital treats to elevate special days & those between them!`;
-							newreferralData.metaImage = "https://www.scrpt.com/assets/img/new/capsule-1.jpg";
+							const siteBaseUrl = req.getSiteBaseUrl ? req.getSiteBaseUrl() : (process.env.SITE_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || '');
+							newreferralData.metaImage = (siteBaseUrl || '') + "/assets/img/new/capsule-1.jpg";
 							newreferralData.metaTitle = "Scrpt referral join & earn $"+AppSettingData.ReferralDiscount;
-							newreferralData.metaUrl = 'https://www.scrpt.com' + req.url;
+							newreferralData.metaUrl = (siteBaseUrl || '') + req.url;
 							res.render('referral.jade', newreferralData );
 						});
 					}
@@ -374,7 +434,8 @@ module.exports = (app) => {
 									const newreferralData = {};
 									newreferralData.referralData = referralData;
 									newreferralData.metaDescription = referralData.capsuleReferdata.MetaData.description ? referralData.capsuleReferdata.MetaData.description : 'Scrpt publishes digital treats to elevate special days & those between them!';
-									newreferralData.metaImage = "http://www.scrpt.com/assets/Media/capsules/600/" + referralData.capsuleReferdata.CoverArt;
+									const siteBaseUrl = req.getSiteBaseUrl ? req.getSiteBaseUrl() : (process.env.SITE_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || '');
+									newreferralData.metaImage = (siteBaseUrl || '') + "/assets/Media/capsules/600/" + referralData.capsuleReferdata.CoverArt;
 									
 									newreferralData.metaTitle = referralData.capsuleReferdata.Title;
 									
@@ -391,7 +452,7 @@ module.exports = (app) => {
 										break;
 									}
 									
-									newreferralData.metaUrl = 'http://www.scrpt.com' + req.url;
+									newreferralData.metaUrl = (siteBaseUrl || '') + req.url;
 									
 									res.render('publicInvite.jade', newreferralData);
 								}
@@ -433,12 +494,37 @@ module.exports = (app) => {
 		};
 		
 		// Default meta tag values
-		const siteUrl = process.env.SITE_URL || 'https://www.scrpt.com';
-		const frontendUrl = process.env.FRONTEND_URL || 'http://localhost:3000';
+		// Get protocol from request (HTTPS if secure, HTTP otherwise)
+		// Trust proxy ensures req.secure works correctly behind Vercel/proxies
+		const protocol = req.secure || req.headers['x-forwarded-proto'] === 'https' ? 'https' : 'http';
+		const host = req.get('host') || 'localhost:3002';
+		
+		// Build URLs using environment variables only (no hardcoded URLs)
+		const siteUrl = req.getSiteBaseUrl ? req.getSiteBaseUrl() : (process.env.SITE_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || '');
+		if (!siteUrl) {
+			console.error('⚠️  SITE_URL, FRONTEND_URL, or NEXT_PUBLIC_SITE_URL must be set in environment variables');
+			return res.status(500).send('Site URL not configured');
+		}
+		
+		// Get frontend URL from environment variables or helper function
+		let frontendUrl = req.getFrontendUrl ? req.getFrontendUrl() : (process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || '');
+		if (!frontendUrl) {
+			console.error('⚠️  FRONTEND_URL or NEXT_PUBLIC_SITE_URL must be set in environment variables');
+			return res.status(500).send('Frontend URL not configured');
+		}
+		// Ensure HTTPS in production if URL is provided
+		if (frontendUrl && process.env.NODE_ENV === 'production' && frontendUrl.startsWith('http://') && !frontendUrl.includes('localhost')) {
+			frontendUrl = frontendUrl.replace('http://', 'https://');
+		}
+		
+		// Build share URL using site URL from environment variables
+		const shareUrl = `${siteUrl}/share/${id}/${postHashCode}`;
+		const imageUrl = `${siteUrl}/streamposts/${postHashCode}`;
+		
 		let metaTitle = 'Join Scrpt';
 		let metaDescription = 'Scrpt publishes digital treats to elevate special days & those between them!';
-		let metaImage = `${siteUrl}/streamposts/${postHashCode}`;
-		let metaUrl = `${siteUrl}/share/${id}/${postHashCode}`;
+		let metaImage = imageUrl;
+		let metaUrl = shareUrl;
 		
 		// Try to fetch post data for better meta tags
 		if (id && mongoose.Types.ObjectId.isValid(id)) {

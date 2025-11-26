@@ -1406,7 +1406,8 @@ var SynedPostEmailCron = async function () {
                                 console.log("Attempting to send scheduled email to:", shareWithEmail);
                                 try {
                                     // Use environment variable for base URL, fallback to HOST_URL
-                                    const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://www.scrpt.com';
+                                    // Priority: process.env.FRONTEND_URL (from .env) > process.FRONTEND_URL > process.env.HOST_URL > process.HOST_URL
+                                    const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.HOST_URL || process.HOST_URL || 'https://www.scrpt.com';
                                     const unsubscribeUrl = `${baseUrl}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
                                     const htmlWithUnsubscribe = newHtml.replace(/{UnsubscribeUrl}/g, unsubscribeUrl);
                                     await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, htmlWithUnsubscribe, subject, EmailBeaconImg);
@@ -2508,7 +2509,8 @@ var SynedPostEmailCron = async function (testMode = false) {
 
                     if (fs.existsSync(uploadDir + "/" + file_name)) {
                         // Use environment variable for base URL, fallback to HOST_URL
-                        const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                        // Priority: process.env.FRONTEND_URL (from .env) > process.FRONTEND_URL > process.env.HOST_URL > process.HOST_URL
+                        const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.HOST_URL || process.HOST_URL || 'https://ahaday.com';
                         blendedImage = `${baseUrl}/streamposts/${hexcode}.png`;
                         console.log("✅ Using pre-blended image:", hexcode + '.png');
                     }
@@ -2537,8 +2539,8 @@ var SynedPostEmailCron = async function (testMode = false) {
 
             const SharedByUser = Array.isArray(dataRecord.SharedByUser) && dataRecord.SharedByUser.length > 0 ? dataRecord.SharedByUser[0] : {};
             const SharedByUserName = SharedByUser.Name ? SharedByUser.Name.split(' ')[0] : "";
-            // Use environment variable for base URL, fallback to HOST_URL
-            const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+            // Priority: process.env.FRONTEND_URL (from .env) > process.FRONTEND_URL > process.env.HOST_URL > process.HOST_URL
+            const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.HOST_URL || process.HOST_URL || 'https://ahaday.com';
             const PostURL = `${baseUrl}/streams?pid=${dataRecord.CapsuleData._id}__${dataRecord.PostId}__${blendedImage}`;
 
             const PostImage1_600 = PostImage1.replace('/Media/img/300/', '/Media/img/600/');
@@ -2597,7 +2599,8 @@ var SynedPostEmailCron = async function (testMode = false) {
                             // Create personalized tracking pixel for this specific recipient
                             if (dataRecord.CapsuleId && dataRecord.PageId && dataRecord.PostId && EmailBeaconHash) {
                                 // Use environment variable for base URL, fallback to HOST_URL
-                                const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                                // Priority: process.env.FRONTEND_URL (from .env) > process.FRONTEND_URL > process.env.HOST_URL > process.HOST_URL
+                                const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.HOST_URL || process.HOST_URL || 'https://ahaday.com';
                                 EmailBeaconImg = `<img src='${baseUrl}/assets/img/email-stats.png?CapsuleId=${dataRecord.CapsuleId}&PageId=${dataRecord.PageId}&PostId=${dataRecord.PostId}&EmailIndex=${EmailBeaconHash}&UserEmail=${shareWithEmail}' />`;
                             }
                             
@@ -2610,7 +2613,13 @@ var SynedPostEmailCron = async function (testMode = false) {
                             console.log("Attempting to send scheduled email to:", shareWithEmail);
                             try {
                                 // Use environment variable for base URL, fallback to HOST_URL
-                                const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                                // Priority: process.FRONTEND_URL > process.env.FRONTEND_URL > process.HOST_URL > process.env.HOST_URL
+                                const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.HOST_URL || process.HOST_URL || 'https://ahaday.com';
+                                console.log("🔗 Unsubscribe URL baseUrl:", baseUrl);
+                                console.log("   - process.env.FRONTEND_URL:", process.env.FRONTEND_URL);
+                                console.log("   - process.FRONTEND_URL:", process.FRONTEND_URL);
+                                console.log("   - process.env.HOST_URL:", process.env.HOST_URL);
+                                console.log("   - process.HOST_URL:", process.HOST_URL);
                                 const unsubscribeUrl = `${baseUrl}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
                                 const htmlWithUnsubscribe = newHtml.replace(/{UnsubscribeUrl}/g, unsubscribeUrl);
                                 await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, htmlWithUnsubscribe, subject, EmailBeaconImg);
@@ -2647,7 +2656,8 @@ var SynedPostEmailCron = async function (testMode = false) {
                                 // Create personalized tracking pixel for non-registered user
                                 if (dataRecord.CapsuleId && dataRecord.PageId && dataRecord.PostId && EmailBeaconHash) {
                                     // Use environment variable for base URL, fallback to HOST_URL
-                                    const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://www.scrpt.com';
+                                    // Priority: process.env.FRONTEND_URL > process.FRONTEND_URL > process.env.HOST_URL > process.HOST_URL
+                                    const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.HOST_URL || process.HOST_URL || 'https://www.scrpt.com';
                                     EmailBeaconImg = `<img src='${baseUrl}/assets/img/email-stats.png?CapsuleId=${dataRecord.CapsuleId}&PageId=${dataRecord.PageId}&PostId=${dataRecord.PostId}&EmailIndex=${EmailBeaconHash}&UserEmail=${shareWithEmail}' />`;
                                 }
 
@@ -2660,7 +2670,8 @@ var SynedPostEmailCron = async function (testMode = false) {
                                 console.log("Attempting to send scheduled email to non-registered user:", shareWithEmail);
                                 try {
                                     // Use environment variable for base URL, fallback to HOST_URL
-                                    const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://www.scrpt.com';
+                                    // Priority: process.env.FRONTEND_URL (from .env) > process.FRONTEND_URL > process.env.HOST_URL > process.HOST_URL
+                                    const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.HOST_URL || process.HOST_URL || 'https://www.scrpt.com';
                                     const unsubscribeUrl = `${baseUrl}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
                                     const htmlWithUnsubscribe = newHtml.replace(/{UnsubscribeUrl}/g, unsubscribeUrl);
                                     await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, htmlWithUnsubscribe, subject, EmailBeaconImg);
