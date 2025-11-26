@@ -240,14 +240,15 @@ var __updateChapterCollection = async function (registeredUserEmail, registeredU
         };
 
         try {
-            const capsuleResult = await Capsule.update(conditions, { $set: data }, options).exec();
-            console.log("Capsule : Total Number Of Affected Records = ", capsuleResult);
+            // ⚠️ FIXED: Using updateMany instead of deprecated update()
+            const capsuleResult = await Capsule.updateMany(conditions, { $set: data }, options).exec();
+            console.log("Capsule : Total Number Of Affected Records = ", capsuleResult.modifiedCount || capsuleResult);
 
-            const chapterResult = await Chapter.update(conditions, { $set: data }, options).exec();
-            console.log("Chapter : Total Number Of Affected Records = ", chapterResult);
+            const chapterResult = await Chapter.updateMany(conditions, { $set: data }, options).exec();
+            console.log("Chapter : Total Number Of Affected Records = ", chapterResult.modifiedCount || chapterResult);
 
-            const pageResult = await Page.update(conditions, { $set: data }, options).exec();
-            console.log("Page : Total Number Of Affected Records = ", pageResult);
+            const pageResult = await Page.updateMany(conditions, { $set: data }, options).exec();
+            console.log("Page : Total Number Of Affected Records = ", pageResult.modifiedCount || pageResult);
 
 		var conditions_2 = {
 			OwnerEmail: registeredUserEmail,
@@ -372,8 +373,9 @@ var __updateChapterCollection__invitationCase = async function (registeredUserEm
         };
 
         try {
-            const result = await Chapter.update(conditions, { $set: data }, options).exec();
-            console.log("Chapter : Total Number Of Affected Records = ", result);
+            // ⚠️ FIXED: Using updateMany instead of deprecated update()
+            const result = await Chapter.updateMany(conditions, { $set: data }, options).exec();
+            console.log("Chapter : Total Number Of Affected Records = ", result.modifiedCount || result);
         } catch (error) {
             console.log("Chapter : ----09998887----ERROR : ", error);
         }
@@ -1156,8 +1158,8 @@ const register = async (req, res) => {
                 referralCode: numAffected.referralCode
             });
 
-            // Create default journal instances
-            __createDefaultJournal_BackgroundCall(numAffected._id, numAffected.Email);
+            // Create default journal instances - await it to ensure it completes
+            await __createDefaultJournal_BackgroundCall(numAffected._id, numAffected.Email);
 
                             if (req.body.referralLink) {
                 const referralData = {
@@ -1175,8 +1177,9 @@ const register = async (req, res) => {
                                 console.log('ℹ️ No referral link provided - skipping referral tracking');
                             }
 
-                            __updateChapterCollection(newUser.Email, numAffected._id);
-                            __updatePendingFriendRequests(newUser.Email, numAffected._id);
+                            // Await async functions to ensure they complete
+                            await __updateChapterCollection(newUser.Email, numAffected._id);
+                            await __updatePendingFriendRequests(newUser.Email, numAffected._id);
 
                             if (req.body.board) {
                 try {
@@ -1682,8 +1685,9 @@ async function addLaunchDateOnAllMyBirthdayStreams (UserId, Birthdate) {
 		};
 		console.log("conditions - ", conditions);
 		console.log("setObj - ", setObj);
-		var results = await Capsule.update(conditions, {$set: setObj});
-		console.log("All Birthday type streams are updated - ", results)
+		// ⚠️ FIXED: Using updateMany instead of deprecated update()
+		var results = await Capsule.updateMany(conditions, {$set: setObj});
+		console.log("All Birthday type streams are updated - ", results.modifiedCount || results)
 	} else {
 		console.log("------- addLaunchDateOnAllMyBirthdayStreams ----- ELSE CASE");
 	}
@@ -1843,13 +1847,13 @@ function sendmail(to, type, req, res) {
             } catch (error) {
                 reject(error);
             }
-        }).then((results) => {
+        }).then(async (results) => {
                             var newHtml;
                             var name = data.Name ? data.Name.split(' ') : "";
                             RecipientName = name[0];
 
                             if (type == "reset") {
-                                var userHash = new Buffer(userToHash).toString('base64');
+                                var userHash = Buffer.from(userToHash).toString('base64');
                                 // Use environment variable for base URL, fallback to HOST_URL
                                 const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
                                 var urlString = baseUrl + '/changePassword/' + userHash;
@@ -1870,7 +1874,7 @@ function sendmail(to, type, req, res) {
                             else if (type == "pswrdChanged") {
                                 //console.log(" * % * % * % * inside password Changed * % * %  * % * ", data)
                                 //var urlString = process.HOST_URL + '/#/forgotPassword';
-                                var userHash = new Buffer(userToHash).toString('base64');
+                                var userHash = Buffer.from(userToHash).toString('base64');
                                 // Use environment variable for base URL, fallback to HOST_URL
                                 const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
                                 var urlString = baseUrl + '/changePassword/' + userHash;
@@ -1929,19 +1933,33 @@ function sendmail(to, type, req, res) {
                                 }
                             });
 							*/
-                            var transporter = nodemailer.createTransport(process.EMAIL_ENGINE.info.smtpOptions)
-                            transporter.sendMail(mailOptions, function (error, info) {
-                                if (error) {
-                                    //console.log(error);
-                    res.json(error);
-                                } else {
-                                    console.log('Message sent to: ' + to + info.response);
-                                    //res.json({'msg': 'done', 'code': '200'});
+                            var transporter = nodemailer.createTransport(process.EMAIL_ENGINE.info.smtpOptions);
+                            
+                            // ⚠️ CRITICAL: Await email sending to ensure it completes on Vercel
+                            // On serverless, functions terminate when response is sent, so we must await
+                            try {
+                                const info = await transporter.sendMail(mailOptions);
+                                console.log('Message sent to: ' + to + (info.response || ''));
+                                
+                                // Send response only if not already sent
+                                if (!res.headersSent) {
                                     if (type == "reset" || type == "pswrdChanged") {
                                         res.json({ 'msg': 'done', 'code': '200' });
                                     }
                                 }
-                            });
+                            } catch (error) {
+                                console.error('❌ Email sending failed:', error.message);
+                                console.error('   Error stack:', error.stack);
+                                
+                                // Send error response only if not already sent
+                                if (!res.headersSent) {
+                                    res.status(500).json({ 
+                                        'code': '500', 
+                                        'msg': 'Failed to send email',
+                                        'error': process.env.NODE_ENV === 'development' ? error.message : undefined
+                                    });
+                                }
+                            }
 
         }).catch((error) => {
             console.error('Email template error:', error);
@@ -1988,7 +2006,7 @@ function sendmail__requestInvitation(to, type, req, res) {
             } catch (error) {
                 reject(error);
             }
-        }).then((results) => {
+        }).then(async (results) => {
                             var newHtml;
                             var name = data.Name ? data.Name.split(' ') : "";
                             RecipientName = name[0];
@@ -2010,19 +2028,33 @@ function sendmail__requestInvitation(to, type, req, res) {
 								html: newHtml
 							};
 
-                            var transporter = nodemailer.createTransport(process.EMAIL_ENGINE.info.smtpOptions)
-                            transporter.sendMail(mailOptions, function (error, info) {
-                                if (error) {
-                                    //console.log(error);
-                    res.json(error);
-                                } else {
-                                    console.log('Message sent to: ' + to + info.response);
-
+                            var transporter = nodemailer.createTransport(process.EMAIL_ENGINE.info.smtpOptions);
+                            
+                            // ⚠️ CRITICAL: Await email sending to ensure it completes on Vercel
+                            // On serverless, functions terminate when response is sent, so we must await
+                            try {
+                                const info = await transporter.sendMail(mailOptions);
+                                console.log('Message sent to: ' + to + (info.response || ''));
+                                
+                                // Send response only if not already sent
+                                if (!res.headersSent) {
                                     if (type == "reset" || type == "pswrdChanged") {
                                         res.json({ 'msg': 'done', 'code': '200' });
                                     }
                                 }
-                            });
+                            } catch (error) {
+                                console.error('❌ Email sending failed:', error.message);
+                                console.error('   Error stack:', error.stack);
+                                
+                                // Send error response only if not already sent
+                                if (!res.headersSent) {
+                                    res.status(500).json({ 
+                                        'code': '500', 
+                                        'msg': 'Failed to send email',
+                                        'error': process.env.NODE_ENV === 'development' ? error.message : undefined
+                                    });
+                                }
+                            }
 
         }).catch((error) => {
             console.error('Email template error:', error);
@@ -2041,7 +2073,7 @@ function sendmail__requestInvitation(to, type, req, res) {
 
 var newPassword = async function (req, res) {
     try {
-    var idAndTime = new Buffer(req.body.id, 'base64').toString('ascii');
+    var idAndTime = Buffer.from(req.body.id, 'base64').toString('ascii');
     if (req.body.id) {
         var userData = (idAndTime).split('_');
         //console.log('userData[0]=' + userData[0]);
@@ -4311,7 +4343,8 @@ var __createDefaultJournal_BackgroundCall = async function (user_id, user_email)
             console.log("Journal ID saved to user");
 
 			//update if there is any transfer ownership chapter
-            await Chapter.update({
+            // ⚠️ FIXED: Using updateMany instead of deprecated update()
+            await Chapter.updateMany({
 					"OwnerEmail": user_email,
                 "Origin": "journal",
                 "CapsuleId": { $exists: false }

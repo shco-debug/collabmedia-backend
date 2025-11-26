@@ -252,13 +252,16 @@ var add = async function (req, res) {
 						html: newHtml
 					};
 					
-					// Send mail asynchronously (don't await)
-					transporter.sendMail(mailOptions, function (error, info) {
-						if (error) {
-							return console.log('Email send error:', error);
-						}
-						console.log('USER ADDED BY ADMIN---------Message sent: ' + info.response);
-					});
+					// ⚠️ CRITICAL: Await email sending to ensure it completes on Vercel/AWS
+					// On serverless, functions terminate when response is sent, so we must await
+					try {
+						const info = await transporter.sendMail(mailOptions);
+						console.log('USER ADDED BY ADMIN---------Message sent: ' + (info.response || ''));
+					} catch (emailError) {
+						console.error('❌ Email sending failed:', emailError.message);
+						console.error('   Error stack:', emailError.stack);
+						// Don't throw - log error but don't fail the user creation
+					}
 				}
 			} catch (emailErr) {
 				console.error('Email template error:', emailErr);
