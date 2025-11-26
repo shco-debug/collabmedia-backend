@@ -19,6 +19,7 @@ var Page = require("../models/pageModel.js");
 var Capsule = require("../models/capsuleModel.js");
 var Chapter = require("../models/chapterModel.js");
 var PageStream = require("../models/pageStreamModel.js");
+var SyncedPost = require("../models/syncedpostModel.js");
 var StreamComments = require("../models/StreamCommentsModel.js");
 var StreamLikes = require("../models/StreamLikes.js");
 var StreamCommentLikes = require("../models/StreamCommentLikesModel.js");
@@ -3641,6 +3642,37 @@ const getUserPosts = async (req, res) => {
       });
     });
 
+    // Additional fallback: Look up pageId from SyncedPost collection
+    // This handles standalone posts that aren't in Pages but are in SyncedPosts
+    if (mediaIds.length > 0) {
+      try {
+        const syncedPosts = await SyncedPost.find(
+          {
+            PostId: { $in: mediaIds },
+            IsDeleted: { $ne: true },
+            PageId: { $exists: true, $ne: null }
+          },
+          { PostId: 1, PageId: 1 }
+        )
+          .lean()
+          .exec();
+
+        syncedPosts.forEach((syncedPost) => {
+          if (syncedPost.PostId && syncedPost.PageId) {
+            const mediaKey = syncedPost.PostId.toString();
+            const pageIdStr = syncedPost.PageId.toString();
+            // Only set if not already found in Pages lookup
+            if (!mediaIdToPageId.has(mediaKey)) {
+              mediaIdToPageId.set(mediaKey, pageIdStr);
+            }
+          }
+        });
+      } catch (error) {
+        console.error("Error looking up SyncedPost for pageId:", error);
+        // Continue without failing - this is just a fallback
+      }
+    }
+
     const postIdStrings = posts
       .map((post) => (post && post._id ? post._id.toString() : null))
       .filter(Boolean);
@@ -3928,6 +3960,20 @@ const getUserPosts = async (req, res) => {
       }
 
       const likesForPostRaw = postIdStr ? likesByPostId.get(postIdStr) || [] : [];
+      
+      // If pageId is still null, try to get it from likes (SocialPageId)
+      if (!formattedPost.pageId && likesForPostRaw.length > 0 && likesForPostRaw[0].SocialPageId) {
+        formattedPost.pageId = likesForPostRaw[0].SocialPageId.toString();
+      }
+
+      const topLevelCommentsDocs = postIdStr
+        ? topLevelCommentsByPostId.get(postIdStr) || []
+        : [];
+
+      // If pageId is still null, try to get it from comments (SocialPageId)
+      if (!formattedPost.pageId && topLevelCommentsDocs.length > 0 && topLevelCommentsDocs[0].SocialPageId) {
+        formattedPost.pageId = topLevelCommentsDocs[0].SocialPageId.toString();
+      }
       const likesForPost = likesForPostRaw.map((likeDoc) => ({
         _id: likeDoc._id,
         SocialPageId: likeDoc.SocialPageId,
@@ -3939,10 +3985,6 @@ const getUserPosts = async (req, res) => {
 
       formattedPost.likes = likesForPost;
       formattedPost.likeCount = likesForPost.length;
-
-      const topLevelCommentsDocs = postIdStr
-        ? topLevelCommentsByPostId.get(postIdStr) || []
-        : [];
 
       const commentPayloads = topLevelCommentsDocs
         .map((commentDoc) => buildCommentPayload(commentDoc, true))
@@ -5268,9 +5310,19 @@ const importUnsplashImagesV2 = async function (req, res) {
 		}
 
 		tempUploadDir = fs.mkdtempSync(path.join(os.tmpdir(), "unsplashimport-"));
+		
+		// Ensure temp directory exists (should already exist from mkdtempSync, but double-check)
+		await fsPromises.mkdir(tempUploadDir, { recursive: true });
+		
 		savedFilePath = await moveUploadedFile(file, tempUploadDir, `${dateFormat()}_unsplashimport`);
 		console.log("[massmediaupload] Saved file to:", savedFilePath);
+		
 		const outputJsonPath = path.join(tempUploadDir, "output.json");
+		
+		// Ensure output directory exists before converting Excel to JSON
+		const outputDir = path.dirname(outputJsonPath);
+		await fsPromises.mkdir(outputDir, { recursive: true });
+		
 		const rows = await convertXlsxToJson(savedFilePath, outputJsonPath);
 		console.log("[massmediaupload] Parsed rows count:", Array.isArray(rows) ? rows.length : 0);
 

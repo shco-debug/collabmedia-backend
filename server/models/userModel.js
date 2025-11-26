@@ -76,14 +76,17 @@ var userSchema = new mongoose.Schema({
 	IsSubscriber: {type: Boolean, default: false},
 	SubscriberSince: {type: Date, default: null},
 	SubscriptionExpiresOn: {type: Date, default: null},
+	IsAutoRenewalEnabled: {type: Boolean, default: true}, // Auto-renewal toggle, default enabled
+	SubscriptionGracePeriodEndsOn: {type: Date, default: null}, // Grace period end date (1 day after payment failure)
 	SubscriptionStatus: {
 		type: String,
-		enum: ['trial', 'active', 'expired', 'cancelled'],
+		enum: ['trial', 'active', 'expired', 'cancelled', 'set_to_cancel_at_period_end', 'grace_period'],
 		default: null
 	},
 	SubscriptionTrialEndsOn: { type: Date, default: null },
 	SubscriptionLastTrialEndsOn: { type: Date, default: null },
 	SubscriptionExpiresOn: { type: Date, default: null },
+	SubscriptionCancelledOn: { type: Date, default: null },
 	SubscriptionPrice: { type: Number, default: null },
 	SubscriptionCurrency: { type: String, default: 'USD' },
 	Role: {type: String, enum: ["user", "subadmin", "admin"], default: "user"},

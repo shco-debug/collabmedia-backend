@@ -512,7 +512,9 @@ async function notifyMembers (users, UserName, Action, StreamId) {
 
 		var _cId = memberObj.AllFoldersId ? memberObj.AllFoldersId : '';
 		var _pId = memberObj.AllPagesId ? memberObj.AllPagesId : '';
-		var userStreamPageUrl = 'https://www.scrpt.com/streams/'+_cId+'/'+_pId+'?stream='+StreamId;
+		// Use environment variable for base URL, fallback to HOST_URL
+		const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+		var userStreamPageUrl = `${baseUrl}/streams/${_cId}/${_pId}?stream=${StreamId}`;
 
 		var newHtml = results[0].description.replace(/{RecipientName}/g, memberObj.Name.split(' ')[0]);
 		newHtml = newHtml.replace(/{UserName}/g, UserName.split(' ')[0]);
@@ -2348,6 +2350,7 @@ var syncPost = function (req,res) {
 	var dataRecord = {
 		PageId : req.body.PageId ? req.body.PageId : null,
 		PostId : req.body.PostId ? req.body.PostId : null,
+		MediaType : req.body.MediaType || null, // ✅ Add MediaType from request body if available
 		PostImage : PostImage,
 		PostOwnerId : req.body.PostOwnerId ? req.body.PostOwnerId : null,
 		ReceiverEmails : req.body.ReceiverEmails ? req.body.ReceiverEmails : [],
@@ -2358,62 +2361,76 @@ var syncPost = function (req,res) {
 	dataRecord.ReceiverEmails = typeof dataRecord.ReceiverEmails == 'object' ? dataRecord.ReceiverEmails : [];
 
 	if(dataRecord.PageId && dataRecord.PostId && dataRecord.PostOwnerId && dataRecord.ReceiverEmails.length) {
-		SyncedPost(dataRecord).save( function(err, data){
-			if(err){
-				res.json({"code":"204", message : "error1"});
-			} else {
+		// ✅ Fetch MediaType from Media collection using PostId (only if not already provided)
+		if (!dataRecord.MediaType && dataRecord.PostId) {
+			Media.findOne({ _id: dataRecord.PostId }, { MediaType: 1 }, function (mediaErr, mediaDoc) {
+				if (!mediaErr && mediaDoc && mediaDoc.MediaType) {
+					dataRecord.MediaType = mediaDoc.MediaType;
+				}
+				saveSyncedPostAndSendEmail();
+			});
+		} else {
+			// MediaType already provided or PostId missing, save directly
+			saveSyncedPostAndSendEmail();
+		}
+		
+		function saveSyncedPostAndSendEmail() {
+			SyncedPost(dataRecord).save( function(err, data){
+				if(err){
+					res.json({"code":"204", message : "error1"});
+				} else {
+					var condition = {};
+					condition.name = "Sync__Post";
 
-				var condition = {};
-				condition.name = "Sync__Post";
+					EmailTemplate.find(condition, {}, function (err, results) {
+						if (!err) {
+							if (results.length) {
+								var SharedByUserName = req.session.user.Name ? req.session.user.Name.split(' ')[0] : "";
+								var PostURL = "https://www.scrpt.com/post_view?post="+dataRecord.PostId;
+								PostImage = PostImage.replace('/Media/img/300/', '/Media/img/600/');
 
-				EmailTemplate.find(condition, {}, function (err, results) {
-					if (!err) {
-						if (results.length) {
-							var SharedByUserName = req.session.user.Name ? req.session.user.Name.split(' ')[0] : "";
-							var PostURL = "https://www.scrpt.com/post_view?post="+dataRecord.PostId;
-							PostImage = PostImage.replace('/Media/img/300/', '/Media/img/600/');
+								var newHtml = results[0].description.replace(/{SharedByUserName}/g, SharedByUserName);
+								newHtml = newHtml.replace(/{PostImage}/g, PostImage);
+								newHtml = newHtml.replace(/{PostStatement}/g, PostStatement);
+								newHtml = newHtml.replace(/{PostURL}/g, PostURL);
+								newHtml = newHtml.replace(/{BlendMode}/g, BlendMode);
+								newHtml = newHtml.replace(/{PublisherName}/g, 'The Scrpt Co.');
+								results[0].subject = typeof (results[0].subject) == 'string' ? results[0].subject : '';
+								var subject = results[0].subject.replace(/{SharedByUserName}/g, SharedByUserName);
 
-							var newHtml = results[0].description.replace(/{SharedByUserName}/g, SharedByUserName);
-							newHtml = newHtml.replace(/{PostImage}/g, PostImage);
-							newHtml = newHtml.replace(/{PostStatement}/g, PostStatement);
-							newHtml = newHtml.replace(/{PostURL}/g, PostURL);
-							newHtml = newHtml.replace(/{BlendMode}/g, BlendMode);
-							newHtml = newHtml.replace(/{PublisherName}/g, 'The Scrpt Co.');
-							results[0].subject = typeof (results[0].subject) == 'string' ? results[0].subject : '';
-							var subject = results[0].subject.replace(/{SharedByUserName}/g, SharedByUserName);
-
-							User.find({ 'Email': {$in : dataRecord.ReceiverEmails}, Status: 1, IsDeleted : false }, { Name: true, Email : true }, function (err, UserData) {
-								if (!err) {
-									UserData = UserData ? UserData : [];
-									var emails = [];
-									for(var i = 0; i < UserData.length; i++) {
-										var RecipientName = UserData[i].Name ? UserData[i].Name.split(' ')[0] : "";
-										var shareWithEmail = UserData[i].Email ? UserData[i].Email : null;
-										emails.push(shareWithEmail);
-										if(shareWithEmail) {
-											sendSyncEmail(shareWithEmail, RecipientName, SharedByUserName, newHtml, subject);
-										}
-									}
-
-									if(emails.length != dataRecord.ReceiverEmails.length) {
-										var difference = dataRecord.ReceiverEmails.filter(x => emails.indexOf(x) === -1);
-										for(var i = 0; i < difference.length; i++) {
-											var RecipientName = difference[i] ? difference[i].split('@')[0] : "";
-											var shareWithEmail = difference[i] ? difference[i] : null;
-
+								User.find({ 'Email': {$in : dataRecord.ReceiverEmails}, Status: 1, IsDeleted : false }, { Name: true, Email : true }, function (err, UserData) {
+									if (!err) {
+										UserData = UserData ? UserData : [];
+										var emails = [];
+										for(var i = 0; i < UserData.length; i++) {
+											var RecipientName = UserData[i].Name ? UserData[i].Name.split(' ')[0] : "";
+											var shareWithEmail = UserData[i].Email ? UserData[i].Email : null;
+											emails.push(shareWithEmail);
 											if(shareWithEmail) {
 												sendSyncEmail(shareWithEmail, RecipientName, SharedByUserName, newHtml, subject);
 											}
 										}
+
+										if(emails.length != dataRecord.ReceiverEmails.length) {
+											var difference = dataRecord.ReceiverEmails.filter(x => emails.indexOf(x) === -1);
+											for(var i = 0; i < difference.length; i++) {
+												var RecipientName = difference[i] ? difference[i].split('@')[0] : "";
+												var shareWithEmail = difference[i] ? difference[i] : null;
+
+												if(shareWithEmail) {
+													sendSyncEmail(shareWithEmail, RecipientName, SharedByUserName, newHtml, subject);
+												}
+											}
+										}
 									}
-								}
-							})
+								})
+							}
 						}
-					}
-				});
-				res.json({"code":"200", message : "success"});
-			}
-		});
+					});
+					res.json({"code":"200", message : "success"});
+				}
+			});
+		}
 	} else {
 		res.json({"code":"204", message : "error2"});
 	}

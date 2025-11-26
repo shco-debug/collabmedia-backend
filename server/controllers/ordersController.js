@@ -1960,69 +1960,80 @@ var capsule__createNewInstance = async function (CapsuleData, owner, req, index_
 					}
 				}
 
-				var emailFor = "Published__ForOthers";
+			var emailFor = "Published__ForOthers";
 
-				if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream') {
-					emailFor = 'Purchased__ForGift__Stream';
-				}
+			if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream') {
+				emailFor = 'Purchased__ForGift__Stream';
+			}
 
-				CapsuleData.IsSurpriseGift = CapsuleData.IsSurpriseGift ? CapsuleData.IsSurpriseGift : false;
-				if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream' && CapsuleData.LaunchSettings.StreamType == 'Group' && !CapsuleData.IsSurpriseGift) {
-					emailFor = 'Purchased__ForGift__GroupStream';
-				}
+			CapsuleData.IsSurpriseGift = CapsuleData.IsSurpriseGift ? CapsuleData.IsSurpriseGift : false;
+			if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream' && CapsuleData.LaunchSettings.StreamType == 'Group' && !CapsuleData.IsSurpriseGift) {
+				emailFor = 'Purchased__ForGift__GroupStream';
+			}
 
-				if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream' && CapsuleData.LaunchSettings.StreamType == 'Group' && CapsuleData.IsSurpriseGift) {
-					emailFor = 'Purchased__ForSurpriseGift__GroupStream';
-					console.log("This is a surprise gift so returning without sending instant email.");
-					return;
-				}
+			if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream' && CapsuleData.LaunchSettings.StreamType == 'Group' && CapsuleData.IsSurpriseGift) {
+				emailFor = 'Purchased__ForSurpriseGift__GroupStream';
+				console.log("This is a surprise gift so returning without sending instant email.");
+				return;
+			}
 
-				if (index_value_email >= 0) {
+			console.log('📧 Email Debug - index_value_email:', index_value_email, 'purchaseFor:', req.body.purchaseFor);
 
-					var mailto = req.body.purchaseFor[index_value_email];
-					if (mailto == 'Gift') {
-						emailFor = 'Purchased__ForGift';
-						if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream') {
-							emailFor = 'Purchased__ForGift__Stream';
-						}
+			if (index_value_email >= 0) {
 
-						CapsuleData.IsSurpriseGift = CapsuleData.IsSurpriseGift ? CapsuleData.IsSurpriseGift : false;
-						if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream' && CapsuleData.LaunchSettings.StreamType == 'Group' && !CapsuleData.IsSurpriseGift) {
-							emailFor = 'Purchased__ForGift__GroupStream';
-						}
-
-						if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream' && CapsuleData.LaunchSettings.StreamType == 'Group' && CapsuleData.IsSurpriseGift) {
-							emailFor = 'Purchased__ForSurpriseGift__GroupStream';
-							console.log("This is a surprise gift so returning without sending instant email.");
-							return;
-						}
-					}
-					else if (mailto == 'Myself') {
-						emailFor = 'Purchased__ForMyself';
-						if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream') {
-							emailFor = 'Purchased__ForMyself__Stream';
-						}
-
-						if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream' && CapsuleData.LaunchSettings.StreamType == 'Group') {
-							emailFor = 'Purchased__ForMyself__GroupStream';
-						}
+				var mailto = req.body.purchaseFor ? req.body.purchaseFor[index_value_email] : null;
+				console.log('📧 Email Debug - mailto value:', mailto);
+				
+				if (mailto == 'Gift') {
+					emailFor = 'Purchased__ForGift';
+					if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream') {
+						emailFor = 'Purchased__ForGift__Stream';
 					}
 
+					CapsuleData.IsSurpriseGift = CapsuleData.IsSurpriseGift ? CapsuleData.IsSurpriseGift : false;
+					if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream' && CapsuleData.LaunchSettings.StreamType == 'Group' && !CapsuleData.IsSurpriseGift) {
+						emailFor = 'Purchased__ForGift__GroupStream';
+					}
+
+					if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream' && CapsuleData.LaunchSettings.StreamType == 'Group' && CapsuleData.IsSurpriseGift) {
+						emailFor = 'Purchased__ForSurpriseGift__GroupStream';
+						console.log("This is a surprise gift so returning without sending instant email.");
+						return;
+					}
+				}
+				else if (mailto == 'Myself') {
+					emailFor = 'Purchased__ForMyself';
+					if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream') {
+						emailFor = 'Purchased__ForMyself__Stream';
+					}
+
+					if(CapsuleData.LaunchSettings.CapsuleFor == 'Stream' && CapsuleData.LaunchSettings.StreamType == 'Group') {
+						emailFor = 'Purchased__ForMyself__GroupStream';
+					}
 				}
 
+			}
 
-				var condition = {};
-				condition.name = emailFor;
+			console.log('📧 Email Debug - Final emailFor template:', emailFor, 'CapsuleFor:', CapsuleData.LaunchSettings.CapsuleFor, 'StreamType:', CapsuleData.LaunchSettings.StreamType);
 
-				var results = await EmailTemplate.find(condition);
-				results = Array.isArray(results) ? results : [];
-				if (results.length) {
+			var condition = {};
+			condition.name = emailFor;
+
+			var results = await EmailTemplate.find(condition);
+			results = Array.isArray(results) ? results : [];
+			console.log('📧 Email Debug - Template found:', results.length > 0, 'Template name:', emailFor);
+			
+			if (results.length) {
+					console.log('📧 Email Debug - Scheduling email send in 3 seconds to:', shareWithEmail);
 					setTimeout(async function(){
+						console.log('📧 Email Debug - Starting email send process for:', shareWithEmail);
 						var RecipientName = shareWithName ? shareWithName : '';
 						var userD = await User.find({ 'Email': new RegExp('^'+shareWithEmail+'$', 'i'), IsDeleted: false }, { 'Name': true, 'AllFoldersId' : true, 'AllPagesId': true });
 						var _cId = '';
 						var _pId = '';
-						var _StreamUrl = 'https://www.scrpt.com/login';
+						// Use environment variable for base URL, fallback to ahaday.com for backward compatibility
+						var baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+						var _StreamUrl = baseUrl + '/login';
 
 						if (userD.length > 0) {
 							var name = userD[0].Name ? userD[0].Name.split(' ') : [];
@@ -2030,7 +2041,7 @@ var capsule__createNewInstance = async function (CapsuleData, owner, req, index_
 
 							_cId = userD[0].AllFoldersId ? userD[0].AllFoldersId : '';
 							_pId = userD[0].AllPagesId ? userD[0].AllPagesId : '';
-							_StreamUrl = 'https://www.scrpt.com/streams/'+_cId+'/'+_pId+'?stream='+newCapsuleId;
+							_StreamUrl = baseUrl + '/streams/'+_cId+'/'+_pId+'?stream='+newCapsuleId;
 						}
 
 						var publisherNameArr = req.session.user.Name ? req.session.user.Name.split(' ') : [];
@@ -2057,11 +2068,20 @@ var capsule__createNewInstance = async function (CapsuleData, owner, req, index_
 							html: newHtml
 						};
 
+					try {
+						console.log('📧 Sending email - To:', mailOptions.to, 'Subject:', mailOptions.subject, 'From:', mailOptions.from);
 						var info = await transporter.sendMail(mailOptions);
 						info = info || {};
 						info.response = info.response ? info.response : {};
-						console.log('capsule__createNewInstance---------Message sent: ' + mailOptions.to + info.response);
+						console.log('✅ capsule__createNewInstance---------Message sent: ' + mailOptions.to + ' Subject: ' + mailOptions.subject + ' Response: ' + JSON.stringify(info.response));
+						console.log('📧 Email details - Stream URL:', _StreamUrl, 'Recipient:', RecipientName);
+					} catch (emailError) {
+						console.error('❌ Email sending failed:', emailError.message);
+						console.error('Email error details:', emailError);
+					}
 					},3000);
+				} else {
+					console.log('⚠️ Email Debug - Email template not found in database:', emailFor);
 				}
 
 			}

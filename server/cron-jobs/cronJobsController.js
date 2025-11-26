@@ -1405,7 +1405,9 @@ var SynedPostEmailCron = async function () {
                             if (shareWithEmail && (userUnsubscribedStreams.indexOf(String(dataRecord.CapsuleId)) < 0)) {
                                 console.log("Attempting to send scheduled email to:", shareWithEmail);
                                 try {
-                                    const unsubscribeUrl = `${process.HOST_URL}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
+                                    // Use environment variable for base URL, fallback to HOST_URL
+                                    const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://www.scrpt.com';
+                                    const unsubscribeUrl = `${baseUrl}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
                                     const htmlWithUnsubscribe = newHtml.replace(/{UnsubscribeUrl}/g, unsubscribeUrl);
                                     await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, htmlWithUnsubscribe, subject, EmailBeaconImg);
                                     console.log("Successfully sent email to:", shareWithEmail);
@@ -2505,7 +2507,9 @@ var SynedPostEmailCron = async function (testMode = false) {
                     const uploadDir = __dirname + '/../../media-assets/streamposts';
 
                     if (fs.existsSync(uploadDir + "/" + file_name)) {
-                        blendedImage = `https://www.scrpt.com/streamposts/${hexcode}.png`;
+                        // Use environment variable for base URL, fallback to HOST_URL
+                        const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                        blendedImage = `${baseUrl}/streamposts/${hexcode}.png`;
                         console.log("✅ Using pre-blended image:", hexcode + '.png');
                     }
                 }
@@ -2533,7 +2537,9 @@ var SynedPostEmailCron = async function (testMode = false) {
 
             const SharedByUser = Array.isArray(dataRecord.SharedByUser) && dataRecord.SharedByUser.length > 0 ? dataRecord.SharedByUser[0] : {};
             const SharedByUserName = SharedByUser.Name ? SharedByUser.Name.split(' ')[0] : "";
-            const PostURL = "https://www.scrpt.com/streams?pid=" + dataRecord.CapsuleData._id + '__' + dataRecord.PostId + '__' + blendedImage;
+            // Use environment variable for base URL, fallback to HOST_URL
+            const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+            const PostURL = `${baseUrl}/streams?pid=${dataRecord.CapsuleData._id}__${dataRecord.PostId}__${blendedImage}`;
 
             const PostImage1_600 = PostImage1.replace('/Media/img/300/', '/Media/img/600/');
             const PostImage2_600 = PostImage2.replace('/Media/img/300/', '/Media/img/600/');
@@ -2590,7 +2596,9 @@ var SynedPostEmailCron = async function (testMode = false) {
                         if (shareWithEmail && (userUnsubscribedStreams.indexOf(String(dataRecord.CapsuleId)) < 0)) {
                             // Create personalized tracking pixel for this specific recipient
                             if (dataRecord.CapsuleId && dataRecord.PageId && dataRecord.PostId && EmailBeaconHash) {
-                                EmailBeaconImg = `<img src='https://www.scrpt.com/assets/img/email-stats.png?CapsuleId=${dataRecord.CapsuleId}&PageId=${dataRecord.PageId}&PostId=${dataRecord.PostId}&EmailIndex=${EmailBeaconHash}&UserEmail=${shareWithEmail}' />`;
+                                // Use environment variable for base URL, fallback to HOST_URL
+                                const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                                EmailBeaconImg = `<img src='${baseUrl}/assets/img/email-stats.png?CapsuleId=${dataRecord.CapsuleId}&PageId=${dataRecord.PageId}&PostId=${dataRecord.PostId}&EmailIndex=${EmailBeaconHash}&UserEmail=${shareWithEmail}' />`;
                             }
                             
                             if (dataRecord.Subject) {
@@ -2601,7 +2609,9 @@ var SynedPostEmailCron = async function (testMode = false) {
                             
                             console.log("Attempting to send scheduled email to:", shareWithEmail);
                             try {
-                                const unsubscribeUrl = `${process.HOST_URL}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
+                                // Use environment variable for base URL, fallback to HOST_URL
+                                const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                                const unsubscribeUrl = `${baseUrl}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
                                 const htmlWithUnsubscribe = newHtml.replace(/{UnsubscribeUrl}/g, unsubscribeUrl);
                                 await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, htmlWithUnsubscribe, subject, EmailBeaconImg);
                                 console.log("Successfully sent email to:", shareWithEmail);
@@ -2636,7 +2646,9 @@ var SynedPostEmailCron = async function (testMode = false) {
                             if (shareWithEmail) {
                                 // Create personalized tracking pixel for non-registered user
                                 if (dataRecord.CapsuleId && dataRecord.PageId && dataRecord.PostId && EmailBeaconHash) {
-                                    EmailBeaconImg = `<img src='https://www.scrpt.com/assets/img/email-stats.png?CapsuleId=${dataRecord.CapsuleId}&PageId=${dataRecord.PageId}&PostId=${dataRecord.PostId}&EmailIndex=${EmailBeaconHash}&UserEmail=${shareWithEmail}' />`;
+                                    // Use environment variable for base URL, fallback to HOST_URL
+                                    const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://www.scrpt.com';
+                                    EmailBeaconImg = `<img src='${baseUrl}/assets/img/email-stats.png?CapsuleId=${dataRecord.CapsuleId}&PageId=${dataRecord.PageId}&PostId=${dataRecord.PostId}&EmailIndex=${EmailBeaconHash}&UserEmail=${shareWithEmail}' />`;
                                 }
 
                                 if (dataRecord.Subject) {
@@ -2647,7 +2659,9 @@ var SynedPostEmailCron = async function (testMode = false) {
                                 
                                 console.log("Attempting to send scheduled email to non-registered user:", shareWithEmail);
                                 try {
-                                    const unsubscribeUrl = `${process.HOST_URL}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
+                                    // Use environment variable for base URL, fallback to HOST_URL
+                                    const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://www.scrpt.com';
+                                    const unsubscribeUrl = `${baseUrl}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
                                     const htmlWithUnsubscribe = newHtml.replace(/{UnsubscribeUrl}/g, unsubscribeUrl);
                                     await sendSyncEmail_SYNC(shareWithEmail, RecipientName, SharedByUserName, htmlWithUnsubscribe, subject, EmailBeaconImg);
                                     console.log("Successfully sent email to non-registered user:", shareWithEmail);
@@ -2945,9 +2959,12 @@ exports.createTestSyncedPost = createTestSyncedPost;
 		const nowTime = now.getTime();
 
 		// Base conditions - don't require SubscriptionPrice here, we'll check it later
+		// Explicitly exclude cancelled subscriptions from automatic renewal
+		// But include "set_to_cancel_at_period_end" - these need to be processed to cancel without payment
 		const baseConditions = {
 			IsDeleted: false,
-			Role: { $nin: ["admin", "subadmin"] }
+			Role: { $nin: ["admin", "subadmin"] },
+			SubscriptionStatus: { $ne: "cancelled" }
 		};
 
 		// Find users with expired trials (including those already marked expired)
@@ -2960,11 +2977,15 @@ exports.createTestSyncedPost = createTestSyncedPost;
 		};
 
 		// Find users with expired active subscriptions (including those already marked expired)
+		// Also include "set_to_cancel_at_period_end" - these should be cancelled without payment
+		// Also include "grace_period" - check if grace period has ended
 		const activeDueConditions = {
 			...baseConditions,
 			$or: [
 				{ SubscriptionStatus: "active", SubscriptionExpiresOn: { $lte: now } },
-				{ SubscriptionStatus: "expired", SubscriptionExpiresOn: { $ne: null, $lte: now } }
+				{ SubscriptionStatus: "expired", SubscriptionExpiresOn: { $ne: null, $lte: now } },
+				{ SubscriptionStatus: "set_to_cancel_at_period_end", SubscriptionExpiresOn: { $lte: now } },
+				{ SubscriptionStatus: "grace_period", SubscriptionGracePeriodEndsOn: { $lte: now } }
 			]
 		};
 
@@ -2997,6 +3018,12 @@ exports.createTestSyncedPost = createTestSyncedPost;
 		const usersMap = new Map();
 		const addUserToMap = (userRecord, reason) => {
 			if (!userRecord) return;
+			// Double-check: skip cancelled subscriptions (safety measure)
+			const status = (userRecord.SubscriptionStatus || "").toString().toLowerCase();
+			if (status === "cancelled") {
+				console.log(`⚠️ Skipping cancelled subscription for user ${userRecord._id} (${userRecord.Email || "unknown"})`);
+				return;
+			}
 			const key = userRecord._id.toString();
 			const userObject = typeof userRecord.toObject === "function" ? userRecord.toObject() : userRecord;
 			if (!usersMap.has(key)) {
@@ -3037,6 +3064,96 @@ exports.createTestSyncedPost = createTestSyncedPost;
 			var expiredUser = allExpiredUsers[i];
 			var userId = expiredUser._id.toString();
 			var userEmail = expiredUser.Email || "unknown";
+
+			// Safety check: Skip cancelled subscriptions (should already be filtered, but double-check)
+			const userStatus = (expiredUser.SubscriptionStatus || "").toString().toLowerCase();
+			if (userStatus === "cancelled") {
+				console.log(`⚠️ Skipping cancelled subscription for user ${userId} (${userEmail}) - should not have been included`);
+				continue;
+			}
+
+			// Check if this is a "set_to_cancel_at_period_end" subscription
+			// On renewal date, set to expired (not cancelled) - user moves to no_active_plan and access is revoked
+			// Setting to "expired" ensures middleware properly restricts access
+			if (userStatus === "set_to_cancel_at_period_end") {
+				console.log(`🔄 Processing cancellation at period end for user ${userId} (${userEmail})`);
+				
+				// Update user to expired state without charging - revoke access (no_active_plan)
+				// Use "expired" status so middleware properly restricts access
+				await User.updateOne(
+					{ _id: expiredUser._id },
+					{
+						$set: {
+							SubscriptionStatus: "expired",
+							IsSubscriber: false, // no_active_plan - access revoked
+							// Keep the dates for reference
+							SubscriptionExpiresOn: expiredUser.SubscriptionExpiresOn,
+							SubscriptionTrialEndsOn: null, // Clear trial dates - no new trial
+							SubscriptionLastTrialEndsOn: expiredUser.SubscriptionLastTrialEndsOn || expiredUser.SubscriptionTrialEndsOn || null,
+							SubscriptionGracePeriodEndsOn: null, // Clear grace period
+						}
+					}
+				).exec();
+				
+				console.log(`✅ User ${userId} (${userEmail}) subscription expired at period end. Access revoked. No charge made.`);
+				successCount++;
+				continue; // Skip payment processing
+			}
+
+			// Check if grace period has ended - expire the subscription
+			if (userStatus === "grace_period") {
+				const gracePeriodEndsOn = expiredUser.SubscriptionGracePeriodEndsOn 
+					? new Date(expiredUser.SubscriptionGracePeriodEndsOn) 
+					: null;
+				
+				if (gracePeriodEndsOn && gracePeriodEndsOn.getTime() <= nowTime) {
+					console.log(`⏰ Grace period ended for user ${userId} (${userEmail}) - expiring subscription`);
+					
+					await User.updateOne(
+						{ _id: expiredUser._id },
+						{
+							$set: {
+								SubscriptionStatus: "expired",
+								IsSubscriber: false,
+								SubscriptionGracePeriodEndsOn: null,
+								SubscriptionTrialEndsOn: null,
+								SubscriptionLastTrialEndsOn: expiredUser.SubscriptionLastTrialEndsOn || expiredUser.SubscriptionTrialEndsOn || null,
+								SubscriptionExpiresOn: expiredUser.SubscriptionExpiresOn || null
+							}
+						}
+					).exec();
+					
+					console.log(`✅ User ${userId} (${userEmail}) subscription expired after grace period. Access revoked.`);
+					successCount++;
+					continue;
+				}
+			}
+
+			// Check if auto-renewal is enabled - payment will only be attempted if auto-renewal is ON
+			const isAutoRenewalEnabled = expiredUser.IsAutoRenewalEnabled !== false; // Default to true if not set
+			
+			// If auto-renewal is disabled, skip payment processing and expire immediately
+			if (!isAutoRenewalEnabled) {
+				console.log(`🚫 Auto-renewal disabled for user ${userId} (${userEmail}) - expiring subscription`);
+				
+				await User.updateOne(
+					{ _id: expiredUser._id },
+					{
+						$set: {
+							SubscriptionStatus: "expired",
+							IsSubscriber: false,
+							SubscriptionGracePeriodEndsOn: null,
+							SubscriptionTrialEndsOn: null,
+							SubscriptionLastTrialEndsOn: expiredUser.SubscriptionLastTrialEndsOn || expiredUser.SubscriptionTrialEndsOn || null,
+							SubscriptionExpiresOn: expiredUser.SubscriptionExpiresOn || null
+						}
+					}
+				).exec();
+				
+				console.log(`✅ User ${userId} (${userEmail}) subscription expired (auto-renewal disabled). Access revoked.`);
+				successCount++;
+				continue; // Skip payment processing
+			}
 
 			try {
 				var subscriptionPrice = null;
@@ -3090,16 +3207,20 @@ exports.createTestSyncedPost = createTestSyncedPost;
 					const annualDurationDays = Number(process.env.PLATFORM_SUBSCRIPTION_DURATION_DAYS || 365);
 					const newExpiresOn = new Date(nowTime + annualDurationDays * 24 * 60 * 60 * 1000);
 
-					// Determine new locked price:
-					// - For trial expiry: Keep the same locked price (already locked at trial start)
-					// - For annual renewal: Lock the new current platform price
-					var newLockedPrice = subscriptionPrice;
+					// Determine subscription price to save:
+					// - For trial expiry: Clear locked price (set to null) after first payment
+					//   Future renewals will always use current platform price
+					// - For annual renewal: Keep locked price as null (already cleared after first payment)
+					//   Future renewals will always use current platform price
+					var priceToSave;
 					if (isAnnualRenewal) {
-						// Annual renewal: lock the current platform price for the next year
-						newLockedPrice = currentPlatformPrice;
+						// Annual renewal: Keep locked price as null (already cleared after first payment)
+						// Future renewals will always use current platform price
+						priceToSave = null;
 					} else {
-						// Trial expiry: keep the existing locked price
-						newLockedPrice = expiredUser.SubscriptionPrice || subscriptionPrice;
+						// Trial expiry: Clear locked price after first payment
+						// This is the first payment after trial, so clear it so future renewals use current platform price
+						priceToSave = null;
 					}
 
 					// Update user subscription status to active
@@ -3112,8 +3233,11 @@ exports.createTestSyncedPost = createTestSyncedPost;
 								SubscriptionExpiresOn: newExpiresOn,
 								SubscriptionTrialEndsOn: null,
 								SubscriptionLastTrialEndsOn: expiredUser.SubscriptionTrialEndsOn || expiredUser.SubscriptionLastTrialEndsOn || null,
-								SubscriptionPrice: newLockedPrice, // Lock the price for this subscription period
-								SubscriptionCurrency: subscriptionCurrency
+								// For trial expiry: Save locked price
+								// For annual renewal: Keep original locked price (for reference only, future renewals use current price)
+								SubscriptionPrice: priceToSave,
+								SubscriptionCurrency: subscriptionCurrency,
+								SubscriptionGracePeriodEndsOn: null // Clear grace period on successful payment
 							}
 						}
 					).exec();
@@ -3142,17 +3266,59 @@ exports.createTestSyncedPost = createTestSyncedPost;
 				} else {
 					console.error(`❌ Failed to charge user ${userId} (${userEmail}): ${chargeResult.error} (${chargeResult.code})`);
 
-					// Update user subscription status to expired (payment failed)
-					await User.updateOne(
-						{ _id: expiredUser._id },
-						{
-							$set: {
-								IsSubscriber: false,
-								SubscriptionStatus: "expired",
-								SubscriptionTrialEndsOn: null
-							}
+					// Payment failed - enter grace period (1 day) if not already in grace period
+					// During grace period, payment will be retried on next cron run
+					const currentStatus = (expiredUser.SubscriptionStatus || "").toString().toLowerCase();
+					
+					if (currentStatus === "grace_period") {
+						// Already in grace period - payment retry failed
+						// Check if grace period has ended - if so, expire
+						const gracePeriodEndsOn = expiredUser.SubscriptionGracePeriodEndsOn 
+							? new Date(expiredUser.SubscriptionGracePeriodEndsOn) 
+							: null;
+						
+						if (gracePeriodEndsOn && gracePeriodEndsOn.getTime() <= nowTime) {
+							// Grace period ended and payment still failed - expire
+							await User.updateOne(
+								{ _id: expiredUser._id },
+								{
+									$set: {
+										SubscriptionStatus: "expired",
+										IsSubscriber: false,
+										SubscriptionGracePeriodEndsOn: null,
+										SubscriptionTrialEndsOn: null,
+										SubscriptionLastTrialEndsOn: expiredUser.SubscriptionLastTrialEndsOn || expiredUser.SubscriptionTrialEndsOn || null,
+										SubscriptionExpiresOn: expiredUser.SubscriptionExpiresOn || null
+									}
+								}
+							).exec();
+							
+							console.log(`⏰ User ${userId} (${userEmail}) grace period ended and payment failed - subscription expired. Access revoked.`);
+						} else {
+							// Still in grace period - will retry payment on next cron run
+							console.log(`⏰ User ${userId} (${userEmail}) payment failed but still in grace period. Will retry on next cron run.`);
 						}
-					).exec();
+					} else {
+						// Not in grace period yet - enter grace period (1 day)
+						const gracePeriodDays = 1;
+						const gracePeriodEndsOn = new Date(nowTime + gracePeriodDays * 24 * 60 * 60 * 1000);
+						
+						await User.updateOne(
+							{ _id: expiredUser._id },
+							{
+								$set: {
+									SubscriptionStatus: "grace_period",
+									IsSubscriber: true, // Keep access during grace period
+									SubscriptionGracePeriodEndsOn: gracePeriodEndsOn,
+									SubscriptionTrialEndsOn: null,
+									SubscriptionLastTrialEndsOn: expiredUser.SubscriptionLastTrialEndsOn || expiredUser.SubscriptionTrialEndsOn || null,
+									SubscriptionExpiresOn: expiredUser.SubscriptionExpiresOn || null
+								}
+							}
+						).exec();
+						
+						console.log(`⏰ User ${userId} (${userEmail}) payment failed - entered grace period until ${gracePeriodEndsOn.toISOString()}. Will retry payment. Access maintained.`);
+					}
 
 					failureCount++;
 					errors.push({
@@ -3222,11 +3388,24 @@ var expireDueSubscriptions = async function () {
 			Role: { $nin: ["admin", "subadmin"] }
 		};
 
+		// Also handle "set_to_cancel_at_period_end" - when period ends, set to expired
+		const cancelledAtPeriodEndFilter = {
+			IsDeleted: false,
+			SubscriptionStatus: "set_to_cancel_at_period_end",
+			SubscriptionExpiresOn: { $lte: now },
+			Role: { $nin: ["admin", "subadmin"] }
+		};
+
+		// Note: Cancelled subscriptions are already excluded by the status filters above
+		// (trial/active only), but we add explicit exclusion for safety
+
 		const expiredTrialUsers = await user.find(trialFilter).exec();
 		const expiredActiveUsers = await user.find(activeFilter).exec();
+		const cancelledAtPeriodEndUsers = await user.find(cancelledAtPeriodEndFilter).exec();
 
 		let trialUpdates = 0;
 		let activeUpdates = 0;
+		let cancelledAtPeriodEndUpdates = 0;
 		let errors = [];
 
 		for (let i = 0; i < expiredTrialUsers.length; i++) {
@@ -3282,18 +3461,50 @@ var expireDueSubscriptions = async function () {
 			}
 		}
 
+		// Process "set_to_cancel_at_period_end" subscriptions
+		for (let i = 0; i < cancelledAtPeriodEndUsers.length; i++) {
+			const cancelledUser = cancelledAtPeriodEndUsers[i];
+			try {
+				const updatePayload = {
+					IsSubscriber: false,
+					SubscriptionStatus: "expired",
+					SubscriptionExpiresOn: cancelledUser.SubscriptionExpiresOn || now,
+					SubscriptionTrialEndsOn: null,
+					SubscriptionLastTrialEndsOn: cancelledUser.SubscriptionLastTrialEndsOn || cancelledUser.SubscriptionTrialEndsOn || null,
+					SubscriptionGracePeriodEndsOn: null
+				};
+
+				await user.updateOne(
+					{ _id: cancelledUser._id },
+					{ $set: updatePayload }
+				).exec();
+
+				cancelledAtPeriodEndUpdates++;
+				console.log(`✅ User ${cancelledUser._id} (${cancelledUser.Email || "unknown"}) subscription expired at period end. Access revoked.`);
+			} catch (cancelledErr) {
+				console.error(`❌ Failed to expire cancelled-at-period-end user ${cancelledUser._id}:`, cancelledErr);
+				errors.push({
+					userId: cancelledUser._id,
+					type: "set_to_cancel_at_period_end",
+					error: cancelledErr.message || "Unknown error"
+				});
+			}
+		}
+
 		const summary = {
 			success: true,
 			expiredTrials: trialUpdates,
 			expiredActives: activeUpdates,
-			totalProcessed: trialUpdates + activeUpdates,
+			expiredCancelledAtPeriodEnd: cancelledAtPeriodEndUpdates,
+			totalProcessed: trialUpdates + activeUpdates + cancelledAtPeriodEndUpdates,
 			trialCandidates: expiredTrialUsers.length,
 			activeCandidates: expiredActiveUsers.length,
+			cancelledAtPeriodEndCandidates: cancelledAtPeriodEndUsers.length,
 			errors: errors
 		};
 
 		console.log("---------------------------------expireDueSubscriptions COMPLETE----------------------------------------");
-		console.log(`Summary: Trials expired: ${trialUpdates}/${expiredTrialUsers.length}, Active expired: ${activeUpdates}/${expiredActiveUsers.length}`);
+		console.log(`Summary: Trials expired: ${trialUpdates}/${expiredTrialUsers.length}, Active expired: ${activeUpdates}/${expiredActiveUsers.length}, Cancelled-at-period-end expired: ${cancelledAtPeriodEndUpdates}/${cancelledAtPeriodEndUsers.length}`);
 
 		return summary;
 	} catch (error) {

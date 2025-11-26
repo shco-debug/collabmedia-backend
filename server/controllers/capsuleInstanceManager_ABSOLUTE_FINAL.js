@@ -936,11 +936,20 @@ const createCapsuleInstance = async (
               newPageIds.push(newPage._id);
 
               // Process stream posts if applicable
+              console.log(`🔍 DEBUG: Checking stream post conditions:`, {
+                CapsuleFor: CapsuleData.LaunchSettings?.CapsuleFor,
+                StreamType: CapsuleData.LaunchSettings?.StreamType,
+                newPageMediasLength: newPage.Medias ? newPage.Medias.length : 0,
+                newPageMedias: newPage.Medias ? newPage.Medias.slice(0, 3).map(m => m.toString()) : null
+              });
+              
               if (
                 CapsuleData.LaunchSettings.CapsuleFor == "Stream" &&
                 CapsuleData.LaunchSettings.StreamType != "Group"
               ) {
+                console.log(`✅ Stream conditions met, checking Medias...`);
                 if (newPage.Medias && newPage.Medias.length) {
+                  console.log(`✅ Found ${newPage.Medias.length} media IDs in newPage.Medias`);
                   // Fetch the media documents (same ones from original stream) for streaming
                   const startTime = Date.now();
                   
@@ -950,6 +959,8 @@ const createCapsuleInstance = async (
                     _id: { $in: newPage.Medias },
                     IsDeleted: { $ne: true }
                   }).lean();
+                  
+                  console.log(`🔍 DEBUG: Media.find returned ${mediaDocsForStreaming.length} documents`);
                   
                   if (mediaDocsForStreaming.length > 0) {
                     console.log(`📋 Fetching PageStream blend configurations for ${mediaDocsForStreaming.length} media`);
@@ -1051,8 +1062,14 @@ const createCapsuleInstance = async (
                     } else {
                       console.log(`📚 E-book stream detected - skipping SyncedPost creation for capsule ${newCapsuleId}`);
                     }
+                  } else {
+                    console.log(`⚠️ WARNING: No media documents found for ${newPage.Medias.length} media IDs`);
                   }
+                } else {
+                  console.log(`⚠️ WARNING: newPage.Medias is empty or undefined`);
                 }
+              } else {
+                console.log(`⚠️ WARNING: Stream conditions not met - CapsuleFor: ${CapsuleData.LaunchSettings?.CapsuleFor}, StreamType: ${CapsuleData.LaunchSettings?.StreamType}`);
               }
             }
 
