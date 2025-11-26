@@ -100,6 +100,7 @@ module.exports = function(req, res, next){
 			'/syncGdTwoMjImage_INTERNAL_API',
 			'/addMjImageToMedia__INTERNAL_API',
 			'/addUnsplashImageToMedia__INTERNAL_API',
+			'/SynedPostEmailCronApi',
 			// '/createSinglePost' - removed to require authentication
 			// '/updatePostPrivacy' - removed to require JWT authentication
 			'/createBlend'
@@ -196,41 +197,9 @@ module.exports = function(req, res, next){
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}
 	else if(reqUrl.substring(0,8) == '/journal'){
-		//console.log("journal--- in checkSession.js");
-		var frontendApiPrefix = '/journal';
-		var unprotectedRoutes = [
-			'/streamPage',
-			'/streamPage__WithSelectedBlendCase',
-			'/stream__publicaddMembers',
-			'/addKeywordAndCallAddBlendImagesApi_INTERNAL_API',
-			'/addBlendImages_INTERNAL_API',
-			'/generatePostBlendImage_INTERNAL_API',
-			'/createNewUserAccount_INTERNAL_API',
-			'/unsubscribeEmails',
-			'/GroupStreamTopicCron__API',
-			'/PreLaunch_GroupStreamTopicCron__API',
-			'/sendPreLaunchPosts_INTERNAL_API',
-			'/addNewPost_INTERNAL_API',
-			'/addGTAsyncAwait__INTERNAL_API',
-			'/setStreamMediaSelectionCriteria__INTERNAL_API',
-			'/addComments_INTERNAL_API',
-			'/markAsAdPost',
-			'/markAsKeyPost',
-			'/markAsPost',
-			'/markAsGeneralPost',
-			'/markAsQuestionPost',
-			'/markAsInfoPost',
-			'/markAsInfoPostOwner',
-			'/markAsIsPreLaunchPost',
-			'/markAsNotPreLaunchPost',
-			'/markAsPublicQuestionPost',
-			'/markAsPrivateQuestionPost',
-			'/markAsOneTimePost',
-			'/markAsRepeatPost',
-			'/markAsBroadcastPost',
-			'/updateStreamMediaFilterSortingOrder_BROWSER_API'
-		];
-		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
+		// ALL journal routes are public/unprotected - skip authentication entirely
+		//console.log("journal--- in checkSession.js - all routes are public");
+		next();
 	}
 	else if(reqUrl.substring(0,16) == '/userManagement'){
 		var frontendApiPrefix = '/userManagement';

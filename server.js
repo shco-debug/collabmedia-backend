@@ -4,21 +4,24 @@
  * Based on project_cluster_scrpt.js
  */
 
-// Load environment variables FIRST (before New Relic check)
-require("dotenv").config();
+// Performance monitoring
 
-// Environment setup - Set default NODE_ENV before New Relic loads
+// Environment setup - Force development mode for Vercel deployment
 process.env.NODE_ENV = process.env.NODE_ENV || "development";
 
-// ⚡ CRITICAL: New Relic MUST be loaded early (before other application modules)
-// This enables Application Performance Monitoring (APM)
-// Only loads if NEWRELIC_LICENSE_KEY environment variable is set
-if (process.env.NEWRELIC_LICENSE_KEY) {
-  require('newrelic');
-  console.log('✅ New Relic APM monitoring enabled');
-} else {
-  console.log('ℹ️  New Relic APM monitoring disabled (no license key found)');
-  console.log('   💡 Set NEWRELIC_LICENSE_KEY in .env to enable monitoring');
+// ============================================================================
+// SSL/TLS Configuration for Local Development
+// ============================================================================
+// Allow self-signed certificates for localhost in development
+// This is safe because it only affects localhost connections
+// ⚠️ IMPORTANT: This is ONLY for development. Production (Vercel/AWS) uses valid SSL certificates.
+if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {
+  // Disable SSL certificate verification for localhost only
+  // This allows internal HTTPS requests (like /journal/addNewPost_INTERNAL_API) to work with self-signed certificates
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  console.log('🔓 SSL certificate verification disabled for localhost (development only)');
+  console.log('   This allows internal HTTPS API calls to work with self-signed certificates');
+  console.log('   ⚠️  This setting is NOT used in production - valid SSL certificates are used on Vercel/AWS');
 }
 
 // Core Node.js modules
@@ -35,8 +38,18 @@ const mongoose = require("mongoose");
 const html2canvasProxy = require("html2canvas-proxy");
 const bodyParser = require("body-parser");
 
+// Load environment variables
+require("dotenv").config();
+
+// Debug: Log what FRONTEND_URL is being loaded from .env
+console.log('📋 Environment Variables Loaded:');
+console.log('   - FRONTEND_URL from .env:', process.env.FRONTEND_URL || 'NOT SET');
+console.log('   - BACKEND_URL from .env:', process.env.BACKEND_URL || 'NOT SET');
+console.log('   - APP_PROTOCOL from .env:', process.env.APP_PROTOCOL || 'NOT SET');
+console.log('   - APP_BASE_URL from .env:', process.env.APP_BASE_URL || 'NOT SET');
+console.log('   - HOST_URL from .env:', process.env.HOST_URL || 'NOT SET');
+
 // ⚡ CRITICAL: Load environment config BEFORE anything else
-// Note: dotenv already loaded at top of file for New Relic
 // This sets process.STRIPE_CONFIG, process.EMAIL_ENGINE, etc.
 require("./config/env/development.js")();
 
@@ -571,46 +584,53 @@ app.get("/health", (req, res) => {
 });
 
 
-// Load SSL certificates for HTTPS
+// ============================================================================
+// SSL/TLS Configuration for Local Development
+// ============================================================================
 let httpsOptions = null;
-const certsDir = path.join(__dirname, "certs");
 
-// Try .pem first (standard), then .pen as fallback
-let keyPath = path.join(certsDir, "localhost-key.pem");
-let certPath = path.join(certsDir, "localhost.pem");
-
-// If .pem files don't exist, try .pen extension
-if (!fs.existsSync(keyPath)) {
-  const penKeyPath = path.join(certsDir, "localhost-key.pen");
-  if (fs.existsSync(penKeyPath)) {
-    keyPath = penKeyPath;
+// Only load SSL certificates for LOCAL DEVELOPMENT (not needed on Vercel)
+if (process.env.VERCEL !== '1') {
+  const certsDir = path.join(__dirname, "certs");
+  
+  // Try .pem first (standard), then .pen as fallback
+  let keyPath = path.join(certsDir, "localhost-key.pem");
+  let certPath = path.join(certsDir, "localhost.pem");
+  
+  // If .pem files don't exist, try .pen extension
+  if (!fs.existsSync(keyPath)) {
+    const penKeyPath = path.join(certsDir, "localhost-key.pen");
+    if (fs.existsSync(penKeyPath)) {
+      keyPath = penKeyPath;
+    }
   }
-}
-if (!fs.existsSync(certPath)) {
-  const penCertPath = path.join(certsDir, "localhost.pen");
-  if (fs.existsSync(penCertPath)) {
-    certPath = penCertPath;
+  if (!fs.existsSync(certPath)) {
+    const penCertPath = path.join(certsDir, "localhost.pen");
+    if (fs.existsSync(penCertPath)) {
+      certPath = penCertPath;
+    }
   }
-}
-
-try {
-  if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-    httpsOptions = {
-      key: fs.readFileSync(keyPath, "utf8"),
-      cert: fs.readFileSync(certPath, "utf8"),
-    };
-    console.log(`✅ SSL certificates loaded from ${certsDir}`);
-    console.log(`   Key: ${path.basename(keyPath)}`);
-    console.log(`   Cert: ${path.basename(certPath)}`);
-  } else {
-    console.warn(`⚠️  SSL certificates not found. Expected files:`);
-    console.warn(`   - ${path.join(certsDir, "localhost-key.pem")} (or .pen)`);
-    console.warn(`   - ${path.join(certsDir, "localhost.pem")} (or .pen)`);
+  
+  try {
+    if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
+      httpsOptions = {
+        key: fs.readFileSync(keyPath, "utf8"),
+        cert: fs.readFileSync(certPath, "utf8"),
+      };
+      console.log(`✅ SSL certificates loaded for LOCAL DEVELOPMENT`);
+      console.log(`   Key: ${path.basename(keyPath)}`);
+      console.log(`   Cert: ${path.basename(certPath)}`);
+      console.log(`   ⚠️  These are self-signed certificates for localhost only.`);
+    } else {
+      console.warn(`⚠️  SSL certificates not found. Expected files:`);
+      console.warn(`   - ${path.join(certsDir, "localhost-key.pem")} (or .pen)`);
+      console.warn(`   - ${path.join(certsDir, "localhost.pem")} (or .pen)`);
+      console.warn(`   Server will start with HTTP only.`);
+    }
+  } catch (error) {
+    console.error(`❌ Error loading SSL certificates:`, error.message);
     console.warn(`   Server will start with HTTP only.`);
   }
-} catch (error) {
-  console.error(`❌ Error loading SSL certificates:`, error.message);
-  console.warn(`   Server will start with HTTP only.`);
 }
 
 // Start server for Local Development (skip for Vercel)

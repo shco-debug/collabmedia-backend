@@ -22,7 +22,19 @@ module.exports = function(){
 	
 	// Backend URL (where API runs - for referral redirects)
 	process.BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3002';
+	
+	// Frontend URL - IMPORTANT: This is used for email unsubscribe links
+	// Priority: Use process.env.FRONTEND_URL directly (from .env file) - no fallback override
 	process.FRONTEND_URL = process.env.FRONTEND_URL || 'http://localhost:3000';
+	
+	// Debug: Log what URLs are being used
+	console.log('🌐 URL Configuration:');
+	console.log('   - process.env.FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
+	console.log('   - process.FRONTEND_URL:', process.FRONTEND_URL);
+	console.log('   - process.env.HOST_URL:', process.env.HOST_URL || 'NOT SET');
+	console.log('   - process.HOST_URL:', process.HOST_URL);
+	console.log('   - process.env.APP_PROTOCOL:', process.env.APP_PROTOCOL || 'NOT SET');
+	console.log('   - process.env.APP_BASE_URL:', process.env.APP_BASE_URL || 'NOT SET');
 	
 	// FOR PRODUCTION: Uncomment this and comment above
 	// process.AppAccessProtocal = process.env.APP_PROTOCOL || 'https://';
