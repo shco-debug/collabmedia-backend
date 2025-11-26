@@ -1645,12 +1645,12 @@ var createCelebrityInstance = async function (req, res) {
   owner.UserName = owner.Name;
 
   capsule__createNewInstance_Celebrity(CapsuleData, owner, req);
-  setTimeout(function () {
-    return res.json({
-      code: 200,
-      message: "Calebrity instance has been configured successfully.",
-    });
-  }, 3000);
+  // NO TIMEOUT - respond immediately after async operation is initiated
+  // The operation continues in background, response sent immediately
+  return res.json({
+    code: 200,
+    message: "Celebrity instance has been configured successfully.",
+  });
 };
 
 function capsule__createNewInstance_Celebrity(CapsuleData, owner, req) {

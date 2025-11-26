@@ -1127,8 +1127,11 @@ const createCapsuleInstance = async (
             return result;
           }
 
-          if (index_value_email >= 0) {
+          console.log('📧 Email Debug - index_value_email:', index_value_email, 'purchaseFor:', req.body?.purchaseFor);
+          
+          if (index_value_email >= 0 && req.body?.purchaseFor && Array.isArray(req.body.purchaseFor)) {
             const mailto = req.body.purchaseFor[index_value_email];
+            console.log('📧 Email Debug - mailto value:', mailto);
             if (mailto == "Gift") {
               emailFor = "Purchased__ForGift";
               if (CapsuleData.LaunchSettings.CapsuleFor == "Stream") {
@@ -1179,100 +1182,166 @@ const createCapsuleInstance = async (
 
           const condition = {};
           condition.name = emailFor;
+          
+          console.log('📧 Email Debug - Final emailFor template:', emailFor, 'CapsuleFor:', CapsuleData.LaunchSettings?.CapsuleFor, 'StreamType:', CapsuleData.LaunchSettings?.StreamType);
 
           if (emailFor) {
-            EmailTemplate.find(condition, {})
-              .then(async function (results) {
-                if (results.length) {
-                  setTimeout(async function () {
-                    let RecipientName = shareWithName ? shareWithName : "";
-                    const userD = await User.find(
-                      {
-                        Email: new RegExp("^" + shareWithEmail + "$", "i"),
-                        IsDeleted: false,
-                      },
-                      {
-                        Name: true,
-                        AllFoldersId: true,
-                        AllPagesId: true,
-                      }
-                    );
-
-                    let _cId = "";
-                    let _pId = "";
-                    let _StreamUrl = "https://www.scrpt.com/login";
-
-                    if (userD.length > 0) {
-                      const name = userD[0].Name ? userD[0].Name.split(" ") : [];
-                      RecipientName = name[0];
-
-                      _cId = userD[0].AllFoldersId ? userD[0].AllFoldersId : "";
-                      _pId = userD[0].AllPagesId ? userD[0].AllPagesId : "";
-                      _StreamUrl =
-                        "https://www.scrpt.com/streams/" +
-                        _cId +
-                        "/" +
-                        _pId +
-                        "?stream=" +
-                        newCapsuleId;
-                    }
-
-                    const publisherNameArr = req.session.user.Name
-                      ? req.session.user.Name.split(" ")
-                      : [];
-                    const PublisherName = publisherNameArr[0];
-
-                    let newHtml = results[0].description.replace(
-                      /{PublisherName}/g,
-                      PublisherName
-                    );
-                    newHtml = newHtml.replace(/{CapsuleName}/g, data.Title);
-                    newHtml = newHtml.replace(/{RecipientName}/g, RecipientName);
-                    newHtml = newHtml.replace(/{StreamUrl}/g, _StreamUrl);
-                    newHtml = newHtml.replace(/{IfNewUserStatement}/g, ""); // we need to make this dynamic
-
-                    const transporter = nodemailer.createTransport(
-                      process.EMAIL_ENGINE.info.smtpOptions
-                    );
-                    const to = shareWithEmail;
-                    results[0].subject =
-                      typeof results[0].subject == "string"
-                        ? results[0].subject
-                        : "";
-                    let subject = results[0].subject.replace(
-                      /{PublisherName}/g,
-                      PublisherName
-                    );
-                    subject = subject.replace(/{CapsuleName}/g, data.Title);
-                    subject =
-                      subject != ""
-                        ? subject
-                        : "Scrpt - " +
-                          PublisherName +
-                          " has published a capsule for you!";
-
-                    const mailOptions = {
-                      from: process.EMAIL_ENGINE.info.senderLine,
-                      to: to,
-                      subject: subject,
-                      text: process.HOST_URL + "/login",
-                      html: newHtml,
-                    };
-
-                    let info = await transporter.sendMail(mailOptions);
-                    info = info || {};
-                    info.response = info.response ? info.response : {};
-                    console.log(
-                      "capsule__createNewInstance---------Message sent: " +
-                        mailOptions.to +
-                        info.response
-                    );
-                  }, 3000);
+            // Use async/await instead of .then() for better error handling in production
+            try {
+              const emailTemplateResults = await EmailTemplate.find(condition, {}).exec();
+              console.log('📧 Email Debug - Template found:', emailTemplateResults.length > 0, 'Template name:', emailFor);
+              
+              if (emailTemplateResults.length) {
+                console.log('📧 Email Debug - Preparing to send email to:', shareWithEmail);
+                
+                // Check SMTP configuration before sending email
+                if (!process.EMAIL_ENGINE || !process.EMAIL_ENGINE.info || !process.EMAIL_ENGINE.info.smtpOptions) {
+                  console.error('❌ SMTP configuration missing! process.EMAIL_ENGINE:', {
+                    exists: !!process.EMAIL_ENGINE,
+                    hasInfo: !!process.EMAIL_ENGINE?.info,
+                    hasSmtpOptions: !!process.EMAIL_ENGINE?.info?.smtpOptions,
+                    env: process.env.NODE_ENV
+                  });
+                } else {
+                  console.log('✅ SMTP configuration found:', {
+                    host: process.EMAIL_ENGINE.info.smtpOptions.host,
+                    port: process.EMAIL_ENGINE.info.smtpOptions.port,
+                    user: process.EMAIL_ENGINE.info.smtpOptions.auth?.user || 'NOT SET',
+                    senderLine: process.EMAIL_ENGINE.info.senderLine
+                  });
                 }
-              })
-              .catch(function (err) {
-                console.error("Error finding email template:", err);
-              });
+                
+                // Send email asynchronously (fire and forget) but with proper error handling
+                // Using Promise.resolve().then() to ensure it runs asynchronously without delay
+                // This is more reliable than setTimeout/setImmediate in serverless environments
+                Promise.resolve().then(async function () {
+                    try {
+                      let RecipientName = shareWithName ? shareWithName : "";
+                      const userD = await User.find(
+                        {
+                          Email: new RegExp("^" + shareWithEmail + "$", "i"),
+                          IsDeleted: false,
+                        },
+                        {
+                          Name: true,
+                          AllFoldersId: true,
+                          AllPagesId: true,
+                        }
+                      );
+
+                      let _cId = "";
+                      let _pId = "";
+                      // Use environment variable for base URL, fallback to ahaday.com for backward compatibility
+                      var baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                      let _StreamUrl = baseUrl + "/login";
+
+                      if (userD.length > 0) {
+                        const name = userD[0].Name ? userD[0].Name.split(" ") : [];
+                        RecipientName = name[0];
+
+                        _cId = userD[0].AllFoldersId ? userD[0].AllFoldersId : "";
+                        _pId = userD[0].AllPagesId ? userD[0].AllPagesId : "";
+                        _StreamUrl =
+                          baseUrl + "/streams/" +
+                          _cId +
+                          "/" +
+                          _pId +
+                          "?stream=" +
+                          newCapsuleId;
+                      }
+
+                      const publisherNameArr = req.session.user.Name
+                        ? req.session.user.Name.split(" ")
+                        : [];
+                      const PublisherName = publisherNameArr[0];
+
+                      let newHtml = emailTemplateResults[0].description.replace(
+                        /{PublisherName}/g,
+                        PublisherName
+                      );
+                      newHtml = newHtml.replace(/{CapsuleName}/g, data.Title);
+                      newHtml = newHtml.replace(/{RecipientName}/g, RecipientName);
+                      newHtml = newHtml.replace(/{StreamUrl}/g, _StreamUrl);
+                      newHtml = newHtml.replace(/{IfNewUserStatement}/g, ""); // we need to make this dynamic
+
+                      // Verify SMTP configuration exists
+                      if (!process.EMAIL_ENGINE || !process.EMAIL_ENGINE.info || !process.EMAIL_ENGINE.info.smtpOptions) {
+                        console.error('❌ SMTP configuration missing when trying to send email!');
+                        console.error('   process.EMAIL_ENGINE:', !!process.EMAIL_ENGINE);
+                        console.error('   process.EMAIL_ENGINE.info:', !!process.EMAIL_ENGINE?.info);
+                        console.error('   process.EMAIL_ENGINE.info.smtpOptions:', !!process.EMAIL_ENGINE?.info?.smtpOptions);
+                        return;
+                      }
+
+                      const transporter = nodemailer.createTransport(
+                        process.EMAIL_ENGINE.info.smtpOptions
+                      );
+                      const to = shareWithEmail;
+                      emailTemplateResults[0].subject =
+                        typeof emailTemplateResults[0].subject == "string"
+                          ? emailTemplateResults[0].subject
+                          : "";
+                      let subject = emailTemplateResults[0].subject.replace(
+                        /{PublisherName}/g,
+                        PublisherName
+                      );
+                      subject = subject.replace(/{CapsuleName}/g, data.Title);
+                      subject =
+                        subject != ""
+                          ? subject
+                          : "Scrpt - " +
+                            PublisherName +
+                            " has published a capsule for you!";
+
+                      const mailOptions = {
+                        from: process.EMAIL_ENGINE.info.senderLine,
+                        to: to,
+                        subject: subject,
+                        text: baseUrl + "/login",
+                        html: newHtml,
+                      };
+
+                      console.log('📧 Sending email - To:', mailOptions.to, 'Subject:', mailOptions.subject, 'From:', mailOptions.from);
+                      console.log('📧 SMTP Config - Host:', process.EMAIL_ENGINE.info.smtpOptions.host, 'Port:', process.EMAIL_ENGINE.info.smtpOptions.port);
+                      
+                      let info = await transporter.sendMail(mailOptions);
+                      info = info || {};
+                      info.response = info.response ? info.response : {};
+                      console.log(
+                        "✅ capsule__createNewInstance---------Message sent: " +
+                          mailOptions.to +
+                          " Subject: " + mailOptions.subject +
+                          " Response: " + JSON.stringify(info.response)
+                      );
+                      console.log('📧 Email details - Stream URL:', _StreamUrl, 'Recipient:', RecipientName);
+                    } catch (emailError) {
+                      console.error('❌ Email sending failed:', emailError.message);
+                      console.error('   Email error stack:', emailError.stack);
+                      console.error('   Recipient:', shareWithEmail);
+                      console.error('   SMTP Config exists:', !!process.EMAIL_ENGINE?.info?.smtpOptions);
+                      if (process.EMAIL_ENGINE?.info?.smtpOptions) {
+                        console.error('   SMTP Host:', process.EMAIL_ENGINE.info.smtpOptions.host);
+                        console.error('   SMTP Port:', process.EMAIL_ENGINE.info.smtpOptions.port);
+                        console.error('   SMTP User:', process.EMAIL_ENGINE.info.smtpOptions.auth?.user || 'NOT SET');
+                      }
+                      // Re-throw to ensure unhandled rejection is caught
+                      throw emailError;
+                    }
+                })().catch(function(err) {
+                  // Catch any unhandled promise rejections in the async callback
+                  console.error('❌ Unhandled error in email sending callback:', err.message);
+                  console.error('   Stack:', err.stack);
+                });
+              } else {
+                console.log('⚠️ Email Debug - Email template not found in database:', emailFor);
+                console.log('   Searched for template name:', emailFor);
+                console.log('   Database query returned', emailTemplateResults.length, 'results');
+              }
+            } catch (templateError) {
+              console.error("❌ Error finding email template:", templateError.message);
+              console.error("   Template search condition:", condition);
+              console.error("   Error stack:", templateError.stack);
+            }
           }
 
           result = { success: true, capsuleId: newCapsuleId };

@@ -33,6 +33,12 @@ module.exports = function (router) {
     CronJobsModule.SynedPostEmailCronApi(req, res);
   });
 
+  // Test email endpoint for debugging email issues in production
+  router.get("/testEmail", function (req, res) {
+    const testEmail = require("../../../controllers/testEmail.js");
+    testEmail(req, res);
+  });
+
   router.get("/processSubscriptionRenewalsApi", function (req, res) {
     CronJobsModule.processSubscriptionRenewalsApi(req, res);
   });
