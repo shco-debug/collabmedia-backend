@@ -14,6 +14,10 @@ var groupTagSchema = new mongoose.Schema({
 	GroupTagTitle:{type:String}, // Added for fast search performance
 	MetaMetaTagID: {type:String,ref:'groupTags'},
 	MetaTagID: {type:String,ref:'groupTags'},
+	TagID: {type:String},            // Specific tag document ID
+	TagTitle: {type:String},         // Specific tag title (normalized)
+	TagType: {type:String},          // Tag type (subject, verb, etc.)
+	MatchedFrom: {type:String},      // Optional metadata path used for matching
 })
 
 var collectionSchema = new mongoose.Schema({

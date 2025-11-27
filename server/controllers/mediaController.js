@@ -5481,6 +5481,152 @@ const importUnsplashImagesV2 = async function (req, res) {
 
 const uploadMassImport = importUnsplashImagesV2;
 
+const METADATA_PATHS_BY_TAGTYPE = {
+  subject: ["MetaData.Subjects"],
+  metaphor: ["MetaData.Metaphors"],
+  concept: ["MetaData.Concepts"],
+  attribute: ["MetaData.Attributes"],
+  feeling: ["MetaData.Feelings"],
+  verb: ["MetaData.Verbs"],
+};
+
+const FALLBACK_METADATA_PATHS = [
+  "MetaData.Subjects",
+  "MetaData.Verbs",
+  "MetaData.Attributes",
+  "MetaData.Feelings",
+  "MetaData.Concepts",
+  "MetaData.Metaphors",
+];
+
+const escapeRegex = (str = "") => str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const getMetadataPathsForTagType = (tagType) => {
+  if (!tagType) {
+    return FALLBACK_METADATA_PATHS;
+  }
+  const key = String(tagType).toLowerCase();
+  return METADATA_PATHS_BY_TAGTYPE[key] || FALLBACK_METADATA_PATHS;
+};
+
+const buildTagUpdatePayload = (groupTagDoc, tagDoc, matchedFromPath) => ({
+  GroupTagID: String(groupTagDoc._id),
+  GroupTagTitle: groupTagDoc.GroupTagTitle || "",
+  TagID: tagDoc && tagDoc._id ? String(tagDoc._id) : undefined,
+  TagTitle: tagDoc?.TagTitle || groupTagDoc.GroupTagTitle || "",
+  TagType: tagDoc?.TagType || "",
+  MatchedFrom: matchedFromPath || "",
+});
+
+const matchAndUpdateMediaForTag = async (groupTagDoc, tagDoc) => {
+  const tagTitle = (tagDoc?.TagTitle || groupTagDoc.GroupTagTitle || "").trim();
+  if (!tagTitle) {
+    return { matchedMedia: 0, metadataPaths: [] };
+  }
+
+  const metadataPaths = getMetadataPathsForTagType(tagDoc?.TagType);
+  if (!metadataPaths.length) {
+    return { matchedMedia: 0, metadataPaths };
+  }
+
+  const regex = new RegExp(`^${escapeRegex(tagTitle)}$`, "i");
+  let matchedMedia = 0;
+
+  for (const path of metadataPaths) {
+    const filterForPath = {
+      IsDeleted: { $ne: 1 },
+      [path]: { $regex: regex },
+    };
+
+    const updatePayload = buildTagUpdatePayload(groupTagDoc, tagDoc, path);
+
+    const update = {
+      $addToSet: {
+        GroupTags: updatePayload,
+      },
+    };
+
+    const result = await media.updateMany(filterForPath, update).exec();
+    const modified =
+      result?.modifiedCount ??
+      result?.nModified ??
+      (result?.acknowledged ? result?.matchedCount : 0) ??
+      0;
+    matchedMedia += modified;
+  }
+
+  return { matchedMedia, metadataPaths };
+};
+
+const backfillMediaTagsForGroup = async (req, res) => {
+  try {
+    const groupTagId = req.body.groupTagId || req.query.groupTagId;
+    if (!groupTagId) {
+      return res.status(400).json({
+        code: 400,
+        message: "groupTagId is required",
+      });
+    }
+
+    const groupTagDoc = await groupTags
+      .findOne({
+        _id: groupTagId,
+        status: { $in: [1, 3] },
+      })
+      .lean();
+
+    if (!groupTagDoc) {
+      return res.status(404).json({
+        code: 404,
+        message: "Group tag not found or inactive",
+      });
+    }
+
+    const tagList = Array.isArray(groupTagDoc.Tags)
+      ? groupTagDoc.Tags.filter((tag) => tag?.status === 1)
+      : [];
+
+    if (!tagList.length) {
+      return res.status(400).json({
+        code: 400,
+        message: "Selected group tag does not have active tags to process",
+      });
+    }
+
+    const tagResults = [];
+    let totalMediaUpdated = 0;
+
+    for (const tag of tagList) {
+      const result = await matchAndUpdateMediaForTag(groupTagDoc, tag);
+      totalMediaUpdated += result.matchedMedia;
+      tagResults.push({
+        tagId: String(tag._id),
+        tagTitle: tag.TagTitle,
+        tagType: tag.TagType,
+        metadataPaths: result.metadataPaths,
+        mediaUpdated: result.matchedMedia,
+      });
+    }
+
+    return res.json({
+      code: 200,
+      message: "Backfill completed",
+      groupTagId: String(groupTagDoc._id),
+      groupTagTitle: groupTagDoc.GroupTagTitle,
+      tagsProcessed: tagResults.length,
+      totalMediaUpdated,
+      tagResults,
+    });
+  } catch (error) {
+    console.error("backfillMediaTagsForGroup error:", error);
+    return res.status(500).json({
+      code: 500,
+      message: "Failed to backfill media tags",
+      error: error?.message || "Unknown error",
+    });
+  }
+};
+
 module.exports = {
   crop_image,
   findAll,
@@ -5503,4 +5649,5 @@ module.exports = {
   findAllStatus,
   deleteMedia,
   uploadMassImport,
+  backfillMediaTagsForGroup,
 };

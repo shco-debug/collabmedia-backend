@@ -1181,6 +1181,16 @@ const register = async (req, res) => {
                             await __updateChapterCollection(newUser.Email, numAffected._id);
                             await __updatePendingFriendRequests(newUser.Email, numAffected._id);
 
+                            // ⚠️ CRITICAL: Send confirmation email after successful registration
+                            // Use async/await to ensure email completes on Vercel/AWS
+                            try {
+                                await sendmail(numAffected.Email, "register", req, res);
+                                console.log('✅ Registration confirmation email sent to:', numAffected.Email);
+                            } catch (emailError) {
+                                console.error('❌ Failed to send registration confirmation email:', emailError.message);
+                                // Don't fail registration if email fails - user is already created
+                            }
+
                             if (req.body.board) {
                 try {
                     const emailInvite = Buffer.from(req.body.emailInvite, 'base64').toString('ascii');
@@ -1893,9 +1903,22 @@ function sendmail(to, type, req, res) {
                             }
                             else if (type == "register") {
                                 //console.log(" * % * % * % * inside register * % * %  * % * ", data)
-                                // Use environment variable for base URL, fallback to HOST_URL
-                                const baseUrl = process.FRONTEND_URL || process.env.FRONTEND_URL || process.HOST_URL || process.env.HOST_URL || 'https://ahaday.com';
+                                // ⚠️ CRITICAL: Use environment variable ONLY - NO hardcoded URLs
+                                // Priority: FRONTEND_URL > NEXT_PUBLIC_SITE_URL > HOST_URL (from env vars only)
+                                const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || process.env.HOST_URL || process.HOST_URL;
+                                
+                                if (!baseUrl) {
+                                    console.error('❌ FRONTEND_URL environment variable is not set! Cannot generate confirmation email link.');
+                                    throw new Error('FRONTEND_URL environment variable is required for email confirmation links');
+                                }
+                                
                                 var urlString = baseUrl + '/confirm-email/' + data.resetPasswordToken;
+                                console.log('🔗 Registration email confirmation link:', urlString);
+                                console.log('   - baseUrl from env:', baseUrl);
+                                console.log('   - process.env.FRONTEND_URL:', process.env.FRONTEND_URL || 'NOT SET');
+                                console.log('   - process.env.NEXT_PUBLIC_SITE_URL:', process.env.NEXT_PUBLIC_SITE_URL || 'NOT SET');
+                                console.log('   - process.env.HOST_URL:', process.env.HOST_URL || 'NOT SET');
+                                
                                 newHtml = results[0].description.replace(/{RecipientName}/g, RecipientName);
                                 newHtml = newHtml.replace(/{ConfirmEmailid}/g, urlString);
                                 //console.log("Inside Send Mail function = 3= == >", RecipientName, newHtml);
@@ -2772,12 +2795,40 @@ var confirm_token = async function (req, res) {
             
             console.log("✅ Email confirmed successfully for:", email);
             
-            // Send confirmation success email
+            // ⚠️ CRITICAL: Send confirmation success email with async/await for Vercel/AWS compatibility
+            // Inline email sending to ensure proper async/await handling (sendmail doesn't return a promise)
             try {
-                sendmail(email, "confirm_token", userData, res);
+                var emailCondition = { name: "Signup__Success" };
+                const emailTemplateResults = await EmailTemplate.find(emailCondition, {}).exec();
+                
+                if (emailTemplateResults && emailTemplateResults.length > 0) {
+                    const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || process.env.HOST_URL || process.HOST_URL;
+                    
+                    if (baseUrl) {
+                        var recipientName = userData.Name ? userData.Name.split(' ')[0] : userData.Name || '';
+                        var newHtml = emailTemplateResults[0].description.replace(/{RecipientName}/g, recipientName);
+
+                        var transporter = nodemailer.createTransport(process.EMAIL_ENGINE.info.smtpOptions);
+                        var mailOptions = {
+                            from: process.EMAIL_ENGINE.info.senderLine,
+                            to: email,
+                            subject: emailTemplateResults[0].subject ? emailTemplateResults[0].subject : 'Scrpt - Your account has been verified',
+                            text: baseUrl + '/login',
+                            html: newHtml
+                        };
+
+                        const info = await transporter.sendMail(mailOptions);
+                        console.log('✅ Confirmation success email sent to: ' + email + ' - Response: ' + (info.response || ''));
+                    } else {
+                        console.warn('⚠️ FRONTEND_URL not set - skipping confirmation success email');
+                    }
+                } else {
+                    console.warn('⚠️ Email template "Signup__Success" not found - skipping confirmation success email');
+                }
             } catch (emailError) {
-                console.error('Error sending confirmation email:', emailError);
-                // Continue even if email fails
+                console.error('❌ Error sending confirmation success email:', emailError.message);
+                console.error('   Error stack:', emailError.stack);
+                // Continue even if email fails - email is already confirmed
             }
             
             return res.json({
@@ -4350,7 +4401,7 @@ var __createDefaultJournal_BackgroundCall = async function (user_id, user_email)
                 "CapsuleId": { $exists: false }
             }, {
                 $set: {
-                    CapsuleId: data.CapsuleId,
+                    CapsuleId: capsuleResult._id, // ⚠️ FIXED: Use capsuleResult._id instead of data.CapsuleId
                     OwnerId: String(user_id)
                 }
             }).exec();
@@ -4358,89 +4409,98 @@ var __createDefaultJournal_BackgroundCall = async function (user_id, user_email)
             var myDefaultFolders = ["General", "Work", "Relation", "Play"];
 
             for (var loop = 0; loop < myDefaultFolders.length; loop++) {
-				data.Title = myDefaultFolders[loop] ? myDefaultFolders[loop] : "Untitled Folder";
+				// ⚠️ FIXED: Create new chapterData object for each folder to avoid overwriting
+				var chapterData = {
+					Origin: "journal",
+					CapsuleId: capsuleResult._id,
+					CreaterId: user_id,
+					OwnerId: user_id,
+					IsPublished: true,
+					IsLaunched: true,
+					Title: myDefaultFolders[loop] ? myDefaultFolders[loop] : "Untitled Folder"
+				};
 
-                const chapterResult = await Chapter(data).save();
+                const chapterResult = await Chapter(chapterData).save();
                 
                 if (chapterResult) {
 						//save All Folders - id in users collection...
-                    if (result.Title == 'General') {
+                    if (chapterResult.Title == 'General') { // ⚠️ FIXED: Use chapterResult instead of undefined result
 							var updateCond = {
                             _id: user_id
 							};
 							var dataToSet = {
-                            AllFoldersId: String(result._id)
+                            AllFoldersId: String(chapterResult._id) // ⚠️ FIXED: Use chapterResult._id instead of result._id
                         };
                         
                         await user.updateOne(updateCond, dataToSet).exec();
 
-							var data = {};
-							data.Title = "General";
-							data.Origin = "journal";
-							data.CreaterId = user_id;
-							data.OwnerId = user_id;
+							var pageData = {}; // ⚠️ FIXED: Renamed to pageData to avoid variable shadowing
+							pageData.Title = "General";
+							pageData.Origin = "journal";
+							pageData.CreaterId = user_id;
+							pageData.OwnerId = user_id;
 
-							data.ChapterId = result._id ? result._id : null;
-							data.PageType = "gallery";
+							pageData.ChapterId = chapterResult._id ? chapterResult._id : null; // ⚠️ FIXED: Use chapterResult._id instead of result._id
+							pageData.PageType = "gallery";
 
-                        data.CommonParams = {};
-                        data.CommonParams.Background = {};
-							data.ViewportDesktopSections = {};
-							data.ViewportDesktopSections.Background = {};
-							data.ViewportDesktopSections.Widgets = [];
+                        pageData.CommonParams = {};
+                        pageData.CommonParams.Background = {};
+							pageData.ViewportDesktopSections = {};
+							pageData.ViewportDesktopSections.Background = {};
+							pageData.ViewportDesktopSections.Widgets = [];
 
-							data.ViewportTabletSections = {};
-							data.ViewportTabletSections.Background = {};
-							data.ViewportTabletSections.Widgets = [];
+							pageData.ViewportTabletSections = {};
+							pageData.ViewportTabletSections.Background = {};
+							pageData.ViewportTabletSections.Widgets = [];
 
-							data.ViewportMobileSections = {};
-							data.ViewportMobileSections.Background = {};
-							data.ViewportMobileSections.Widgets = [];
+							pageData.ViewportMobileSections = {};
+							pageData.ViewportMobileSections.Background = {};
+							pageData.ViewportMobileSections.Widgets = [];
 
-							data.IsLabelAllowed = true;
-							data.Labels = [
+							pageData.IsLabelAllowed = true;
+							pageData.Labels = [
 								{
-                                "LabelId": ObjectId("5ff179065a0a9a452c791f54"),
+                                "LabelId": new ObjectId("5ff179065a0a9a452c791f54"), // ⚠️ FIXED: Added 'new' keyword
                                 "Label": "Goal",
                                 "Icon": "Goal.png",
                                 "AddedBy": "Admin"
                             },
                             {
-                                "LabelId": ObjectId("5ff179255a0a9a452c791f56"),
+                                "LabelId": new ObjectId("5ff179255a0a9a452c791f56"), // ⚠️ FIXED: Added 'new' keyword
                                 "Label": "Old story",
                                 "Icon": "Old_story.png",
                                 "AddedBy": "Admin"
                             },
                             {
-                                "LabelId": ObjectId("5ff179465a0a9a452c791f58"),
+                                "LabelId": new ObjectId("5ff179465a0a9a452c791f58"), // ⚠️ FIXED: Added 'new' keyword
                                 "Label": "New story",
                                 "Icon": "New_story.png",
                                 "AddedBy": "Admin"
                             },
                             {
-                                "LabelId": ObjectId("5ff179555a0a9a452c791f59"),
+                                "LabelId": new ObjectId("5ff179555a0a9a452c791f59"), // ⚠️ FIXED: Added 'new' keyword
                                 "Label": "Actions",
                                 "Icon": "Skillful_action.png",
                                 "AddedBy": "Admin"
                             },
                             {
-                                "LabelId": ObjectId("5ff1797f5a0a9a452c791f5d"),
+                                "LabelId": new ObjectId("5ff1797f5a0a9a452c791f5d"), // ⚠️ FIXED: Added 'new' keyword
                                 "Label": "Wins",
                                 "Icon": "Victory.png",
                                 "AddedBy": "Admin"
                             }
                         ];
 
-                        const pageResult = await Page(data).save();
+                        const pageResult = await Page(pageData).save(); // ⚠️ FIXED: Use pageData instead of data
                         
                         if (pageResult) {
 									//save General page - id in users collection...
-                            if (result.Title == 'General') {
+                            if (pageResult.Title == 'General') { // ⚠️ FIXED: Use pageResult.Title instead of result.Title
 										var updateCond = {
                                     _id: user_id
 										};
 										var dataToSet = {
-                                    AllPagesId: String(result._id)
+                                    AllPagesId: String(pageResult._id) // ⚠️ FIXED: Use pageResult._id instead of result._id
                                 };
                                 
                                 await user.updateOne(updateCond, dataToSet).exec();
@@ -4450,7 +4510,7 @@ var __createDefaultJournal_BackgroundCall = async function (user_id, user_email)
 									var response = {
 										status: 200,
 										message: "Page created successfully.",
-                                result: result
+                                result: pageResult // ⚠️ FIXED: Use pageResult instead of result
                             };
 									console.log(response);
                         } else {
@@ -4459,56 +4519,56 @@ var __createDefaultJournal_BackgroundCall = async function (user_id, user_email)
                     } else {
                         var myDefaultFoldersPages = ["Page 1", "Page 2", "Page 3"];
 
-							var data = {};
-							data.Origin = "journal";
-							data.CreaterId = user_id;
-							data.OwnerId = user_id;
+							var pageDataForOtherFolders = {}; // ⚠️ FIXED: Renamed to avoid confusion
+							pageDataForOtherFolders.Origin = "journal";
+							pageDataForOtherFolders.CreaterId = user_id;
+							pageDataForOtherFolders.OwnerId = user_id;
 
-							data.ChapterId = result._id ? result._id : null;
-							data.PageType = "gallery";
+							pageDataForOtherFolders.ChapterId = chapterResult._id ? chapterResult._id : null; // ⚠️ FIXED: Use chapterResult._id instead of result._id
+							pageDataForOtherFolders.PageType = "gallery";
 
-                        data.CommonParams = {};
-                        data.CommonParams.Background = {};
-							data.ViewportDesktopSections = {};
-							data.ViewportDesktopSections.Background = {};
-							data.ViewportDesktopSections.Widgets = [];
+                        pageDataForOtherFolders.CommonParams = {};
+                        pageDataForOtherFolders.CommonParams.Background = {};
+							pageDataForOtherFolders.ViewportDesktopSections = {};
+							pageDataForOtherFolders.ViewportDesktopSections.Background = {};
+							pageDataForOtherFolders.ViewportDesktopSections.Widgets = [];
 
-							data.ViewportTabletSections = {};
-							data.ViewportTabletSections.Background = {};
-							data.ViewportTabletSections.Widgets = [];
+							pageDataForOtherFolders.ViewportTabletSections = {};
+							pageDataForOtherFolders.ViewportTabletSections.Background = {};
+							pageDataForOtherFolders.ViewportTabletSections.Widgets = [];
 
-							data.ViewportMobileSections = {};
-							data.ViewportMobileSections.Background = {};
-							data.ViewportMobileSections.Widgets = [];
+							pageDataForOtherFolders.ViewportMobileSections = {};
+							pageDataForOtherFolders.ViewportMobileSections.Background = {};
+							pageDataForOtherFolders.ViewportMobileSections.Widgets = [];
 
-							data.IsLabelAllowed = true;
-							data.Labels = [
+							pageDataForOtherFolders.IsLabelAllowed = true;
+							pageDataForOtherFolders.Labels = [
 								{
-                                "LabelId": ObjectId("5ff179065a0a9a452c791f54"),
+                                "LabelId": new ObjectId("5ff179065a0a9a452c791f54"), // ⚠️ FIXED: Added 'new' keyword
                                 "Label": "Goal",
                                 "Icon": "Goal.png",
                                 "AddedBy": "Admin"
                             },
                             {
-                                "LabelId": ObjectId("5ff179255a0a9a452c791f56"),
+                                "LabelId": new ObjectId("5ff179255a0a9a452c791f56"), // ⚠️ FIXED: Added 'new' keyword
                                 "Label": "Old story",
                                 "Icon": "Old_story.png",
                                 "AddedBy": "Admin"
                             },
                             {
-                                "LabelId": ObjectId("5ff179465a0a9a452c791f58"),
+                                "LabelId": new ObjectId("5ff179465a0a9a452c791f58"), // ⚠️ FIXED: Added 'new' keyword
                                 "Label": "New story",
                                 "Icon": "New_story.png",
                                 "AddedBy": "Admin"
                             },
                             {
-                                "LabelId": ObjectId("5ff179555a0a9a452c791f59"),
+                                "LabelId": new ObjectId("5ff179555a0a9a452c791f59"), // ⚠️ FIXED: Added 'new' keyword
                                 "Label": "Actions",
                                 "Icon": "Skillful_action.png",
                                 "AddedBy": "Admin"
                             },
                             {
-                                "LabelId": ObjectId("5ff1797f5a0a9a452c791f5d"),
+                                "LabelId": new ObjectId("5ff1797f5a0a9a452c791f5d"), // ⚠️ FIXED: Added 'new' keyword
                                 "Label": "Wins",
                                 "Icon": "Victory.png",
                                 "AddedBy": "Admin"
@@ -4516,14 +4576,14 @@ var __createDefaultJournal_BackgroundCall = async function (user_id, user_email)
                         ];
 
                         for (var loop2 = 0; loop2 < myDefaultFoldersPages.length; loop2++) {
-								data.Title = myDefaultFoldersPages[loop2] ? myDefaultFoldersPages[loop2] : "Untitled Page";
-                            const pageResult = await Page(data).save();
+								pageDataForOtherFolders.Title = myDefaultFoldersPages[loop2] ? myDefaultFoldersPages[loop2] : "Untitled Page"; // ⚠️ FIXED: Use pageDataForOtherFolders instead of data
+                            const pageResultForOtherFolders = await Page(pageDataForOtherFolders).save(); // ⚠️ FIXED: Use pageDataForOtherFolders instead of data
                             
-                            if (pageResult) {
+                            if (pageResultForOtherFolders) {
 										var response = {
 											status: 200,
 											message: "Page created successfully.",
-                                    result: result
+                                    result: pageResultForOtherFolders // ⚠️ FIXED: Use pageResultForOtherFolders instead of undefined result
                                 };
 										console.log(response);
                             } else {

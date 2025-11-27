@@ -15120,8 +15120,32 @@ var addStreamPostLike = async function(req, res) {
 	var ownerId = req.body.OwnerId ? req.body.OwnerId : null;
 	var postOwnerId = req.body.PostOwnerId ? req.body.PostOwnerId : null;
 
-	var loginUserId = req.session.user._id;
-	var loginUserName = req.session.user.Name;
+	// ⚠️ FIXED: Support both JWT (req.user) and Session (req.session.user) authentication
+	var loginUserId = null;
+	var loginUserName = null;
+	
+	// Check JWT authentication first (req.user)
+	if (req?.user?.userId) {
+		loginUserId = req.user.userId;
+		loginUserName = req.user.Name || req.user.name || null;
+	} else if (req?.user?._id) {
+		loginUserId = req.user._id;
+		loginUserName = req.user.Name || req.user.name || null;
+	}
+	// Check session authentication (req.session.user)
+	else if (req?.session?.user?._id) {
+		loginUserId = req.session.user._id;
+		loginUserName = req.session.user.Name || req.session.user.name || null;
+	}
+	
+	// If no authentication found, return error
+	if (!loginUserId) {
+		return res.status(401).json({
+			status: "error",
+			message: "Authentication required. Please login to like posts.",
+			results: []
+		});
+	}
 
 	// ✅ CRITICAL: SocialPostId MUST be SyncedPost._id (not Media document's PostId)
 	// This is the _id from the SyncedPost collection, which is what the frontend sends
