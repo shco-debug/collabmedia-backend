@@ -3123,6 +3123,11 @@ var getSearchGalleryMediasV2 = async function( req , res ){
 			}
 }
 
+/**
+ * Get search gallery medias - Filters images by tags (GroupTags) only
+ * Note: This function does NOT use FSG (personality traits) for filtering or ranking
+ * Images are fetched and ranked based solely on tag matching
+ */
 var getSearchGalleryMedias = async function (req, res) {
 	var selectedKeywords = req.body.selectedKeywords ? req.body.selectedKeywords : [];
 	var mp_selectedWords = req.body.selectedWords ? req.body.selectedWords : [];
@@ -3133,10 +3138,13 @@ var getSearchGalleryMedias = async function (req, res) {
 	var login_user_id = String(req.session.user._id);
 	var outCollection = "UserMedia_"+login_user_id;
 	
+	// Note: userFSGs from req.body.userFSGs is ignored - filtering is tag-based only
+	
 	// Handle both old format (array of strings) and new format (array of objects with groupTagId and tagId)
 	var keywordGroupTagIds = [];
 	var keywordTagIds = [];
 	var validatedGroupTagIds = [];
+	var validatedTagIds = [];
 	
 	if (selectedKeywords.length > 0) {
 		if (typeof selectedKeywords[0] === 'string') {
@@ -3166,19 +3174,29 @@ var getSearchGalleryMedias = async function (req, res) {
 					if (validatedGroupTagIds.length === 0) {
 						validatedGroupTagIds = keywordGroupTagIds;
 					}
+					
+					validatedTagIds = keywordTagIds;
 				} catch (validationError) {
 					console.log('Tag validation error, using provided GroupTag IDs:', validationError.message);
 					validatedGroupTagIds = keywordGroupTagIds;
+					validatedTagIds = keywordTagIds;
 				}
 			} else {
 				// No tag IDs provided, use GroupTag IDs directly
 				validatedGroupTagIds = keywordGroupTagIds;
+				validatedTagIds = [];
 			}
 		}
 	}
 	
-	// Use the validated GroupTag IDs for the rest of the function
-	selectedKeywords = validatedGroupTagIds;
+	// Use the validated IDs for the rest of the function
+	var selectedGroupTagIds = validatedGroupTagIds.length ? validatedGroupTagIds : keywordGroupTagIds;
+	if (!selectedGroupTagIds.length && typeof selectedKeywords[0] === 'string') {
+		selectedGroupTagIds = selectedKeywords;
+	}
+	selectedGroupTagIds = selectedGroupTagIds.filter(Boolean);
+	var selectedTagIds = validatedTagIds.length ? validatedTagIds : keywordTagIds;
+	selectedTagIds = selectedTagIds.filter(Boolean);
 	
 	var allWords = [];
 	for(var i = 0; i < mp_selectedWords.length; i++) {
@@ -3243,12 +3261,21 @@ var getSearchGalleryMedias = async function (req, res) {
 		InAppropFlagCount : { $lt:5 }
 	};
 	
-	if(selectedKeywords.length){
+	if(selectedGroupTagIds.length){
 		conditions["MetaMetaTags"] = {
 			$nin : []
 		};
 		
-		conditions["GroupTags"] = { $in : selectedKeywords };
+		if (selectedTagIds.length) {
+			conditions["GroupTags"] = {
+				$elemMatch: {
+					GroupTagID: { $in : selectedGroupTagIds },
+					TagID: { $in : selectedTagIds }
+				}
+			};
+		} else {
+			conditions["GroupTags.GroupTagID"] = { $in : selectedGroupTagIds };
+		}
 		conditions["$or"] = [
 			{MediaType : "Image"},
 			{MediaType : "Link" , LinkType: "image" , IsUnsplashImage : {$exists:true}, IsUnsplashImage : true}
@@ -3263,10 +3290,19 @@ var getSearchGalleryMedias = async function (req, res) {
 	var limit = page*per_page;	//48
 	
 	var aggregateStages = [];
-	if(selectedKeywords.length) {
-		conditions["GroupTags"] = {
-			$in : selectedKeywords
-		};
+	if(selectedGroupTagIds.length) {
+		if (selectedTagIds.length) {
+			conditions["GroupTags"] = {
+				$elemMatch: {
+					GroupTagID: { $in : selectedGroupTagIds },
+					TagID: { $in : selectedTagIds }
+				}
+			};
+		} else {
+			conditions["GroupTags.GroupTagID"] = {
+				$in : selectedGroupTagIds
+			};
+		}
 		
 		conditions["$or"] = [
 			{ MediaType : "Image", AddedHow: "uploadImageTool", Source: "ChatGPT_MJ" },
@@ -3280,11 +3316,11 @@ var getSearchGalleryMedias = async function (req, res) {
 		
 		//this is the grouptags set by rank
 		var subsetByRank = {};
-		var selKeywordsLen = selectedKeywords.length;
+		var selKeywordsLen = selectedGroupTagIds.length;
 		var totalSets = [];
 		for(var i = 0; i < selKeywordsLen; i++) {
-			if(selectedKeywords.indexOf(groupTagID) < 0) {
-				totalSets.push([selectedKeywords[i]]);
+			if(selectedGroupTagIds.indexOf(groupTagID) < 0) {
+				totalSets.push([selectedGroupTagIds[i]]);
 			}
 		}
 		totalSets.push([groupTagID]);
@@ -3403,7 +3439,7 @@ var getSearchGalleryMedias = async function (req, res) {
 	var Model = createModelForName(stuff.name);
 	var userMedia_userIdmodel = Model;
 	
-	//var sortObj = {'value.MaxFSGSort':-1,'value.AvgFSGSort':-1,'value.MediaScore':-1,'value.RandomSortId':1,'value.UploadedOn':-1};
+	// Sort by tag-based ranks and upload date (no FSG sorting)
 	var sortObj = {"value.Ranks" : -1, "value.UploadedOn" : -1};
 	//var pageLimit = 48;	
 	var pageLimit = page*per_page;	

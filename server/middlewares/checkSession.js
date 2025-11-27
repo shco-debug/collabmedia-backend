@@ -197,9 +197,17 @@ module.exports = function(req, res, next){
 		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}
 	else if(reqUrl.substring(0,8) == '/journal'){
-		// ALL journal routes are public/unprotected - skip authentication entirely
-		//console.log("journal--- in checkSession.js - all routes are public");
-		next();
+		// Journal routes - require authentication for all routes except specific public/internal APIs
+		var frontendApiPrefix = '/journal';
+		var unprotectedRoutes = [
+			'/addNewPost_INTERNAL_API',  // Internal API calls (server-to-server)
+			'/addBlendImages_INTERNAL_API',
+			'/generatePostBlendImage_INTERNAL_API',
+			'/resetUsedMediaForPage_INTERNAL_API',
+			'/streamPage',  // Public stream pages for buyers (no auth needed to view)
+			'/streamPage__WithSelectedBlendCase',  // Public stream pages (no auth needed to view)
+		];
+		checkUnprotectedRoutes(req , res , next , frontendApiPrefix , unprotectedRoutes , reqUrl);
 	}
 	else if(reqUrl.substring(0,16) == '/userManagement'){
 		var frontendApiPrefix = '/userManagement';
@@ -344,6 +352,7 @@ function checkSubAdminSession(req , res , next){
 
 function checkSession(req , res , next , frontendApiPrefix , reqUrl){
 	// Use JWT authentication instead of session-based authentication
+	// Note: sessionCompatibility middleware (registered globally) will map req.user to req.session.user after authentication
 	authenticateJWT(req, res, next);
 }
 

@@ -979,8 +979,6 @@ var keywordParsar_aggregate = function( req , res ){
 	//return;
 	var login_user_id = "";
 	if(req.session && req.session.user){
-		console.log("Session is set!");
-		console.log(JSON.stringify(req.session.user));
 		if( req.session.user._id != undefined ){
 			login_user_id = req.session.user._id;
 		}
@@ -998,18 +996,13 @@ var keywordParsar_aggregate = function( req , res ){
 	var inputText = req.body.inputText ? req.body.inputText.toLowerCase().trim() : "";
 	inputText = inputText.replace(/["']/g, "");
 	
-	console.log("🔍 DEBUG: inputText =", inputText);
-	console.log("🔍 DEBUG: keywordsArr =", keywordsArr);
-	
 	// Use groupTags with Tags array instead of alltags collection
 	// This replicates the exact logic from scrpt but uses groupTags.Tags
 	
 	// Use the exact same approach as scrpt: $text search + mapReduce logic
-	console.log("🔍 DEBUG: Using $text search approach like scrpt...");
 	
 	// Set a timeout to prevent hanging (increased to 45 seconds for large datasets)
 	var timeoutId = setTimeout(function() {
-		console.log("🔍 DEBUG: Request timeout - returning empty response");
 		if (!res.headersSent) {
 			res.json({
 				"code": "200",
@@ -1026,132 +1019,107 @@ var keywordParsar_aggregate = function( req , res ){
 		}
 	}, 45000); // 45 second timeout
 	
-	// First, let's check what's actually in the database without any filters
-	console.log("🔍 DEBUG: First checking what data exists in groupTags collection...");
-	keywordModel.find({}).limit(5).then(function(allGroupTags) {
-		console.log("🔍 DEBUG: Total groupTags in database (first 5):", allGroupTags.length);
-		if(allGroupTags.length > 0) {
-			console.log("🔍 DEBUG: Sample groupTag structure:", JSON.stringify(allGroupTags[0], null, 2));
-			console.log("🔍 DEBUG: Does it have Tags array?", allGroupTags[0].Tags ? "YES" : "NO");
-			if(allGroupTags[0].Tags && allGroupTags[0].Tags.length > 0) {
-				console.log("🔍 DEBUG: Sample Tag:", JSON.stringify(allGroupTags[0].Tags[0], null, 2));
-			}
+	// Direct search for GroupTags where GroupTagTitle matches input text
+	// Use case-insensitive regex for exact match or word boundary match
+	var queryConditions = {
+		GroupTagTitle: new RegExp("^" + inputText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "$", "i"),  // Escape special regex chars and exact match
+		status: { $in: [1, 3] },
+		MetaMetaTagID: { 
+			$nin: process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase || []
 		}
-		
-		// Now try $text search like scrpt does - this requires a text index on the collection
-		return keywordModel.find({ 
-			$text: { $search: inputText },  // Use MongoDB text search like scrpt
-			status: { $in: [1, 3] },
-			MetaMetaTagID: { 
-				$nin: process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase 
-			}
-		}).limit(100);
-		
-	}).then(function(groupTags) {
+	};
+	
+	keywordModel.find(queryConditions)
+		.limit(100)
+		.then(function(groupTags) {
 		clearTimeout(timeoutId);
 		
-		console.log("🔍 DEBUG: Found", groupTags.length, "groupTags with $text search");
-		
-		// Debug: Show sample data
-		if(groupTags.length > 0) {
-			console.log("🔍 DEBUG: Sample groupTag:", JSON.stringify(groupTags[0], null, 2));
-		}
-		
-		// Process tags manually (simpler than aggregation)
+		// Process tags: Find GroupTags where GroupTagTitle matches input words, then return ALL tags from those groups
 		var matchedArr = [];
 		var suggestedArr = [];
 		var difference = [];
 		var difference_neg = [];
-		var totalTagsProcessed = 0;
 		
-		// First pass: Check if GroupTagTitle itself matches any input word (PRIORITY)
-		for(var i = 0; i < groupTags.length; i++) {
-			var groupTag = groupTags[i];
+		// All groupTags returned already match, so use them directly
+		var matchingGroupTags = groupTags || [];
+		
+		// Additional filtering: ensure exact word boundary match
+		var finalMatchingGroupTags = [];
+		for(var i = 0; i < matchingGroupTags.length; i++) {
+			var groupTag = matchingGroupTags[i];
 			var groupTagTitle = groupTag.GroupTagTitle ? groupTag.GroupTagTitle.toLowerCase().trim() : "";
 			
 			if(groupTagTitle != "" && groupTagTitle != null) {
-				// Check if GroupTagTitle matches input text
-				if (new RegExp("\\b" + groupTagTitle + "\\b").test(inputText)) {
-					console.log("🔍 DEBUG: Found GroupTagTitle match:", groupTagTitle);
-					
-					// Return top 10 tags from this groupTag
-					var topTags = groupTag.Tags ? groupTag.Tags.filter(function(t) { return t.status === 1; }).slice(0, 10) : [];
-					
-					var keywordObj = {
-						keyword: {
-							title: groupTagTitle,
-							id: groupTag._id,
-							groupTitle: groupTag.GroupTagTitle,
-							tags: topTags,  // Top 10 tags from THIS groupTag
-							from: 'ans'
-						}
-					};
-					
-					if(groupTagTitle == inputText) {
-						matchedArr.push(keywordObj);
-						suggestedArr.push(keywordObj);
-					} else {
-						suggestedArr.push(keywordObj);
+				// Check if GroupTagTitle exactly matches any input word
+				var isMatch = false;
+				for(var w = 0; w < inputWords.length; w++) {
+					var inputWord = inputWords[w].toLowerCase().trim();
+					// Exact match or word boundary match
+					if (groupTagTitle === inputWord || new RegExp("\\b" + groupTagTitle + "\\b").test(inputWord) || new RegExp("\\b" + inputWord + "\\b").test(groupTagTitle)) {
+						console.log("Found GroupTag:", groupTag.GroupTagTitle);
+						isMatch = true;
+						break;
 					}
-					difference.push(keywordObj);
+				}
+				if(isMatch) {
+					finalMatchingGroupTags.push(groupTag);
 				}
 			}
 		}
+		matchingGroupTags = finalMatchingGroupTags;
 		
-		// Second pass: Check individual tags (only if not already found via GroupTagTitle)
-		for(var i = 0; i < groupTags.length; i++) {
-			var groupTag = groupTags[i];
+		// For each matching GroupTag, return ALL tags from that group
+		for(var i = 0; i < matchingGroupTags.length; i++) {
+			var groupTag = matchingGroupTags[i];
+			var groupTagTitle = groupTag.GroupTagTitle;
 			
-			// Process each tag in the Tags array
+			// Get all active tags from this group
 			if(groupTag.Tags && groupTag.Tags.length > 0) {
-				for(var j = 0; j < groupTag.Tags.length; j++) {
-					var tag = groupTag.Tags[j];
-					totalTagsProcessed++;
+				var activeTags = groupTag.Tags.filter(function(t) { return t.status === 1; });
+				
+				// Create a keyword object for each tag
+				for(var j = 0; j < activeTags.length; j++) {
+					var tag = activeTags[j];
 					
-					if(tag.status === 1 && tag.TagTitle) { // Only active tags
-						var keywordTitle = tag.TagTitle.toLowerCase().trim();
+					if(tag.TagTitle) {
+						var groupTagIdStr = groupTag._id ? String(groupTag._id) : null;
+						var tagIdStr = tag._id ? String(tag._id) : null;
 						
-						// Use scrpt's exact regex logic
-						if (new RegExp("\\b" + keywordTitle + "\\b").test(inputText)) {
-							// Check if this keyword is already in suggestedArr
-							var alreadyExists = suggestedArr.some(function(item) {
-								return item.keyword.title === keywordTitle;
-							});
-							
-							if(!alreadyExists) {
-								// Return top 10 tags from this groupTag
-								var topTags = groupTag.Tags.filter(function(t) { return t.status === 1; }).slice(0, 10);
-								
-								var keywordObj = {
-									keyword: {
-										title: keywordTitle,
-										id: groupTag._id,
-										tagId: tag._id,
-										groupTitle: groupTag.GroupTagTitle,
-										tags: topTags,
-										from: 'ans'
-									}
-								};
-								
-								if(keywordTitle == inputText) {
-									matchedArr.push(keywordObj);
-									suggestedArr.push(keywordObj);
-								} else {
-									suggestedArr.push(keywordObj);
-								}
-								difference.push(keywordObj);
+						if(!groupTagIdStr || !tagIdStr) {
+							continue; // Skip if IDs are missing
+						}
+						
+						var keywordObj = {
+							keyword: {
+								title: tag.TagTitle,  // Tag title (e.g., "tag1")
+								id: groupTagIdStr,     // GroupTag ID (string)
+								tagId: tagIdStr,       // Tag ID (string)
+								groupTitle: groupTagTitle,  // GroupTag title (e.g., "labyrinth")
+								tags: activeTags,     // All tags from this group for reference
+								from: 'ans'
+							}
+						};
+						
+						// Check if exact match
+						var isExactMatch = false;
+						for(var w = 0; w < inputWords.length; w++) {
+							if(inputWords[w].toLowerCase().trim() === groupTagTitle.toLowerCase().trim()) {
+								isExactMatch = true;
+								break;
 							}
 						}
+						
+						if(isExactMatch) {
+							matchedArr.push(keywordObj);
+							suggestedArr.push(keywordObj);
+						} else {
+							suggestedArr.push(keywordObj);
+						}
+						difference.push(keywordObj);
 					}
 				}
 			}
 		}
-		
-		console.log("🔍 DEBUG: Total tags processed:", totalTagsProcessed);
-		
-		console.log("🔍 DEBUG: Final matchedArr =", JSON.stringify(matchedArr));
-		console.log("🔍 DEBUG: Final suggestedArr =", JSON.stringify(suggestedArr));
-		console.log("🔍 DEBUG: Final difference =", JSON.stringify(difference));
 		
 		// Create response in the exact same format as scrpt
 		var response = {
@@ -1163,136 +1131,119 @@ var keywordParsar_aggregate = function( req , res ){
 			"result": suggestedArr  // Frontend expects this
 		};
 		
-		console.log("🔍 DEBUG: Final response =", JSON.stringify(response, null, 2));
 		res.json({"code":"200","msg":"Success","response":response});
 		return;
 		
 	}).catch(function(err) {
 		clearTimeout(timeoutId);
-		console.log("🔍 DEBUG: Query error =", err);
 		
-		// If text index doesn't exist, fall back to simpler search
-		if (err.message && (err.message.includes('text index') || err.message.includes('text search'))) {
-			console.log("🔍 DEBUG: No text index found, falling back to simpler search...");
-			console.log("🔍 DEBUG: Error message:", err.message);
+		// If query fails, fall back to simpler search
+		if (err) {
+			console.log("Primary query failed, using fallback:", err.message);
 			
-			// Fallback: Get limited groupTags and manually search (optimized for speed)
-			keywordModel.find({ 
+			// Fallback: Direct query for GroupTagTitle match (same as primary query)
+			var fallbackQuery = {
+				GroupTagTitle: new RegExp("^" + inputText.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + "$", "i"),  // Escape special regex chars and exact match
 				status: { $in: [1, 3] },
 				MetaMetaTagID: { 
-					$nin: process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase 
+					$nin: process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase || []
 				}
-			}, { _id: 1, GroupTagTitle: 1, Tags: 1, MediaCount: 1 }) // Only fetch necessary fields
-			.sort({ MediaCount: -1 }) // Sort by MediaCount descending (most popular first)
-			.limit(500) // Increased limit to ensure we find relevant keywords
-			.lean() // Use lean() for faster queries
-			.then(function(groupTags) {
-				clearTimeout(timeoutId);
-				
-				console.log("🔍 DEBUG: Fallback - Found", groupTags.length, "groupTags");
-				
-				if(groupTags.length > 0) {
-					console.log("🔍 DEBUG: Sample groupTag:", JSON.stringify(groupTags[0], null, 2));
-				}
-				
-				var matchedArr = [];
-				var suggestedArr = [];
-				var difference = [];
-				var difference_neg = [];
-				var totalTagsChecked = 0;
-				var inputWords = inputText.split(/\s+/);
-				
-				console.log("🔍 DEBUG: Input words to search:", inputWords);
-				
-				// First pass: Check if GroupTagTitle itself matches any input word
-				// This takes priority over matching individual tags
-				for(var i = 0; i < groupTags.length; i++) {
-					var groupTag = groupTags[i];
-					var groupTagTitle = groupTag.GroupTagTitle ? groupTag.GroupTagTitle.toLowerCase().trim() : "";
+			};
+			
+			keywordModel.find(fallbackQuery)
+				.limit(100)
+				.lean() // Use lean() for faster queries
+				.then(function(groupTags) {
+					clearTimeout(timeoutId);
 					
-					if(groupTagTitle != "" && groupTagTitle != null) {
-						// Check if GroupTagTitle matches input text
-						if (new RegExp("\\b" + groupTagTitle + "\\b").test(inputText)) {
-							console.log("🔍 DEBUG: Found GroupTagTitle match:", groupTagTitle);
-							
-							// Return top 5 tags from this groupTag as separate keyword objects
-							var topTags = groupTag.Tags ? groupTag.Tags.filter(function(t) { return t.status === 1; }).slice(0, 5) : [];
-							
-							// Create separate keyword object for each tag
-							for(var k = 0; k < topTags.length; k++) {
-								var tag = topTags[k];
-								var keywordObj = {
-									keyword: {
-										title: tag.TagTitle,
-										id: groupTag._id,
-										tagId: tag._id,
-										groupTitle: groupTag.GroupTagTitle,
-										tags: topTags,  // Keep all tags for reference
-										from: 'ans'
-									}
-								};
-								
-								if(groupTagTitle == inputText) {
-									matchedArr.push(keywordObj);
-									suggestedArr.push(keywordObj);
-								} else {
-									suggestedArr.push(keywordObj);
+					var matchedArr = [];
+					var suggestedArr = [];
+					var difference = [];
+					var difference_neg = [];
+					
+					// Split input text into words for matching
+					var inputWords = inputText.split(/\s+/).filter(function(word) { return word.length > 0; });
+					
+					// All groupTags returned already match, so use them directly
+					var matchingGroupTags = groupTags || [];
+					
+					// Additional filtering: ensure exact word boundary match
+					var finalMatchingGroupTags = [];
+					for(var i = 0; i < matchingGroupTags.length; i++) {
+						var groupTag = matchingGroupTags[i];
+						var groupTagTitle = groupTag.GroupTagTitle ? groupTag.GroupTagTitle.toLowerCase().trim() : "";
+						
+						if(groupTagTitle != "" && groupTagTitle != null) {
+							// Check if GroupTagTitle exactly matches any input word
+							var isMatch = false;
+							for(var w = 0; w < inputWords.length; w++) {
+								var inputWord = inputWords[w].toLowerCase().trim();
+								// Exact match or word boundary match
+								if (groupTagTitle === inputWord || new RegExp("\\b" + groupTagTitle + "\\b").test(inputWord) || new RegExp("\\b" + inputWord + "\\b").test(groupTagTitle)) {
+									console.log("Found GroupTag:", groupTag.GroupTagTitle);
+									isMatch = true;
+									break;
 								}
-								difference.push(keywordObj);
+							}
+							if(isMatch) {
+								finalMatchingGroupTags.push(groupTag);
 							}
 						}
 					}
-				}
+					matchingGroupTags = finalMatchingGroupTags;
 				
-				// Second pass: Check individual tags (only if not already found in GroupTagTitle)
-				for(var i = 0; i < groupTags.length; i++) {
-					var groupTag = groupTags[i];
-					
-					if(groupTag.Tags && groupTag.Tags.length > 0) {
-						for(var j = 0; j < groupTag.Tags.length; j++) {
-							var tag = groupTag.Tags[j];
-							totalTagsChecked++;
+					// For each matching GroupTag, return ALL tags from that group
+					for(var i = 0; i < matchingGroupTags.length; i++) {
+						var groupTag = matchingGroupTags[i];
+						var groupTagTitle = groupTag.GroupTagTitle;
+						
+						// Get all active tags from this group
+						if(groupTag.Tags && groupTag.Tags.length > 0) {
+							var activeTags = groupTag.Tags.filter(function(t) { return t.status === 1; });
 							
-							if(tag.status === 1 && tag.TagTitle) {
-								var keywordTitle = tag.TagTitle.toLowerCase().trim();
+							// Create a keyword object for each tag
+							for(var j = 0; j < activeTags.length; j++) {
+								var tag = activeTags[j];
 								
-								if (new RegExp("\\b" + keywordTitle + "\\b").test(inputText)) {
-									// Check if this keyword is already in suggestedArr from GroupTagTitle match
-									var alreadyExists = suggestedArr.some(function(item) {
-										return item.keyword.title === keywordTitle;
-									});
+								if(tag.TagTitle) {
+									var groupTagIdStr = groupTag._id ? String(groupTag._id) : null;
+									var tagIdStr = tag._id ? String(tag._id) : null;
 									
-									if(!alreadyExists) {
-										// Return top 10 tags from this groupTag
-										var topTags = groupTag.Tags.filter(function(t) { return t.status === 1; }).slice(0, 10);
-										
-										var keywordObj = {
-											keyword: {
-												title: keywordTitle,
-												id: groupTag._id,
-												tagId: tag._id,
-												groupTitle: groupTag.GroupTagTitle,
-												tags: topTags,
-												from: 'ans'
-											}
-										};
-										
-										if(keywordTitle == inputText) {
-											matchedArr.push(keywordObj);
-											suggestedArr.push(keywordObj);
-										} else {
-											suggestedArr.push(keywordObj);
-										}
-										difference.push(keywordObj);
+									if(!groupTagIdStr || !tagIdStr) {
+										continue; // Skip if IDs are missing
 									}
+									
+									var keywordObj = {
+										keyword: {
+											title: tag.TagTitle,  // Tag title (e.g., "tag1")
+											id: groupTagIdStr,     // GroupTag ID (string)
+											tagId: tagIdStr,       // Tag ID (string)
+											groupTitle: groupTagTitle,  // GroupTag title (e.g., "labyrinth")
+											tags: activeTags,     // All tags from this group for reference
+											from: 'ans'
+										}
+									};
+									
+									// Check if exact match
+									var isExactMatch = false;
+									for(var w = 0; w < inputWords.length; w++) {
+										if(inputWords[w].toLowerCase().trim() === groupTagTitle.toLowerCase().trim()) {
+											isExactMatch = true;
+											break;
+										}
+									}
+									
+									if(isExactMatch) {
+										matchedArr.push(keywordObj);
+										suggestedArr.push(keywordObj);
+									} else {
+										suggestedArr.push(keywordObj);
+									}
+									difference.push(keywordObj);
 								}
 							}
 						}
 					}
-				}
-				
-				console.log("🔍 DEBUG: Total tags checked:", totalTagsChecked);
-				console.log("🔍 DEBUG: Matches found:", suggestedArr.length);
 				
 				var response = {
 					"inputText": inputText,
@@ -1303,12 +1254,10 @@ var keywordParsar_aggregate = function( req , res ){
 					"result": suggestedArr
 				};
 				
-				console.log("🔍 DEBUG: Fallback response =", JSON.stringify(response, null, 2));
 				res.json({"code":"200","msg":"Success","response":response});
 			return;
 				
 			}).catch(function(fallbackErr) {
-				console.log("🔍 DEBUG: Fallback error =", fallbackErr);
 				if (!res.headersSent) {
 					res.json({"status":"error","message":"No keywords found"});
 				}

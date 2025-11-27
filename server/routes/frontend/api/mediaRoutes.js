@@ -131,6 +131,10 @@ module.exports = function (router) {
     media.addTagsToUploadedMedia(req, res);
   });
 
+  router.post("/backfillMediaTagsForGroup", function (req, res) {
+    media.backfillMediaTagsForGroup(req, res);
+  });
+
   router.post("/addViews", function (req, res) {
     media.viewMedia(req, res);
   });
