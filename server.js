@@ -10,25 +10,13 @@
 process.env.NODE_ENV = process.env.NODE_ENV || "development";
 
 // ============================================================================
-// SSL/TLS Configuration for Local Development
+// HTTP Configuration (HTTPS disabled)
 // ============================================================================
-// Allow self-signed certificates for localhost in development
-// This is safe because it only affects localhost connections
-// ⚠️ IMPORTANT: This is ONLY for development. Production (Vercel/AWS) uses valid SSL certificates.
-if (process.env.NODE_ENV !== 'production' && process.env.VERCEL !== '1') {
-  // Disable SSL certificate verification for localhost only
-  // This allows internal HTTPS requests (like /journal/addNewPost_INTERNAL_API) to work with self-signed certificates
-  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
-  console.log('🔓 SSL certificate verification disabled for localhost (development only)');
-  console.log('   This allows internal HTTPS API calls to work with self-signed certificates');
-  console.log('   ⚠️  This setting is NOT used in production - valid SSL certificates are used on Vercel/AWS');
-}
+// Server runs on HTTP only - SSL/TLS termination handled by nginx if needed
 
 // Core Node.js modules
 const fs = require("fs");
-const tls = require("tls");
 const path = require("path");
-const https = require("https");
 
 // Third-party modules
 const express = require("express");
@@ -587,53 +575,9 @@ app.get("/health", (req, res) => {
 
 
 // ============================================================================
-// SSL/TLS Configuration for Local Development
+// HTTP Server Configuration (HTTPS disabled)
 // ============================================================================
-let httpsOptions = null;
-
-// Only load SSL certificates for LOCAL DEVELOPMENT (not needed on Vercel)
-if (process.env.VERCEL !== '1') {
-  const certsDir = path.join(__dirname, "certs");
-  
-  // Try .pem first (standard), then .pen as fallback
-  let keyPath = path.join(certsDir, "localhost-key.pem");
-  let certPath = path.join(certsDir, "localhost.pem");
-  
-  // If .pem files don't exist, try .pen extension
-  if (!fs.existsSync(keyPath)) {
-    const penKeyPath = path.join(certsDir, "localhost-key.pen");
-    if (fs.existsSync(penKeyPath)) {
-      keyPath = penKeyPath;
-    }
-  }
-  if (!fs.existsSync(certPath)) {
-    const penCertPath = path.join(certsDir, "localhost.pen");
-    if (fs.existsSync(penCertPath)) {
-      certPath = penCertPath;
-    }
-  }
-  
-  try {
-    if (fs.existsSync(keyPath) && fs.existsSync(certPath)) {
-      httpsOptions = {
-        key: fs.readFileSync(keyPath, "utf8"),
-        cert: fs.readFileSync(certPath, "utf8"),
-      };
-      console.log(`✅ SSL certificates loaded for LOCAL DEVELOPMENT`);
-      console.log(`   Key: ${path.basename(keyPath)}`);
-      console.log(`   Cert: ${path.basename(certPath)}`);
-      console.log(`   ⚠️  These are self-signed certificates for localhost only.`);
-    } else {
-      console.warn(`⚠️  SSL certificates not found. Expected files:`);
-      console.warn(`   - ${path.join(certsDir, "localhost-key.pem")} (or .pen)`);
-      console.warn(`   - ${path.join(certsDir, "localhost.pem")} (or .pen)`);
-      console.warn(`   Server will start with HTTP only.`);
-    }
-  } catch (error) {
-    console.error(`❌ Error loading SSL certificates:`, error.message);
-    console.warn(`   Server will start with HTTP only.`);
-  }
-}
+// Server will run on HTTP only - SSL/TLS handled by nginx if needed
 
 // Start server for Local Development (skip for Vercel)
 if (process.env.VERCEL !== '1') {
@@ -642,29 +586,16 @@ if (process.env.VERCEL !== '1') {
   // Connect to MongoDB first, then start the server
   connectToMongoDB().then((connected) => {
     if (connected) {
-      // Use HTTPS if certificates are available, otherwise HTTP
-      if (httpsOptions) {
-        const httpsServer = https.createServer(httpsOptions, app);
+      // Always use HTTP server (HTTPS disabled)
+      const httpServer = app.listen(httpPort, () => {
         // Set very long timeout for buyNow operations (10 hours = 36000000ms)
-        httpsServer.timeout = 36000000; // 10 hours - allows buyNow to run for many minutes
-        httpsServer.keepAliveTimeout = 36000000; // 10 hours
-        httpsServer.listen(httpPort, () => {
-          console.log(`✅ HTTPS Server running on port ${httpPort}`);
-          console.log(`✅ Local development at https://localhost:${httpPort}`);
-          console.log(`✅ MongoDB connection ready`);
-          console.log(`⏱️  Server timeout set to 10 hours for long-running operations (buyNow)`);
-        });
-      } else {
-        const httpServer = app.listen(httpPort, () => {
-          // Set very long timeout for buyNow operations (10 hours = 36000000ms)
-          httpServer.timeout = 36000000; // 10 hours - allows buyNow to run for many minutes
-          httpServer.keepAliveTimeout = 36000000; // 10 hours
-          console.log(`✅ HTTP Server running on port ${httpPort}`);
-          console.log(`✅ Local development at http://localhost:${httpPort}`);
-          console.log(`✅ MongoDB connection ready`);
-          console.log(`⏱️  Server timeout set to 10 hours for long-running operations (buyNow)`);
-        });
-      }
+        httpServer.timeout = 36000000; // 10 hours - allows buyNow to run for many minutes
+        httpServer.keepAliveTimeout = 36000000; // 10 hours
+        console.log(`✅ HTTP Server running on port ${httpPort}`);
+        console.log(`✅ Local development at http://localhost:${httpPort}`);
+        console.log(`✅ MongoDB connection ready`);
+        console.log(`⏱️  Server timeout set to 10 hours for long-running operations (buyNow)`);
+      });
     } else {
       console.error(`❌ Server cannot start - MongoDB connection failed`);
       process.exit(1);

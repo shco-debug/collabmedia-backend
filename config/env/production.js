@@ -15,13 +15,13 @@ module.exports = function(){
 	process.urls = {};
 
 	// Use environment variables for URLs
-	process.AppAccessProtocal = process.env.APP_PROTOCOL || 'https://';
+	process.AppAccessProtocal = process.env.APP_PROTOCOL || 'http://';
 	process.AppBaseURL = process.env.APP_BASE_URL || 'www.scrpt.com';
 	process.HOST_URL = process.AppAccessProtocal + process.AppBaseURL; // Frontend URL
 	
 	// Backend and Frontend URLs for environment-aware configurations
-	process.BACKEND_URL = process.env.BACKEND_URL || 'https://collabmedia-backend.vercel.app';
-	process.FRONTEND_URL = process.env.FRONTEND_URL || 'https://www.ahady.com';
+	process.BACKEND_URL = process.env.BACKEND_URL || 'http://localhost:3002';
+	process.FRONTEND_URL = process.env.FRONTEND_URL || 'http://www.ahady.com';
 	
 	process.perUserSpace = 524288000;   //500 MB
 
