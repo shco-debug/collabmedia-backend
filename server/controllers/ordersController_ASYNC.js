@@ -832,6 +832,36 @@ async function __streamPagePostNow(
 		PostStatement = PostStatement.replace(new RegExp('<a.*?(?=\>)\>','gi'), '<span>');
 		PostStatement = PostStatement.replace(new RegExp('</a.*?(?=\>)\>','gi'), '</span>');*/
 
+    // ✅ Fetch postTags from Media document
+    var postTags = null;
+    if (postObj._id) {
+      try {
+        const Media = require('../models/mediaModel');
+        const mediaDoc = await Media.findById(postObj._id, { postTags: 1 }).lean();
+        if (mediaDoc && mediaDoc.postTags) {
+          postTags = mediaDoc.postTags;
+        }
+      } catch (mediaErr) {
+        console.log('⚠️ Error fetching postTags from Media:', mediaErr);
+      }
+    }
+    
+    // ✅ Also try to get postTags from PageStream if available
+    if (!postTags && PageData._id && postObj._id) {
+      try {
+        const PageStream = require('../models/pageStreamModel');
+        const pageStreamDoc = await PageStream.findOne(
+          { PageId: PageData._id, PostId: postObj._id },
+          { postTags: 1 }
+        ).lean();
+        if (pageStreamDoc && pageStreamDoc.postTags) {
+          postTags = pageStreamDoc.postTags;
+        }
+      } catch (pageStreamErr) {
+        console.log('⚠️ Error fetching postTags from PageStream:', pageStreamErr);
+      }
+    }
+
     var inputObj = {
       CapsuleId: CapsuleData._id ? CapsuleData._id : null,
       PageId: PageData._id ? PageData._id : null,
@@ -841,6 +871,7 @@ async function __streamPagePostNow(
       ReceiverEmails: shareWithEmail ? [shareWithEmail] : [],
       PostImage: PostImage,
       PostStatement: PostStatement,
+      postTags: postTags, // ✅ Added: Include postTags from Media or PageStream
       IsSurpriseCase: true,
       IsPageStreamCase: true,
       EmailEngineDataSets: [],

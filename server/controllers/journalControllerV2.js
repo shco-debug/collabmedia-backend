@@ -2,6 +2,17 @@ var Capsule = require("./../models/capsuleModel.js");
 var Chapter = require("./../models/chapterModel.js");
 var Page = require("./../models/pageModel.js");
 var groupTags = require("./../models/groupTagsModel.js");
+
+// Static GroupTags loader - uses static file instead of groupTags collection for lookups
+const { 
+  loadTagIndex, 
+  isLoaded: isTagIndexLoaded, 
+  lookupTag,
+  lookupTagsPrioritized,
+  getGroupTagIdsForTags,
+  getGroupTagIdsPrioritized,
+  getGroupTagTitlesById
+} = require("./../utilities/staticGroupTagsLoader.js");
 var Labels = require("./../models/labelsModel.js");
 var SyncedPost = require("./../models/syncedpostModel.js");
 var SyncedPostsMap = require("./../models/SyncedpostsMap.js");
@@ -197,63 +208,52 @@ async function __getKeywordIdsByNames_CMIDW(selectedWords) {
   selectedWords = selectedWords ? selectedWords : [];
 
   if (!selectedWords.length) {
-    return [];
+    return { keywordIds: [], secondaryKeywordsMap: {}, priorityStats: {} };
   }
 
   var tmpArr = [];
   for (var i = 0; i < selectedWords.length; i++) {
-    tmpArr.push(selectedWords[i].trim());
+    tmpArr.push(selectedWords[i].trim().toLowerCase());
   }
 
   selectedWords = tmpArr;
 
-  var conditions = {
-    status: { $in: [1, 3] },
-    //MetaMetaTagID : { $nin : process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase }
-  };
+  console.log("   - Using PRIORITIZED static file lookup for keywords...");
+  console.log("   - Searching for keywords:", selectedWords);
+  console.log("   - Priority order: Subjects > Feelings > Attributes > Other");
 
-  if (selectedWords.length) {
-    conditions["$or"] = [
-      { GroupTagTitle: { $in: selectedWords } }
-    ];
+  // Check if static index is loaded
+  if (!isTagIndexLoaded()) {
+    console.log("   - ⚠️ Static index not loaded, loading now...");
+    await loadTagIndex();
   }
 
-  var fields = {
-    GroupTagTitle: 1,
-    _id: 1,
-  };
-  console.log("   - Executing groupTags.find() with GroupTagTitle search...");
-  console.log("   - Searching for keywords:", selectedWords);
-
-  var results = await groupTags.find(conditions, fields); //.limit(10);
-  results = Array.isArray(results) ? results : [];
+  // Use prioritized lookup - returns results sorted by tag type priority
+  // Subjects first, then Feelings, then Attributes, then Other
+  // Limited to 500 results for performance (enough for 30 post versions)
+  var result = lookupTagsPrioritized(selectedWords, 500);
   
-  console.log("   - Database query results count:", results.length);
-  // Full results log removed for cleaner output
-
-  var keywordIds = [];
+  var keywordIds = result.groupTagIds;
   var secondaryKeywordsMap = {};
   
-  for (var i = 0; i < results.length; i++) {
-    var groupTagId = String(results[i]._id);
-    
-    if (keywordIds.indexOf(groupTagId) < 0) {
-      keywordIds.push(groupTagId);
-      
-      // Use GroupTagTitle (maps to alltags.MainGroupTagTitle in scrpt)
-      var matchedKeyword = typeof results[i].GroupTagTitle === "string"
-        ? results[i].GroupTagTitle.toLowerCase().trim()
-        : "";
-      
-      secondaryKeywordsMap[groupTagId] = matchedKeyword;
-    }
+  // Build secondary keywords map from prioritized results
+  for (var i = 0; i < result.all.length; i++) {
+    var match = result.all[i];
+    secondaryKeywordsMap[match.groupTagId] = match.groupTagTitle.toLowerCase().trim();
   }
   
-  // Keyword logs removed for cleaner output
+  console.log("   - Prioritized lookup results:");
+  console.log(`     📌 Subjects: ${result.stats.subjects} (highest priority)`);
+  console.log(`     💭 Feelings: ${result.stats.feelings}`);
+  console.log(`     🎨 Attributes: ${result.stats.attributes}`);
+  console.log(`     📎 Other: ${result.stats.other}`);
+  console.log(`     📊 Total: ${result.stats.returned}/${result.stats.total} (limited to 500)`);
   
   return {
     keywordIds: keywordIds,
     secondaryKeywordsMap: secondaryKeywordsMap,
+    priorityStats: result.stats,
+    byPriority: result.byPriority
   };
 }
 
@@ -264,34 +264,20 @@ async function __getKeywordIdsByNames(selectedWordsArr) {
   if (!selectedWordsArr.length) {
     return [];
   }
-  var selectedWords = selectedWordsArr.map((obj) => obj.trim());
   
-  var conditions = {
-    status: { $in: [1, 3] },
-    //MetaMetaTagID : { $nin : process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase }
-  };
-  if (selectedWords.length) {
-    conditions["$or"] = [
-      { GroupTagTitle: { $in: selectedWords } }
-    ];
-  }
-
-  var fields = {
-    GroupTagTitle: 1,
-    _id: 1,
-  };
-
-  var results = await groupTags.find(conditions, fields);
-  results = Array.isArray(results) ? results : [];
-
-  var keywordIds = [];
-  for (var i = 0; i < results.length; i++) {
-    if (keywordIds.indexOf(String(results[i]._id)) < 0) {
-      keywordIds.push(String(results[i]._id));
-    }
+  // Check if static index is loaded
+  if (!isTagIndexLoaded()) {
+    console.log("   - ⚠️ Static index not loaded, loading now...");
+    await loadTagIndex();
   }
   
-  //console.log("keywordIds.length = ", keywordIds.length);
+  // Use prioritized static file lookup
+  // Returns IDs sorted by priority: subjects > feelings > attributes > other
+  // Limited to 500 results for performance
+  var keywordIds = getGroupTagIdsPrioritized(selectedWordsArr, 500);
+  
+  console.log(`   - Prioritized lookup: ${keywordIds.length} GroupTagIds (max 500)`);
+  
   return keywordIds;
 }
 
@@ -5788,8 +5774,20 @@ var getMediaFromSet = async function (req, callback) {
     ? reqObj.generatedKeywords  // STEP 2 FIX: Use ALL keywords (like scrpt)
     : [];
     
+  // Secondary keywords - prefer pre-computed IDs, otherwise convert from text
   var SecondaryKeywords = reqObj.SecondaryKeywords || [];
   var SecondaryKeywordsMap = reqObj.SecondaryKeywordsMap || {};
+  
+  // If SecondaryKeywords is empty but we have sArr (text keywords), convert them to IDs
+  // This uses the static file lookup (modern approach, same result as old)
+  var sArr = reqObj.sArr || [];
+  if (SecondaryKeywords.length === 0 && sArr.length > 0) {
+    // Convert text keywords to GroupTagIDs using static file
+    SecondaryKeywords = await getGroupTagIdsPrioritized(sArr, 500);
+    console.log("🔍 IMAGE 1: Converted sArr to GroupTagIDs:", sArr.length, "words →", SecondaryKeywords.length, "IDs");
+  } else if (SecondaryKeywords.length > 0) {
+    console.log("🔍 IMAGE 1: Using pre-computed SecondaryKeywords:", SecondaryKeywords.length, "IDs");
+  }
   
   // CRITICAL FIX: Check if subsetByRank is empty or not an array
   if (!subsetByRank || !Array.isArray(subsetByRank) || subsetByRank.length === 0) {
@@ -6182,6 +6180,11 @@ var getMediaFromSet = async function (req, callback) {
     aggregateStages.push({ $match: conditions });
   }
 
+  // SecondaryKeywords matching is done in $group stage via GroupTags.GroupTagID
+  // The SecondaryKeywords array (which now contains IDs) is matched against Media.GroupTags
+  // This is the same approach as Old Scrpt - matching IDs against GroupTags.GroupTagID
+  console.log("🔍 IMAGE 1: Using GroupTagID matching for secondary keywords:", SecondaryKeywords.length, "IDs");
+  
   let projectPipeline_1 = {
     _id: "$_id",
     Title: "$Title",
@@ -6202,7 +6205,9 @@ var getMediaFromSet = async function (req, callback) {
     DominantColors: "$DominantColors",
     AllMetaData: "$MetaData",
     MetaData: "$MetaData",
+    // SecondaryKeywords comes from $group stage - contains matched GroupTagIDs
     SecondaryKeywords: { $ifNull: ["$SecondaryKeywords", []] },
+    // Count of matched secondary keyword IDs (matched against GroupTags.GroupTagID)
     SecondaryKeywordsCount: { $size: { $ifNull: ["$SecondaryKeywords", []] } },
   };
   console.log("🎨 ===== MEDIA SELECTION CRITERIA DEBUG =====");
@@ -6434,15 +6439,15 @@ var getMediaFromSet = async function (req, callback) {
     }
     // Log removed
 
-    //get all selected gt titles map
-    var selectedGtResults = await groupTags.find({_id : {$in : gtArr}}, {GroupTagTitle : 1, _id: 1});
-    selectedGtResults = selectedGtResults ? selectedGtResults : [];
-    // Log removed
-    var gtTitleMap = {};
-    for( var loop = 0; loop < selectedGtResults.length; loop++ ){
-      gtTitleMap[selectedGtResults[loop]._id] = selectedGtResults[loop].GroupTagTitle ? selectedGtResults[loop].GroupTagTitle : '';
+    // Get all selected gt titles map from STATIC FILE (not MongoDB)
+    var gtTitleMap = getGroupTagTitlesById(gtArr);
+    console.log("🔍 DEBUG - gtArr:", gtArr.slice(0, 5), "...(total:", gtArr.length, ")");
+    console.log("🔍 DEBUG - gtTitleMap keys:", Object.keys(gtTitleMap).length, "mapped from", gtArr.length, "IDs");
+    if (Object.keys(gtTitleMap).length > 0) {
+      console.log("🔍 DEBUG - gtTitleMap sample:", JSON.stringify(Object.entries(gtTitleMap).slice(0, 2)));
+    } else {
+      console.log("⚠️ DEBUG - gtTitleMap is EMPTY! gtArr first IDs:", gtArr.slice(0, 3));
     }
-    // Log removed
 
     //console.log("$$$$$$$$$$$$$$$$$$$$$$ ----------------results ----------------------------- ", results);
     for( var loop = 0; loop < results.length; loop++ ){
@@ -6457,23 +6462,35 @@ var getMediaFromSet = async function (req, callback) {
 
       tempObj.value.SelectedGtTitle = "";
 
-      var index = tempObj.value.Ranks ? tempObj.value.Ranks : null;
-      if(index) {
+      var index = tempObj.value.Ranks;
+      // FIX: Check for valid number (0 is a valid rank!)
+      if(typeof index === 'number' && index >= 0) {
         var finalIndex = local_map_selectedgt["rank_"+index] ? local_map_selectedgt["rank_"+index] : null;
         if(finalIndex && finalIndex.length > 0) {
           // Get the ObjectId - it's already extracted from totalSets
           let gtId = finalIndex[0]; // Get first element from array
+          let originalGtId = gtId; // Save original for logging
           
           // gtId could be either:
           // 1. A valid ObjectId string (24 hex chars) - use directly
-          // 2. A "title__id" format (shouldn't happen after extraction, but check anyway)
+          // 2. A "title__id" format - extract the ID after __
           if (typeof gtId === 'string') {
             if (gtId.includes('__')) {
               gtId = gtId.split('__')[1]; // Extract ObjectId after __
             }
-            // Now lookup the title
+            // Now lookup the title from static file
             var gtTitle = gtTitleMap[gtId] ? gtTitleMap[gtId] : '';
             tempObj.value.SelectedGtTitle = gtTitle;
+            
+            // Debug: Log the lookup
+            if (loop === 0) {
+              console.log("🔍 FIRST MEDIA ITEM - SelectedGtTitle lookup:");
+              console.log("   - Rank:", index);
+              console.log("   - finalIndex[0] (original):", originalGtId);
+              console.log("   - gtId (after extraction):", gtId);
+              console.log("   - gtTitleMap has this ID?:", gtTitleMap.hasOwnProperty(gtId));
+              console.log("   - gtTitle result:", gtTitle || "(EMPTY)");
+            }
           }
         }
       }
@@ -6551,11 +6568,23 @@ var getMediaFromSet2 = async function (req, callback) {
     ? reqObj.generatedKeywords2  // STEP 2 FIX: Use ALL keywords (like scrpt)
     : [];
     
+  // Secondary keywords - prefer pre-computed IDs, otherwise convert from text
   var SecondaryKeywords = reqObj.SecondaryKeywords2 || [];
   var SecondaryKeywordsMap = reqObj.SecondaryKeywordsMap2 || {};
   
-  console.log("✅ IMAGE 2: Using PRIMARY keyword filter ONLY:", selectedKeywords);
-  console.log("✅ IMAGE 2: Secondary keywords will be used for SCORING, not filtering");
+  // If SecondaryKeywords is empty but we have s2Arr (text keywords), convert them to IDs
+  // This uses the static file lookup (modern approach, same result as old)
+  var s2Arr = reqObj.s2Arr || [];
+  if (SecondaryKeywords.length === 0 && s2Arr.length > 0) {
+    // Convert text keywords to GroupTagIDs using static file
+    SecondaryKeywords = await getGroupTagIdsPrioritized(s2Arr, 500);
+    console.log("🔍 IMAGE 2: Converted s2Arr to GroupTagIDs:", s2Arr.length, "words →", SecondaryKeywords.length, "IDs");
+  } else if (SecondaryKeywords.length > 0) {
+    console.log("🔍 IMAGE 2: Using pre-computed SecondaryKeywords2:", SecondaryKeywords.length, "IDs");
+  }
+  
+  console.log("✅ IMAGE 2: Using PRIMARY keyword filter ONLY:", selectedKeywords.length, "IDs");
+  console.log("✅ IMAGE 2: Secondary keywords will be used for SCORING:", SecondaryKeywords.length, "IDs");
   
   // CRITICAL FIX: Check if subsetByRank is empty or not an array
   if (!subsetByRank || !Array.isArray(subsetByRank) || subsetByRank.length === 0) {
@@ -6894,6 +6923,11 @@ var getMediaFromSet2 = async function (req, callback) {
     aggregateStages.push({ $match: conditions });
   }
 
+  // SecondaryKeywords matching is done in $group stage via GroupTags.GroupTagID
+  // The SecondaryKeywords array (which now contains IDs) is matched against Media.GroupTags
+  // This is the same approach as Old Scrpt - matching IDs against GroupTags.GroupTagID
+  console.log("🔍 IMAGE 2: Using GroupTagID matching for secondary keywords:", SecondaryKeywords.length, "IDs");
+
   let projectPipeline_1 = {
     _id: "$_id",
     Title: "$Title",
@@ -6914,7 +6948,9 @@ var getMediaFromSet2 = async function (req, callback) {
     DominantColors: "$DominantColors",
     AllMetaData: "$MetaData",
     MetaData: "$MetaData",
+    // SecondaryKeywords comes from $group stage - contains matched GroupTagIDs
     SecondaryKeywords: { $ifNull: ["$SecondaryKeywords", []] },
+    // Count of matched secondary keyword IDs (matched against GroupTags.GroupTagID)
     SecondaryKeywordsCount: { $size: { $ifNull: ["$SecondaryKeywords", []] } },
   };
 
@@ -7143,15 +7179,15 @@ var getMediaFromSet2 = async function (req, callback) {
     }
     // Log removed
 
-    //get all selected gt titles map
-    var selectedGtResults = await groupTags.find({_id : {$in : gtArr}}, {GroupTagTitle : 1, _id: 1});
-    selectedGtResults = selectedGtResults ? selectedGtResults : [];
-    // Log removed
-    var gtTitleMap = {};
-    for( var loop = 0; loop < selectedGtResults.length; loop++ ){
-      gtTitleMap[selectedGtResults[loop]._id] = selectedGtResults[loop].GroupTagTitle ? selectedGtResults[loop].GroupTagTitle : '';
+    // Get all selected gt titles map from STATIC FILE (not MongoDB)
+    var gtTitleMap = getGroupTagTitlesById(gtArr);
+    console.log("🔍 DEBUG - gtArr:", gtArr.slice(0, 5), "...(total:", gtArr.length, ")");
+    console.log("🔍 DEBUG - gtTitleMap keys:", Object.keys(gtTitleMap).length, "mapped from", gtArr.length, "IDs");
+    if (Object.keys(gtTitleMap).length > 0) {
+      console.log("🔍 DEBUG - gtTitleMap sample:", JSON.stringify(Object.entries(gtTitleMap).slice(0, 2)));
+    } else {
+      console.log("⚠️ DEBUG - gtTitleMap is EMPTY! gtArr first IDs:", gtArr.slice(0, 3));
     }
-    // Log removed
 
     //console.log("$$$$$$$$$$$$$$$$$$$$$$ ----------------results ----------------------------- ", results);
     for( var loop = 0; loop < results.length; loop++ ){
@@ -7166,23 +7202,35 @@ var getMediaFromSet2 = async function (req, callback) {
 
       tempObj.value.SelectedGtTitle = "";
 
-      var index = tempObj.value.Ranks ? tempObj.value.Ranks : null;
-      if(index) {
+      var index = tempObj.value.Ranks;
+      // FIX: Check for valid number (0 is a valid rank!)
+      if(typeof index === 'number' && index >= 0) {
         var finalIndex = local_map_selectedgt["rank_"+index] ? local_map_selectedgt["rank_"+index] : null;
         if(finalIndex && finalIndex.length > 0) {
           // Get the ObjectId - it's already extracted from totalSets
           let gtId = finalIndex[0]; // Get first element from array
+          let originalGtId = gtId; // Save original for logging
           
           // gtId could be either:
           // 1. A valid ObjectId string (24 hex chars) - use directly
-          // 2. A "title__id" format (shouldn't happen after extraction, but check anyway)
+          // 2. A "title__id" format - extract the ID after __
           if (typeof gtId === 'string') {
             if (gtId.includes('__')) {
               gtId = gtId.split('__')[1]; // Extract ObjectId after __
             }
-            // Now lookup the title
+            // Now lookup the title from static file
             var gtTitle = gtTitleMap[gtId] ? gtTitleMap[gtId] : '';
             tempObj.value.SelectedGtTitle = gtTitle;
+            
+            // Debug: Log the lookup
+            if (loop === 0) {
+              console.log("🔍 FIRST MEDIA ITEM - SelectedGtTitle lookup:");
+              console.log("   - Rank:", index);
+              console.log("   - finalIndex[0] (original):", originalGtId);
+              console.log("   - gtId (after extraction):", gtId);
+              console.log("   - gtTitleMap has this ID?:", gtTitleMap.hasOwnProperty(gtId));
+              console.log("   - gtTitle result:", gtTitle || "(EMPTY)");
+            }
           }
         }
       }
@@ -7693,10 +7741,16 @@ var streamPost_withEmailSync = function (req, res) {
       dataRecord.EmailEngineDataSets
     );
     
-    // ✅ Fetch MediaType from Media collection using PostId (only if not already provided)
-    Media.findOne({ _id: dataRecord.PostId }, { MediaType: 1 }, function (mediaErr, mediaDoc) {
-      if (!dataRecord.MediaType && !mediaErr && mediaDoc && mediaDoc.MediaType) {
-        dataRecord.MediaType = mediaDoc.MediaType;
+    // ✅ Fetch MediaType and postTags from Media collection using PostId (only if not already provided)
+    Media.findOne({ _id: dataRecord.PostId }, { MediaType: 1, postTags: 1 }, function (mediaErr, mediaDoc) {
+      if (!mediaErr && mediaDoc) {
+        if (!dataRecord.MediaType && mediaDoc.MediaType) {
+          dataRecord.MediaType = mediaDoc.MediaType;
+        }
+        // ✅ Copy postTags from Media if not already in dataRecord
+        if (!dataRecord.postTags && mediaDoc.postTags) {
+          dataRecord.postTags = mediaDoc.postTags;
+        }
       }
       
       SyncedPost(dataRecord).save(function (err, data) {
@@ -8640,6 +8694,7 @@ var streamPage__WithSelectedBlendCase = async function (req, res) {
     MediaType: req.body.MediaType || null, // ✅ Use MediaType from request body if available
     PostImage: PostImage,
     PostStatement: PostStatement ? PostStatement : "",
+    postTags: req.body.postTags || null, // ✅ Added: Include postTags from request body
     PostOwnerId: req.body.PostOwnerId ? req.body.PostOwnerId : null,
     ReceiverEmails: req.body.ReceiverEmails ? req.body.ReceiverEmails : [],
     SurpriseSelectedTags: SurpriseSelectedTags ? SurpriseSelectedTags : [],
@@ -8680,15 +8735,37 @@ var streamPage__WithSelectedBlendCase = async function (req, res) {
       dataRecord.EmailEngineDataSets
     );
     
-    // ✅ Fetch MediaType from Media collection using PostId (only if not already provided)
-    if (!dataRecord.MediaType && dataRecord.PostId) {
+    // ✅ Fetch MediaType and postTags from Media collection using PostId (only if not already provided)
+    if (dataRecord.PostId) {
       try {
-        const mediaDoc = await Media.findOne({ _id: dataRecord.PostId }, { MediaType: 1 }).lean();
-        if (mediaDoc && mediaDoc.MediaType) {
-          dataRecord.MediaType = mediaDoc.MediaType;
+        const mediaDoc = await Media.findOne({ _id: dataRecord.PostId }, { MediaType: 1, postTags: 1 }).lean();
+        if (mediaDoc) {
+          if (!dataRecord.MediaType && mediaDoc.MediaType) {
+            dataRecord.MediaType = mediaDoc.MediaType;
+          }
+          // ✅ Copy postTags from Media if not already in dataRecord
+          if (!dataRecord.postTags && mediaDoc.postTags) {
+            dataRecord.postTags = mediaDoc.postTags;
+          }
         }
       } catch (mediaErr) {
-        console.log('⚠️ Error fetching MediaType:', mediaErr);
+        console.log('⚠️ Error fetching MediaType/postTags:', mediaErr);
+      }
+    }
+    
+    // ✅ Also try to get postTags from PageStream if available
+    if (!dataRecord.postTags && dataRecord.PageId && dataRecord.PostId) {
+      try {
+        const PageStream = require('../models/pageStreamModel');
+        const pageStreamDoc = await PageStream.findOne(
+          { PageId: dataRecord.PageId, PostId: dataRecord.PostId },
+          { postTags: 1 }
+        ).lean();
+        if (pageStreamDoc && pageStreamDoc.postTags) {
+          dataRecord.postTags = pageStreamDoc.postTags;
+        }
+      } catch (pageStreamErr) {
+        console.log('⚠️ Error fetching postTags from PageStream:', pageStreamErr);
       }
     }
     
@@ -17396,19 +17473,48 @@ var userStreamsPostsWithActivities = async function (req, res) {
     
     // AUTO-FETCH StreamIds if not provided
     if (!StreamIds || !StreamIds.length) {
-      const CapsuleIdsArr = await Capsule.find({
+      // 🎯 SIMPLIFIED LOGIC: Only get streams where friend is OWNER
+      // User A (friend) owns stream S, User B (logged-in) is invited member
+      const ownerStreams = await Capsule.find({
         OwnerId: String(UserId),
         IsDeleted: 0,
         Status: true,
         Origin: "published"  // Only purchased/published streams
       }, { _id: 1 }).lean();
       
-      StreamIds = CapsuleIdsArr.map(c => c._id);
+      StreamIds = ownerStreams.map(c => c._id);
       
       if (!StreamIds.length) {
         return res.json({
           code: "404",
-          message: "No streams found for user.",
+          message: "No streams found where this friend is the owner.",
+          results: [],
+        });
+      }
+      
+      // 🔒 SECURITY CHECK: Filter to only streams where logged-in user is a MEMBER
+      // This ensures: Friend owns stream AND logged-in user is invited member
+      console.log(`🔒 Checking if logged-in user ${loginUserId} is a member of ${StreamIds.length} streams owned by friend...`);
+      
+      const loginUserMemberStreams = await StreamMembers.find({
+        Members: new ObjectId(loginUserId),
+        StreamId: { $in: StreamIds },
+        IsDeleted: false,
+        Status: true
+      }, { StreamId: 1 }).lean();
+      
+      // Filter StreamIds to only those where logged-in user is a member
+      const accessibleStreamIds = new Set();
+      loginUserMemberStreams.forEach(sm => accessibleStreamIds.add(sm.StreamId.toString()));
+      
+      StreamIds = StreamIds.filter(id => accessibleStreamIds.has(id.toString()));
+      
+      console.log(`✅ Logged-in user is a member of ${StreamIds.length} streams owned by friend`);
+      
+      if (!StreamIds.length) {
+        return res.json({
+          code: "403",
+          message: "You are not a member of any streams owned by this friend.",
           results: [],
         });
       }
@@ -17416,6 +17522,46 @@ var userStreamsPostsWithActivities = async function (req, res) {
       // Convert string IDs to ObjectIds
       for (var i = 0; i < StreamIds.length; i++) {
         StreamIds[i] = new ObjectId(StreamIds[i]);
+      }
+      
+      // 🔒 SECURITY CHECK: Verify friend is owner AND logged-in user is member
+      console.log(`🔒 Verifying: Friend is owner and logged-in user is member of provided streams...`);
+      
+      // Check if friend is owner of provided streams
+      const friendOwnerStreams = await Capsule.find({
+        OwnerId: String(UserId),
+        _id: { $in: StreamIds },
+        IsDeleted: 0,
+        Status: true
+      }, { _id: 1 }).lean();
+      
+      const friendOwnedStreamIds = new Set();
+      friendOwnerStreams.forEach(s => friendOwnedStreamIds.add(s._id.toString()));
+      
+      // Check if logged-in user is member of those streams
+      const loginUserMemberStreams = await StreamMembers.find({
+        Members: new ObjectId(loginUserId),
+        StreamId: { $in: StreamIds },
+        IsDeleted: false,
+        Status: true
+      }, { StreamId: 1 }).lean();
+      
+      const accessibleStreamIds = new Set();
+      loginUserMemberStreams.forEach(sm => accessibleStreamIds.add(sm.StreamId.toString()));
+      
+      // Filter: Only streams where friend is owner AND logged-in user is member
+      StreamIds = StreamIds.filter(id => 
+        friendOwnedStreamIds.has(id.toString()) && accessibleStreamIds.has(id.toString())
+      );
+      
+      console.log(`✅ ${StreamIds.length} streams where friend is owner and logged-in user is member`);
+      
+      if (!StreamIds.length) {
+        return res.json({
+          code: "403",
+          message: "You can only see activities from streams where the friend is owner and you are a member.",
+          results: [],
+        });
       }
     }
     
@@ -17447,7 +17593,8 @@ var userStreamsPostsWithActivities = async function (req, res) {
     
     var conditions = {
       CapsuleId: { $in: StreamIds },
-      SyncedBy: new ObjectId(UserId),
+      // Removed SyncedBy filter to show all posts in streams the friend has access to
+      // Activities (likes/comments) will be filtered by UserId later
       IsDeleted: false,
       Status: true,
       // "EmailEngineDataSets.Delivered": false, // Temporarily removed filter
@@ -17486,6 +17633,8 @@ var userStreamsPostsWithActivities = async function (req, res) {
           IsOnetimeStream: "$IsOnetimeStream",
           IsOnlyPostImage: "$IsOnlyPostImage",
           hexcode_blendedImage: "$EmailEngineDataSets.hexcode_blendedImage",
+          MediaType: "$MediaType",
+          ContentType: null, // ContentType not in SyncedPost, will be fetched from Media if needed
         },
       },
       // Date filter removed - show all posts
@@ -17578,6 +17727,8 @@ var userStreamsPostsWithActivities = async function (req, res) {
           "CapsuleData.MetaData": 1,
           //BlendImage : 1,
           hexcode_blendedImage: 1,
+          MediaType: 1,
+          ContentType: 1,
         },
       },
       {
@@ -17718,17 +17869,17 @@ var userStreamsPostsWithActivities = async function (req, res) {
         
         const postsInTheseStreams = await SyncedPost.countDocuments({
           CapsuleId: { $in: StreamIds },
-          SyncedBy: new ObjectId(UserId),
+          // Removed SyncedBy filter - showing all posts in streams
           IsDeleted: false,
           Status: true
         });
         
         console.log("🔍 Debug Info:");
-        console.log(`   - User has ${totalUserPosts} total SyncedPosts`);
+        console.log(`   - User has ${totalUserPosts} total SyncedPosts (synced by user)`);
         console.log(`   - ${deliveredPosts} are already delivered`);
         console.log(`   - ${totalUserPosts - deliveredPosts} are undelivered`);
         console.log(`   - Searching in ${StreamIds.length} streams`);
-        console.log(`   - ${postsInTheseStreams} posts in these specific streams`);
+        console.log(`   - ${postsInTheseStreams} total posts in these streams (from all users)`);
         console.log(`   - DateOfDelivery filter: REMOVED (showing all posts)`);
         
         if (samplePost && samplePost.EmailEngineDataSets && samplePost.EmailEngineDataSets.length > 0) {
@@ -17788,8 +17939,16 @@ var userStreamsPostsWithActivities = async function (req, res) {
           continue;
         }
         
+        // Add both _id and SocialPostId (PostId) to allPosts since activities can match either
         allPosts.push(new ObjectId(dataRecord1.SocialPostId));
+        if (dataRecord1._id && dataRecord1._id.toString() !== dataRecord1.SocialPostId.toString()) {
+          // Also add _id if it's different from SocialPostId (PostId)
+          allPosts.push(new ObjectId(dataRecord1._id));
+        }
         validPostsCount++;
+        if (validPostsCount <= 3) { // Log first 3
+          console.log(`   ✅ Added to allPosts: SocialPostId=${dataRecord1.SocialPostId}, _id=${dataRecord1._id?.toString()}`);
+        }
               /*
 						dataRecord1.SocialPostsWithCommentsArr = dataRecord1.SocialPostsWithCommentsArr ? dataRecord1.SocialPostsWithCommentsArr : [];
 						//console.log("dataRecord1.SocialPostsWithCommentsArr ----- ", dataRecord1.SocialPostsWithCommentsArr);
@@ -17804,42 +17963,339 @@ var userStreamsPostsWithActivities = async function (req, res) {
             }
       
       console.log(`✅ ${validPostsCount} posts passed SocialPageId/SocialPostId check`);
-      console.log(`📋 Collecting activity data for ${allPosts.length} posts...`);
       
-            //console.log("SocialPostsWithCommentsArr = ", SocialPostsWithCommentsArr);
+      // 🎯 NEW APPROACH: Find activities FIRST, then get posts
+      // This ensures we find all activities regardless of stream filtering
+      console.log(`📋 Finding ALL activities by user ${UserId}...`);
+      
+      var activityMapObj = {};
+      
+      // 1) Find ALL comments by the friend (not filtered by allPosts)
+      var commentConditions = {
+        ParentId: { $exists: false },
+        UserId: UserId,
+        IsDeleted: false,
+        $or: [
+          { PrivacySetting: { $exists: false } },
+          { PrivacySetting: "PublicWithName" },
+          { PrivacySetting: "OnlyForOwner", UserId: loginUserId },
+          {
+            PrivacySetting: "InvitedFriends",
+            UserId: { $in: memberIds },
+          },
+        ],
+      };
 
-            var activityMapObj = {};
-            //get all activities -
-            //1) comments
-            var conditions = {
-              ParentId: { $exists: false },
-              SocialPostId: { $in: allPosts.map(id => id.toString()) }, // Convert ObjectIds to strings for query
-              UserId: UserId,
-              IsDeleted: false,
-              $or: [
-                { PrivacySetting: { $exists: false } },
-                { PrivacySetting: "PublicWithName" },
-                { PrivacySetting: "OnlyForOwner", UserId: loginUserId },
-                {
-                  PrivacySetting: "InvitedFriends",
-                  UserId: { $in: memberIds },
+      console.log(`🔍 Querying ALL comments by user...`);
+      var allCommentsByFriend = await StreamComments.find(commentConditions)
+        .sort({ CreatedOn: -1 })
+        .populate("UserId", "_id Name Email ProfilePic")
+        .lean();
+      allCommentsByFriend = Array.isArray(allCommentsByFriend) ? allCommentsByFriend : [];
+      console.log(`💬 Found ${allCommentsByFriend.length} total comments by friend`);
+      
+      // 2) Find ALL likes by the friend
+      var likeConditions = {
+        UserId: UserId,
+        IsDeleted: false,
+      };
+
+      console.log(`❤️ Querying ALL likes by user...`);
+      var allLikesByFriend = await StreamLikes.find(likeConditions)
+        .populate("UserId", "_id Name Email ProfilePic")
+        .lean();
+      allLikesByFriend = Array.isArray(allLikesByFriend) ? allLikesByFriend : [];
+      console.log(`👍 Found ${allLikesByFriend.length} total likes by friend`);
+      
+      // 3) Collect all SocialPostIds from activities
+      const activityPostIds = new Set();
+      allCommentsByFriend.forEach(comment => {
+        if (comment.SocialPostId) {
+          activityPostIds.add(comment.SocialPostId.toString());
+        }
+      });
+      allLikesByFriend.forEach(like => {
+        if (like.SocialPostId) {
+          activityPostIds.add(like.SocialPostId.toString());
+        }
+      });
+      
+      console.log(`📌 Found activities on ${activityPostIds.size} unique posts`);
+      if (activityPostIds.size > 0) {
+        console.log(`   📋 Activity PostIds:`, Array.from(activityPostIds));
+        if (allLikesByFriend.length > 0) {
+          console.log(`   ❤️ Sample like:`, {
+            SocialPostId: allLikesByFriend[0].SocialPostId?.toString(),
+            UserId: allLikesByFriend[0].UserId?._id?.toString(),
+            hexcode_blendedImage: allLikesByFriend[0].hexcode_blendedImage
+          });
+        }
+        if (allCommentsByFriend.length > 0) {
+          console.log(`   💬 Sample comment:`, {
+            SocialPostId: allCommentsByFriend[0].SocialPostId?.toString(),
+            UserId: allCommentsByFriend[0].UserId?._id?.toString()
+          });
+        }
+      }
+      
+      // 4) Check which activity PostIds are not found in SyncedPost, then search in Media collection
+      if (activityPostIds.size > 0) {
+        // Get PostIds that are already found in SyncedPost (compare with both _id and SocialPostId/PostId)
+        const foundPostIds = new Set();
+        syncedPostsResults.forEach(post => {
+          if (post._id) {
+            foundPostIds.add(post._id.toString());
+          }
+          // Also add SocialPostId (which is PostId) since activities might match against it
+          if (post.SocialPostId) {
+            foundPostIds.add(post.SocialPostId.toString());
+          }
+          // Also add PostId directly if it exists and is different
+          if (post.PostId && post.PostId.toString() !== post._id?.toString() && post.PostId.toString() !== post.SocialPostId?.toString()) {
+            foundPostIds.add(post.PostId.toString());
+          }
+        });
+        
+        console.log(`   🔍 Checking ${syncedPostsResults.length} SyncedPost results for activity matches...`);
+        console.log(`   📦 Found PostIds in SyncedPost:`, Array.from(foundPostIds).slice(0, 5), foundPostIds.size > 5 ? `... (${foundPostIds.size} total)` : '');
+        
+        // Debug: Check if specific activity PostIds exist in SyncedPost
+        Array.from(activityPostIds).forEach(activityPostId => {
+          const exists = foundPostIds.has(activityPostId);
+          console.log(`   🔎 Activity PostId ${activityPostId}: ${exists ? '✅ FOUND' : '❌ NOT FOUND'} in SyncedPost results`);
+          if (!exists) {
+            // Check if it exists in SyncedPost collection directly
+            console.log(`      🔍 Checking if SyncedPost with _id=${activityPostId} exists in collection...`);
+          }
+        });
+        
+        // Find PostIds from activities that are NOT in SyncedPost
+        const missingPostIds = Array.from(activityPostIds).filter(id => !foundPostIds.has(id));
+        console.log(`   ⚠️ Missing PostIds (not in SyncedPost):`, missingPostIds);
+        
+        // If missing, check if they exist in SyncedPost but were filtered out
+        if (missingPostIds.length > 0) {
+          const missingPostIdsArray = missingPostIds.map(id => new ObjectId(id));
+          const directCheck = await SyncedPost.find({
+            _id: { $in: missingPostIdsArray },
+            CapsuleId: { $in: StreamIds },
+            IsDeleted: false,
+            Status: true
+          }, { _id: 1, CapsuleId: 1, EmailEngineDataSets: 1 }).lean();
+          console.log(`   🔍 Direct query found ${directCheck.length} posts with missing PostIds`);
+          directCheck.forEach(post => {
+            console.log(`      📄 Post _id=${post._id}, CapsuleId=${post.CapsuleId}, EmailEngineDataSets.length=${post.EmailEngineDataSets?.length || 0}`);
+          });
+        }
+        
+        if (missingPostIds.length > 0) {
+          console.log(`🔄 ${missingPostIds.length} posts from activities not found in SyncedPost, searching in Media collection...`);
+          
+          const missingPostIdsArray = missingPostIds.map(id => new ObjectId(id));
+          
+          // Search in Media collection
+          // First, find Media documents by _id (PostId) and PostedBy (friend)
+          const mediaPosts = await Media.aggregate([
+            {
+              $match: {
+                _id: { $in: missingPostIdsArray },
+                PostedBy: new ObjectId(UserId), // Only posts by the friend
+                IsDeleted: { $ne: 1 }
+              }
+            },
+            {
+              $lookup: {
+                from: "Pages",
+                localField: "OriginatedFrom",
+                foreignField: "_id",
+                as: "PageData",
+              },
+            },
+            {
+              $unwind: { path: "$PageData", preserveNullAndEmptyArrays: true },
+            },
+            {
+              $lookup: {
+                from: "Chapters",
+                localField: "PageData.ChapterId",
+                foreignField: "_id",
+                as: "ChapterData",
+              },
+            },
+            {
+              $unwind: { path: "$ChapterData", preserveNullAndEmptyArrays: true },
+            },
+            {
+              $project: {
+                _id: 1,
+                // Use StreamId if available, otherwise use Chapter's CapsuleId
+                CapsuleId: {
+                  $cond: [
+                    { $ne: ["$StreamId", null] },
+                    "$StreamId",
+                    "$ChapterData.CapsuleId"
+                  ]
                 },
-              ],
-            };
-
-            console.log(`🔍 Querying comments with ${allPosts.length} PostIds...`);
-            var SocialPostsWithCommentsArr = await StreamComments.find(
-              conditions
-            )
-              .sort({ CreatedOn: -1 })
-              .populate("UserId", "_id Name Email ProfilePic")
-              .lean();
-            SocialPostsWithCommentsArr = Array.isArray(
-              SocialPostsWithCommentsArr
-            )
-              ? SocialPostsWithCommentsArr
-              : [];
-            console.log(`💬 Found ${SocialPostsWithCommentsArr.length} comments`);
+                PageId: "$OriginatedFrom",
+                PostId: "$_id",
+                PostStatement: {
+                  $cond: [
+                    { $ne: ["$MediaType", "Notes"] },
+                    { $ifNull: ["$CurrStatement", "$OwnStatement", ""] },
+                    { $ifNull: ["$Content", ""] }
+                  ]
+                },
+                SyncedBy: "$PostedBy",
+                ReceiverEmails: [],
+                CreatedOn: "$PostedOn",
+                Delivered: true,
+                VisualUrls: {
+                  $cond: [
+                    { $gt: [{ $size: { $ifNull: ["$Location", []] } }, 0] },
+                    { $map: {
+                      input: { $ifNull: ["$Location", []] },
+                      as: "loc",
+                      in: "$$loc.URL"
+                    }},
+                    []
+                  ]
+                },
+                SoundFileUrl: {
+                  $cond: [
+                    { $and: [
+                      { $eq: ["$MediaType", "Audio"] },
+                      { $gt: [{ $size: { $ifNull: ["$Location", []] } }, 0] }
+                    ]},
+                    { $arrayElemAt: [{ $map: {
+                      input: { $ifNull: ["$Location", []] },
+                      as: "loc",
+                      in: "$$loc.URL"
+                    }}, 0] },
+                    null
+                  ]
+                },
+                TextAboveVisual: "",
+                TextBelowVisual: "",
+                DateOfDelivery: "$PostedOn",
+                BlendMode: "hard-light",
+                EmailTemplate: "PracticalThinker",
+                Subject: null,
+                IsOnetimeStream: { $ifNull: ["$IsOnetimeStream", false] },
+                IsOnlyPostImage: { $ifNull: ["$IsOnlyPostImage", false] },
+                SocialPageId: "$PageData.OriginatedFrom",
+                SocialPostId: "$_id",
+                hexcode_blendedImage: null,
+                mediaType: "$MediaType",
+                contentType: "$ContentType",
+                StreamId: "$StreamId",
+                ChapterCapsuleId: "$ChapterData.CapsuleId"
+              },
+            },
+            {
+              $match: {
+                $or: [
+                  { CapsuleId: { $in: StreamIds } },
+                  { StreamId: { $in: StreamIds } },
+                  { ChapterCapsuleId: { $in: StreamIds } }
+                ],
+                SocialPostId: { $ne: null }
+              },
+            },
+            {
+              $lookup: {
+                from: "users",
+                localField: "SyncedBy",
+                foreignField: "_id",
+                as: "SharedByUser",
+              },
+            },
+            {
+              $lookup: {
+                from: "Capsules",
+                localField: "CapsuleId",
+                foreignField: "_id",
+                as: "CapsuleData",
+              },
+            },
+            {
+              $project: {
+                _id: 1,
+                CapsuleId: 1,
+                PageId: 1,
+                PostId: 1,
+                PostStatement: 1,
+                SyncedBy: 1,
+                ReceiverEmails: 1,
+                CreatedOn: 1,
+                Delivered: 1,
+                VisualUrls: 1,
+                SoundFileUrl: 1,
+                TextAboveVisual: 1,
+                TextBelowVisual: 1,
+                DateOfDelivery: 1,
+                BlendMode: 1,
+                EmailTemplate: 1,
+                Subject: 1,
+                IsOnetimeStream: { $ifNull: ["$IsOnetimeStream", false] },
+                IsOnlyPostImage: { $ifNull: ["$IsOnlyPostImage", false] },
+                "SharedByUser._id": 1,
+                "SharedByUser.Name": 1,
+                "SharedByUser.Email": 1,
+                "SharedByUser.ProfilePic": 1,
+                "CapsuleData.MetaData": 1,
+                SocialPageId: 1,
+                SocialPostId: 1,
+                hexcode_blendedImage: 1,
+                mediaType: 1,
+                contentType: 1
+              },
+            },
+          ]).allowDiskUse(true);
+          
+          console.log(`✅ Found ${mediaPosts.length} posts from Media collection`);
+          if (mediaPosts.length > 0) {
+            console.log(`   📦 Media posts SocialPostIds:`, mediaPosts.slice(0, 3).map(p => ({
+              SocialPostId: p.SocialPostId?.toString(),
+              _id: p._id?.toString(),
+              CapsuleId: p.CapsuleId?.toString()
+            })));
+          }
+          
+          // Add to syncedPostsResults
+          syncedPostsResults.push(...mediaPosts);
+          
+          // Update allPosts array
+          mediaPosts.forEach((post, idx) => {
+            if (post.SocialPostId) {
+              allPosts.push(new ObjectId(post.SocialPostId));
+              if (idx < 3) {
+                console.log(`   ✅ Added Media post to allPosts: SocialPostId=${post.SocialPostId.toString()}, _id=${post._id?.toString()}`);
+              }
+            } else {
+              console.log(`   ⚠️ Media post missing SocialPostId: _id=${post._id?.toString()}`);
+            }
+          });
+        }
+      }
+      
+      console.log(`📋 Processing activities for ${allPosts.length} posts...`);
+      console.log(`   📦 Sample PostIds in allPosts:`, allPosts.slice(0, 5).map(p => p.toString()), allPosts.length > 5 ? `... (${allPosts.length} total)` : '');
+      
+      // Now process comments - filter to only those matching posts we found
+      if (allCommentsByFriend.length > 0) {
+        console.log(`   💬 Checking ${allCommentsByFriend.length} comments...`);
+        allCommentsByFriend.forEach((comment, idx) => {
+          if (idx < 3) { // Log first 3
+            const commentPostId = comment.SocialPostId?.toString();
+            const found = allPosts.some(postId => postId.toString() === commentPostId);
+            console.log(`      Comment ${idx + 1}: PostId=${commentPostId}, Found=${found}`);
+          }
+        });
+      }
+      var SocialPostsWithCommentsArr = allCommentsByFriend.filter(comment => 
+        allPosts.some(postId => postId.toString() === comment.SocialPostId.toString())
+      );
+      console.log(`💬 Filtered to ${SocialPostsWithCommentsArr.length} comments on found posts`);
 
             for (var i = 0; i < SocialPostsWithCommentsArr.length; i++) {
               //SocialPostsWithCommentsArr[i].UserId = SocialPostsWithCommentsArr[i].UserId.length > 0 ? SocialPostsWithCommentsArr[i].UserId[0] : {};
@@ -17901,89 +18357,66 @@ var userStreamsPostsWithActivities = async function (req, res) {
             }
 
             //console.log("activityMapObj - ", activityMapObj);
-            //2) PostLike
-            var conditions = {
-              SocialPostId: { $in: allPosts.map(id => id.toString()) }, // Convert ObjectIds to strings
-              UserId: UserId,
-              IsDeleted: false,
-            };
-
-            console.log(`❤️ Querying likes with ${allPosts.length} PostIds...`);
-            var SocialPostsWithLikesArr = await StreamLikes.find(conditions)
-              .populate("UserId", "_id Name Email ProfilePic")
-              .lean();
-            SocialPostsWithLikesArr = Array.isArray(SocialPostsWithLikesArr)
-              ? SocialPostsWithLikesArr
-              : [];
-            console.log(`👍 Found ${SocialPostsWithLikesArr.length} likes`);
+            //2) PostLike - filter to only those matching posts we found
+            if (allLikesByFriend.length > 0) {
+              console.log(`   ❤️ Checking ${allLikesByFriend.length} likes...`);
+              allLikesByFriend.forEach((like, idx) => {
+                if (idx < 3) { // Log first 3
+                  const likePostId = like.SocialPostId?.toString();
+                  const found = allPosts.some(postId => postId.toString() === likePostId);
+                  console.log(`      Like ${idx + 1}: PostId=${likePostId}, Found=${found}`);
+                  if (!found && allPosts.length > 0) {
+                    console.log(`         Comparing with first allPost: ${allPosts[0].toString()}, Match=${allPosts[0].toString() === likePostId}`);
+                  }
+                }
+              });
+            }
+            var SocialPostsWithLikesArr = allLikesByFriend.filter(like => 
+              allPosts.some(postId => postId.toString() === like.SocialPostId.toString())
+            );
+            console.log(`👍 Filtered to ${SocialPostsWithLikesArr.length} likes on found posts`);
 
             for (var i = 0; i < SocialPostsWithLikesArr.length; i++) {
               var ActivityText = `${
                 SocialPostsWithLikesArr[i].UserId.Name.split(" ")[0]
               } liked this post.`;
               var ActivityTime = SocialPostsWithLikesArr[i].CreatedOn;
+              
+              const likeKey = SocialPostsWithLikesArr[i].SocialPostId +
+                    "_" +
+                    SocialPostsWithLikesArr[i].hexcode_blendedImage;
+              
+              if (i === 0) {
+                console.log(`   📝 Storing like activity with key: ${likeKey}`);
+                console.log(`      Like SocialPostId: ${SocialPostsWithLikesArr[i].SocialPostId}`);
+                console.log(`      Like hexcode: ${SocialPostsWithLikesArr[i].hexcode_blendedImage}`);
+              }
 
               if (
-                activityMapObj[
-                  SocialPostsWithLikesArr[i].SocialPostId +
-                    "_" +
-                    SocialPostsWithLikesArr[i].hexcode_blendedImage
-                ]
+                activityMapObj[likeKey]
               ) {
-                activityMapObj[
-                  SocialPostsWithLikesArr[i].SocialPostId +
-                    "_" +
-                    SocialPostsWithLikesArr[i].hexcode_blendedImage
-                ] = {
+                activityMapObj[likeKey] = {
                   ActivityText: ActivityText,
                   ActivityTime: ActivityTime,
-                  MyComments: activityMapObj[
-                    SocialPostsWithLikesArr[i].SocialPostId +
-                      "_" +
-                      SocialPostsWithLikesArr[i].hexcode_blendedImage
-                  ].MyComments
-                    ? activityMapObj[
-                        SocialPostsWithLikesArr[i].SocialPostId +
-                          "_" +
-                          SocialPostsWithLikesArr[i].hexcode_blendedImage
-                      ].MyComments
-                    : [],
+                  MyComments: activityMapObj[likeKey].MyComments || [],
                 };
               } else {
-                activityMapObj[
-                  SocialPostsWithLikesArr[i].SocialPostId +
-                    "_" +
-                    SocialPostsWithLikesArr[i].hexcode_blendedImage
-                ] = {
+                activityMapObj[likeKey] = {
                   ActivityText: ActivityText,
                   ActivityTime: ActivityTime,
                   MyComments: [],
                 };
               }
 
+              const likeArrKey = likeKey + "_LikeActivityArr";
               if (
-                activityMapObj[
-                  SocialPostsWithLikesArr[i].SocialPostId +
-                    "_" +
-                    SocialPostsWithLikesArr[i].hexcode_blendedImage +
-                    "_LikeActivityArr"
-                ]
+                activityMapObj[likeArrKey]
               ) {
-                activityMapObj[
-                  SocialPostsWithLikesArr[i].SocialPostId +
-                    "_" +
-                    SocialPostsWithLikesArr[i].hexcode_blendedImage +
-                    "_LikeActivityArr"
-                ].push(
+                activityMapObj[likeArrKey].push(
                   `${SocialPostsWithLikesArr[i].UserId.Name.split(" ")[0]}`
                 );
               } else {
-                activityMapObj[
-                  SocialPostsWithLikesArr[i].SocialPostId +
-                    "_" +
-                    SocialPostsWithLikesArr[i].hexcode_blendedImage +
-                    "_LikeActivityArr"
-                ] = [`${SocialPostsWithLikesArr[i].UserId.Name.split(" ")[0]}`];
+                activityMapObj[likeArrKey] = [`${SocialPostsWithLikesArr[i].UserId.Name.split(" ")[0]}`];
               }
             }
 
@@ -18141,20 +18574,34 @@ var userStreamsPostsWithActivities = async function (req, res) {
         dataRecord.hexcode_blendedImage = blendedImage || null;
 
               // Match scrpt: use direct concatenation (null becomes "null" string)
+              // Try both SocialPostId (PostId) and _id since activities can match either
               var activityKey = dataRecord.SocialPostId + '_' + dataRecord.hexcode_blendedImage;
+              var activityKeyById = dataRecord._id + '_' + dataRecord.hexcode_blendedImage;
               var likeActivityArrKey = dataRecord.SocialPostId + '_' + dataRecord.hexcode_blendedImage + '_LikeActivityArr';
+              var likeActivityArrKeyById = dataRecord._id + '_' + dataRecord.hexcode_blendedImage + '_LikeActivityArr';
               var commentActivityArrKey = dataRecord.SocialPostId + '_' + dataRecord.hexcode_blendedImage + '_CommentActivityArr';
+              var commentActivityArrKeyById = dataRecord._id + '_' + dataRecord.hexcode_blendedImage + '_CommentActivityArr';
 
-              if (activityMapObj[activityKey]) {
+              // Check both keys - activities might be stored with _id or SocialPostId
+              var foundActivity = activityMapObj[activityKey] || activityMapObj[activityKeyById];
+              var foundLikeArr = activityMapObj[likeActivityArrKey] || activityMapObj[likeActivityArrKeyById];
+              var foundCommentArr = activityMapObj[commentActivityArrKey] || activityMapObj[commentActivityArrKeyById];
+
+              if (foundActivity) {
                 //console.log("INSIDE --------------");
-                //dataRecord.ActivityText = activityMapObj[activityKey].ActivityText;
-          dataRecord.ActivityTime = activityMapObj[activityKey].ActivityTime;
-          dataRecord.MyComments = activityMapObj[activityKey].MyComments || [];
+                //dataRecord.ActivityText = foundActivity.ActivityText;
+          dataRecord.ActivityTime = foundActivity.ActivityTime;
+          dataRecord.MyComments = foundActivity.MyComments || [];
 
           dataRecord.ActivityObj = {
-                  LikeActivityArr: activityMapObj[likeActivityArrKey] || [],
-                  CommentActivityArr: activityMapObj[commentActivityArrKey] || [],
+                  LikeActivityArr: foundLikeArr || [],
+                  CommentActivityArr: foundCommentArr || [],
                 };
+                
+                if (loop === 0) {
+                  console.log(`   ✅ Found activity for post: _id=${dataRecord._id}, SocialPostId=${dataRecord.SocialPostId}, hexcode=${dataRecord.hexcode_blendedImage}`);
+                  console.log(`      ActivityKey used: ${activityMapObj[activityKey] ? activityKey : activityKeyById}`);
+                }
 
 
           dataRecord.ActivityObj.CommentActivityArr = dataRecord
@@ -21407,48 +21854,80 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
   var PostStreamType = req.body.PostStreamType || "";
 
     // ===== KEYWORD SPLITTING LOGIC =====
-    // Split primary keywords for each image to ensure different filtering criteria
+    // Split keywords so each image has its own primary + secondary keywords
+    // Image 1: Primary[0] (awareness) + Secondary1 (sArr)
+    // Image 2: Primary[1] (judgment) + Secondary2 (s2Arr)
+    
+    // Check if static index is loaded
+    if (!isTagIndexLoaded()) {
+      await loadTagIndex();
+    }
+    
     if (keywords && keywords.length >= 2) {
-      // ✅ FIXED: Filter existing generatedKeywords (ObjectId strings) to keep only the first primary keyword's ID
-      // generatedKeywords already contains ObjectId strings from addNewPost_INTERNAL_API (line 23245)
-      // We need to find which IDs correspond to keywords[0] and keywords[1]
-      
-      // Query to get ObjectIds for the two primary keywords
-      var primaryKeywordConditions = {
-        status: { $in: [1, 3] },
-        GroupTagTitle: { $in: [keywords[0], keywords[1]] }
-      };
-      var primaryResults = await groupTags.find(primaryKeywordConditions, { GroupTagTitle: 1, _id: 1 });
-      
+      // Get GroupTagIDs for primary keywords
       var keyword1Id = null;
       var keyword2Id = null;
-      for (var pr = 0; pr < primaryResults.length; pr++) {
-        if (primaryResults[pr].GroupTagTitle && primaryResults[pr].GroupTagTitle.toLowerCase() === keywords[0].toLowerCase()) {
-          keyword1Id = String(primaryResults[pr]._id);
-        }
-        if (primaryResults[pr].GroupTagTitle && primaryResults[pr].GroupTagTitle.toLowerCase() === keywords[1].toLowerCase()) {
-          keyword2Id = String(primaryResults[pr]._id);
-        }
+      
+      var matches1 = lookupTag(keywords[0]);
+      if (matches1.length > 0) {
+        keyword1Id = matches1[0].groupTagId;
       }
       
-      // STEP 1 FIX: Use ALL keywords for BOTH images (like scrpt)
-      var allPrimaryKeywordIds = [];
-      if (keyword1Id) allPrimaryKeywordIds.push(keyword1Id);
-      if (keyword2Id) allPrimaryKeywordIds.push(keyword2Id);
+      var matches2 = lookupTag(keywords[1]);
+      if (matches2.length > 0) {
+        keyword2Id = matches2[0].groupTagId;
+      }
       
-      // Image 1: Use ALL primary keywords (same as scrpt)
-      req.body.generatedKeywords = allPrimaryKeywordIds;
+      // Image 1: Use FIRST primary keyword only
+      req.body.generatedKeywords = keyword1Id ? [keyword1Id] : [];
       
-      // Image 2: Use ALL primary keywords (same as scrpt)
-      req.body.generatedKeywords2 = allPrimaryKeywordIds;
+      // Image 2: Use SECOND primary keyword only
+      req.body.generatedKeywords2 = keyword2Id ? [keyword2Id] : [];
       
-      console.log("✅ Both images will use ALL keywords:", allPrimaryKeywordIds);
+      console.log("✅ SPLIT KEYWORDS for image matching:");
+      console.log(`   📸 Image 1: Primary = "${keywords[0]}" (ID: ${keyword1Id})`);
+      console.log(`   📸 Image 2: Primary = "${keywords[1]}" (ID: ${keyword2Id})`);
+      
+      // Secondary keywords for ranking (from req.body parsed earlier)
+      // sArr = Secondary1 (for Image 1 ranking)
+      // s2Arr = Secondary2 (for Image 2 ranking)
+      if (req.body.sArr && req.body.sArr.length > 0) {
+        console.log(`   🔑 Image 1 Secondary: ${req.body.sArr.length} keywords for ranking`);
+      }
+      if (req.body.s2Arr && req.body.s2Arr.length > 0) {
+        console.log(`   🔑 Image 2 Secondary: ${req.body.s2Arr.length} keywords for ranking`);
+      }
+    } else if (keywords && keywords.length === 1) {
+      // Only one primary keyword - use for both images
+      var matches = lookupTag(keywords[0]);
+      var keywordId = matches.length > 0 ? matches[0].groupTagId : null;
+      
+      req.body.generatedKeywords = keywordId ? [keywordId] : [];
+      req.body.generatedKeywords2 = keywordId ? [keywordId] : [];
+      
+      console.log(`⚠️ Only 1 primary keyword "${keywords[0]}" - using for both images`);
     } else {
-      // Fallback: use all keywords for both images if not enough primary keywords
-      req.body.generatedKeywords = keywords || [];
-      req.body.generatedKeywords2 = keywords || [];
-      console.log("⚠️ Insufficient primary keywords, using all for both images");
+      // No keywords
+      req.body.generatedKeywords = [];
+      req.body.generatedKeywords2 = [];
+      console.log("⚠️ No primary keywords provided");
     }
+
+  // ===== CASCADING FALLBACK CONFIGURATION =====
+  const MIN_IMAGES_REQUIRED = 30; // Minimum images needed per set (for 30 post versions)
+  
+  // Store original keywords for fallback expansion
+  const originalKeywords1 = [...(req.body.generatedKeywords || [])];
+  const originalKeywords2 = [...(req.body.generatedKeywords2 || [])];
+  
+  // Secondary keyword IDs are ALREADY available in req.body.SecondaryKeywords / SecondaryKeywords2
+  // These are pre-computed IDs from the static file lookup
+  const secondaryIds1 = req.body.SecondaryKeywords || [];
+  const secondaryIds2 = req.body.SecondaryKeywords2 || [];
+  
+  console.log(`🔄 FALLBACK CONFIG: MIN_IMAGES_REQUIRED = ${MIN_IMAGES_REQUIRED}`);
+  console.log(`🔄 FALLBACK: Secondary IDs ready for Image 1: ${secondaryIds1.length}`);
+  console.log(`🔄 FALLBACK: Secondary IDs ready for Image 2: ${secondaryIds2.length}`);
 
   async_lib.parallel(
     {
@@ -21486,6 +21965,94 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       var MediaSet2 = results.mediaFromSecondSet && results.mediaFromSecondSet.results
         ? results.mediaFromSecondSet.results
         : [];
+      
+      // ===== CASCADING FALLBACK LOGIC =====
+      // If not enough images with PRIMARY keyword:
+      // 1. Keep PRIMARY matches at TOP (they're already ranked by secondary count)
+      // 2. Find images with SECONDARY keywords ONLY (no primary match)
+      // 3. APPEND secondary-only images to fill up to MIN_IMAGES_REQUIRED
+      
+      // Get IDs of already-found images to exclude duplicates
+      const existingIds1 = new Set(MediaSet1.map(m => String(m._id)));
+      const existingIds2 = new Set(MediaSet2.map(m => String(m._id)));
+      
+      // Fallback for Image 1
+      if (MediaSet1.length < MIN_IMAGES_REQUIRED && secondaryIds1.length > 0) {
+        console.log(`\n🔄 ===== FALLBACK TRIGGERED FOR IMAGE 1 =====`);
+        console.log(`   📊 PRIMARY matches: ${MediaSet1.length} (need ${MIN_IMAGES_REQUIRED})`);
+        console.log(`   🔍 Searching for SECONDARY-only matches...`);
+        
+        const needed = MIN_IMAGES_REQUIRED - MediaSet1.length;
+        
+        // Query with SECONDARY keywords ONLY (not primary)
+        req.body.generatedKeywords = secondaryIds1;
+        
+        const fallbackResult1 = await new Promise((resolve) => {
+          getMediaFromSet(req, (err, result) => resolve(result));
+        });
+        
+        if (fallbackResult1 && fallbackResult1.results) {
+          // Filter out images already in MediaSet1 (avoid duplicates)
+          const secondaryOnlyImages = fallbackResult1.results.filter(
+            m => !existingIds1.has(String(m._id))
+          );
+          
+          console.log(`   📊 SECONDARY-only matches found: ${secondaryOnlyImages.length}`);
+          
+          // Take only what we need to reach MIN_IMAGES_REQUIRED
+          const imagesToAdd = secondaryOnlyImages.slice(0, needed);
+          
+          // APPEND secondary-only images (primary matches stay at top)
+          MediaSet1 = [...MediaSet1, ...imagesToAdd];
+          
+          console.log(`   ✅ APPENDED ${imagesToAdd.length} secondary-only images`);
+          console.log(`   📊 TOTAL Image 1: ${MediaSet1.length} images`);
+        }
+        
+        // Restore original keywords for consistency
+        req.body.generatedKeywords = originalKeywords1;
+      }
+      
+      // Fallback for Image 2
+      if (MediaSet2.length < MIN_IMAGES_REQUIRED && secondaryIds2.length > 0 && PostStreamType !== "1UnsplashPost") {
+        console.log(`\n🔄 ===== FALLBACK TRIGGERED FOR IMAGE 2 =====`);
+        console.log(`   📊 PRIMARY matches: ${MediaSet2.length} (need ${MIN_IMAGES_REQUIRED})`);
+        console.log(`   🔍 Searching for SECONDARY-only matches...`);
+        
+        const needed = MIN_IMAGES_REQUIRED - MediaSet2.length;
+        
+        // Query with SECONDARY keywords ONLY (not primary)
+        req.body.generatedKeywords2 = secondaryIds2;
+        
+        const fallbackResult2 = await new Promise((resolve) => {
+          getMediaFromSet2(req, (err, result) => resolve(result));
+        });
+        
+        if (fallbackResult2 && fallbackResult2.results) {
+          // Filter out images already in MediaSet2 (avoid duplicates)
+          const secondaryOnlyImages = fallbackResult2.results.filter(
+            m => !existingIds2.has(String(m._id))
+          );
+          
+          console.log(`   📊 SECONDARY-only matches found: ${secondaryOnlyImages.length}`);
+          
+          // Take only what we need to reach MIN_IMAGES_REQUIRED
+          const imagesToAdd = secondaryOnlyImages.slice(0, needed);
+          
+          // APPEND secondary-only images (primary matches stay at top)
+          MediaSet2 = [...MediaSet2, ...imagesToAdd];
+          
+          console.log(`   ✅ APPENDED ${imagesToAdd.length} secondary-only images`);
+          console.log(`   📊 TOTAL Image 2: ${MediaSet2.length} images`);
+        }
+        
+        // Restore original keywords for consistency
+        req.body.generatedKeywords2 = originalKeywords2;
+      }
+      
+      console.log(`\n📊 ===== FINAL RESULTS =====`);
+      console.log(`   📸 Image 1: ${MediaSet1.length} images (Primary at top, Secondary-only appended)`);
+      console.log(`   📸 Image 2: ${MediaSet2.length} images (Primary at top, Secondary-only appended)`);
 
       console.log("🔍 DEBUG: MediaSet1 length:", MediaSet1.length);
       console.log("🔍 DEBUG: MediaSet2 length:", MediaSet2.length);
@@ -21795,20 +22362,18 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
                 : "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
         }
 
-      // ✅ FIXED: For SelectedKeywords, use primary keywords based on post type
+      // ✅ FIXED: For SelectedKeywords, use SelectedGtTitle from matched images (consistent for ALL post types)
         var selectedKeywords = [];
       
-      if (PostStreamType === "1UnsplashPost" || PostStreamType === "1MJPost") {
-        // For single image posts, only use first primary keyword
-        if (keywords && keywords.length > 0) {
-          selectedKeywords.push(keywords[0]);  // ✅ "awareness" only
-        }
-      } else {
-        // For dual image posts, use SelectedGtTitle from both sets
-        if (set1[loop].SelectedGtTitle) {
-          selectedKeywords.push(set1[loop].SelectedGtTitle);
-        }
-        if (set2[loop].SelectedGtTitle) {
+      // All post types use SelectedGtTitle from matched images
+      // This ensures consistency: selectedKeywords = what the image ACTUALLY matched
+      if (set1[loop] && set1[loop].SelectedGtTitle) {
+        selectedKeywords.push(set1[loop].SelectedGtTitle);
+      }
+      
+      // For dual image posts, also include Image 2's SelectedGtTitle
+      if (PostStreamType !== "1UnsplashPost" && PostStreamType !== "1MJPost") {
+        if (set2[loop] && set2[loop].SelectedGtTitle) {
           selectedKeywords.push(set2[loop].SelectedGtTitle);
         }
       }
@@ -21826,6 +22391,7 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
           blendMode: "overlay",
         Keywords: keywordsForBlend,  // ✅ Fixed: Only first keyword for 1Unsplash
         SelectedKeywords: selectedKeywords ? selectedKeywords : [],  // ✅ Fixed: Only "awareness" for 1Unsplash
+        postTags: req.body.postTags || null, // ✅ Added: Include postTags in each version
 
           SecondaryKeywordsCount_1: set1[loop].SecondaryKeywordsCount
             ? set1[loop].SecondaryKeywordsCount
@@ -21913,6 +22479,7 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
             PostId: PostId,
             PostStatement: PostStatement,
             SelectedBlendImages: SelectedBlendImages,
+            postTags: req.body.postTags || null, // ✅ Added: Save postTags to PageStream
           };
           await PageStream(DateToSave).save();
 
@@ -21942,6 +22509,8 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
               // Extract blend settings from first selected blend image
               const firstBlend = SelectedBlendImages[0];
               
+              // Only store MAIN blend settings in Media (first version only)
+              // All 30 versions are stored in PageStream collection
               const blendSettings = {
                 blendMode: (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") 
                   ? (firstBlend.blendMode || "overlay") 
@@ -21956,12 +22525,13 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
                   : null,
                 keywords: firstBlend.Keywords || [],
                 selectedKeywords: firstBlend.SelectedKeywords || [],
+                postTags: req.body.postTags || null, // ✅ Added: Include postTags in BlendSettings
                 PostStatement: PostStatement,
                 PostStreamType: PostStreamType,
                 UpdatedOn: Date.now(),
-            hexcode_blendedImage: firstBlend.hexcode_blendedImage || null,
-                // Store all blend configurations for reference
-                allBlendConfigurations: SelectedBlendImages
+                hexcode_blendedImage: firstBlend.hexcode_blendedImage || null,
+                // NOTE: All 30 versions stored in PageStream.SelectedBlendImages only
+                // Will be used for SyncedPosts at time of buy
               };
 
               // Create Location array (one or two images based on post type)
@@ -23953,6 +24523,16 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           break;
       }
     }
+    
+    // Attach parsed arrays to req.body for use in image matching and ranking
+    req.body.pArr = pArr;   // Primary keywords (for GroupTag matching)
+    req.body.sArr = sArr;   // Secondary1 keywords (for Image 1 ranking)
+    req.body.s2Arr = s2Arr; // Secondary2 keywords (for Image 2 ranking)
+    
+    console.log("📋 Keywords parsed:");
+    console.log(`   🎯 Primary (pArr): [${pArr.join(", ")}] (${pArr.length} keywords)`);
+    console.log(`   🔑 Secondary1 (sArr): [${sArr.slice(0, 3).join(", ")}...] (${sArr.length} keywords)`);
+    console.log(`   🔑 Secondary2 (s2Arr): [${s2Arr.slice(0, 3).join(", ")}...] (${s2Arr.length} keywords)`);
 
     const postCommentsArr = req.body.postCommentsArr || [];
 
@@ -24347,36 +24927,9 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     }
 
     // Initialize GroupTags array before media creation
+    // NOTE: Posts do NOT need GroupTags - keep empty like old code
+    // GroupTags are only assigned to source images (Unsplash/MJ) by the cron job
     const groupTagsArray = [];
-    
-    // Add primary keywords as GroupTags (if available)
-    if (pArr && pArr.length > 0) {
-      try {
-        const primaryKeywordIds = await __getKeywordIdsByNames_CMIDW(pArr);
-
-        if (
-          primaryKeywordIds &&
-          primaryKeywordIds.keywordIds &&
-          primaryKeywordIds.keywordIds.length > 0
-        ) {
-          const addedIds = new Set();
-          
-          primaryKeywordIds.keywordIds.forEach((keywordId) => {
-            if (!addedIds.has(keywordId)) {
-              const groupTagObj = {
-                GroupTagID: keywordId,
-                MetaMetaTagID: keywordId,
-                MetaTagID: keywordId,
-              };
-              groupTagsArray.push(groupTagObj);
-              addedIds.add(keywordId);
-            }
-          });
-        }
-      } catch (error) {
-        console.log("❌ Error processing primary keywords:", error.message);
-      }
-    }
 
     // ✅ Validate OwnerId user exists before creating post
     let uploaderID = result[0].OwnerId;
@@ -24456,13 +25009,16 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       MediaSelectionCriteria2: req.body.MediaSelectionCriteria2 || null,
       // Add post comments array
       PostCommentsArr: req.body.postCommentsArr || [],
+      // Add postTags - each post will have one keyword, all versions created from it will have the same postTag
+      postTags: req.body.postTags || null,
     };
 
-    // Log MediaSelectionCriteria for debugging
+    // Log MediaSelectionCriteria and postTags for debugging
     console.log("📋 MediaSelectionCriteria metadata being saved:");
     console.log("📋 MediaSelectionCriteria:", req.body.MediaSelectionCriteria);
     console.log("📋 MediaSelectionCriteria1:", req.body.MediaSelectionCriteria1);
     console.log("📋 MediaSelectionCriteria2:", req.body.MediaSelectionCriteria2);
+    console.log("📋 postTags being saved:", req.body.postTags || "none");
 
     console.log(`💾 Saving media to database...`);
     console.log(`📋 Media data preview:`, {
@@ -24702,88 +25258,72 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         });
       }
       
-      var conditions = {
-        _id: { $nin: process.SEARCH_ENGINE_CONFIG.GT__RemoveFrom__DefaultCase || [] },
-        status: { $in: [1, 3] },
-        MetaMetaTagID: { $nin: process.SEARCH_ENGINE_CONFIG.MMT__RemoveFrom__SearchCase || [] }
-      };
-      
-      if (selectedWords.length) {
-        conditions["$or"] = selectedWords;
+      // ===== USE STATIC FILE INSTEAD OF groupTags COLLECTION =====
+      // Check if static index is loaded
+      if (!isTagIndexLoaded()) {
+        console.log("   - ⚠️ Static index not loaded, loading now...");
+        await loadTagIndex();
       }
       
-      var groupTagsFields = {
-        GroupTagTitle: 1,
-        _id: 1
-      };
-      
-      
       try {
-        var results = await groupTags.find(conditions, groupTagsFields);
-        
         // ===== RANK ASSIGNMENT (Step 3 from old code) =====
+        // Use static file lookup instead of groupTags.find()
         
-        // Assign ranks to keywords based on API response (like old code: response.data[key])
-        for (var i = 0; i < results.length; i++) {
-          // Check if already in generatedKeywords (like old code)
-          if (req.body.generatedKeywords.indexOf(String(results[i]._id)) < 0) {
-            // Check if already in selectedKeywords (like old code)
-            if (req.body.selectedKeywords.indexOf(String(results[i]._id)) < 0) {
-              // Add to generatedKeywords (like old code)
-              req.body.generatedKeywords.push(String(results[i]._id));
-              
-              // Check and get rank (like old code)
-              var key = typeof results[i].GroupTagTitle == 'string' ? results[i].GroupTagTitle.toLowerCase().trim() : null;
-              
-              if (key && keywordRankingResponse.data[key]) {
-                var originalRank = keywordRankingResponse.data[key];
+        for (var i = 0; i < allKeywordsForRanking.length; i++) {
+          var keyword = allKeywordsForRanking[i].toLowerCase().trim();
+          if (!keyword) continue;
+          
+          // Lookup keyword in static file
+          var matches = lookupTag(keyword);
+          
+          for (var j = 0; j < matches.length; j++) {
+            var match = matches[j];
+            var groupTagId = match.groupTagId;
+            var groupTagTitle = match.groupTagTitle;
+            
+            // Check if already in generatedKeywords (like old code)
+            if (req.body.generatedKeywords.indexOf(groupTagId) < 0) {
+              // Check if already in selectedKeywords (like old code)
+              if (req.body.selectedKeywords.indexOf(groupTagId) < 0) {
+                // Add to generatedKeywords (like old code)
+                req.body.generatedKeywords.push(groupTagId);
                 
-                // PERFORMANCE OPTIMIZATION: Group individual ranks into 5 main ranks
-                // Convert individual ranks (1,2,3,4,5,6,7,8,9,10...) to grouped ranks (1,1,1,1,2,2,2,2,3,3...)
-                var groupedRank = Math.ceil(originalRank / 4); // Group every 4 keywords into 1 rank
-                if (groupedRank > 5) groupedRank = 5; // Limit to max 5 ranks
+                // Check and get rank (like old code)
+                var key = groupTagTitle.toLowerCase().trim();
                 
-                // Assign to rank bucket (like old code)
-                if (typeof subsetByRankObj[groupedRank] === "object") {
-                  subsetByRankObj[groupedRank].push(String(results[i].GroupTagTitle) + "__" + String(results[i]._id));
-                  subsetByRankObj2[groupedRank].push(String(results[i].GroupTagTitle));
-                } else {
-                  subsetByRankObj[groupedRank] = [];
-                  subsetByRankObj[groupedRank].push(String(results[i].GroupTagTitle) + "__" + String(results[i]._id));
-                  subsetByRankObj2[groupedRank] = [];
-                  subsetByRankObj2[groupedRank].push(String(results[i].GroupTagTitle));
+                if (key && keywordRankingResponse.data[key]) {
+                  var originalRank = keywordRankingResponse.data[key];
+                  
+                  // PERFORMANCE OPTIMIZATION: Group individual ranks into 5 main ranks
+                  var groupedRank = Math.ceil(originalRank / 4);
+                  if (groupedRank > 5) groupedRank = 5;
+                  
+                  // Assign to rank bucket (like old code)
+                  if (typeof subsetByRankObj[groupedRank] === "object") {
+                    subsetByRankObj[groupedRank].push(groupTagTitle + "__" + groupTagId);
+                    subsetByRankObj2[groupedRank].push(groupTagTitle);
+                  } else {
+                    subsetByRankObj[groupedRank] = [];
+                    subsetByRankObj[groupedRank].push(groupTagTitle + "__" + groupTagId);
+                    subsetByRankObj2[groupedRank] = [];
+                    subsetByRankObj2[groupedRank].push(groupTagTitle);
+                  }
                 }
-                
               }
             }
           }
         }
-        
-        // ❌ REMOVED: Don't concatenate - this would add all keywords to generatedKeywords
-        // We need to keep only the primary keyword ID for proper image filtering
-        // Concatenate selectedKeywords with generatedKeywords (like old code)
-        // req.body.generatedKeywords = req.body.selectedKeywords.concat(req.body.generatedKeywords);
       } catch (error) {
+        console.log("   - ⚠️ Static file lookup error:", error.message);
       }
     } else {
       
-      // Query database to get ObjectIds for keywords (like old code)
-      var conditions = {
-        status: { $in: [1, 3] },
-        $or: [
-          { GroupTagTitle: { $in: allKeywordsForRanking } },
-          { MainGroupTagTitle: { $in: allKeywordsForRanking } }
-        ]
-      };
-      
-      var queryFields = {
-        GroupTagTitle: 1,
-        _id: 1,
-      };
-      
-      
-      var results = await groupTags.find(conditions, queryFields);
-      results = Array.isArray(results) ? results : [];
+      // ===== USE STATIC FILE INSTEAD OF groupTags COLLECTION (Fallback) =====
+      // Check if static index is loaded
+      if (!isTagIndexLoaded()) {
+        console.log("   - ⚠️ Static index not loaded, loading now...");
+        await loadTagIndex();
+      }
       
       // Fallback: Use position-based ranking (like old code fallback)
       var rankCounter = 1;
@@ -24798,28 +25338,21 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           continue;
         }
         
-        // ❌ REMOVED: Don't add to generatedKeywords here
-        // generatedKeywords is already set correctly for image filtering (line 20344)
-        // Adding all keywords here would break the Image 1/Image 2 split
-        // req.body.generatedKeywords.push(keyword);
-        
         // Assign individual rank to each keyword (group multiple keywords per rank)
         if (!subsetByRankObj[rankCounter]) {
           subsetByRankObj[rankCounter] = [];
           subsetByRankObj2[rankCounter] = [];
         }
         
-        // Find the ObjectId for this keyword from the API results
-        let keywordObjectId = keyword; // fallback to keyword if not found
-        for (let result of results) {
-          if (result.GroupTagTitle && result.GroupTagTitle.toLowerCase().trim() === keyword.toLowerCase().trim()) {
-            keywordObjectId = result._id;
-            break;
-          }
+        // Use static file lookup to get GroupTagId
+        var matches = lookupTag(keyword);
+        var keywordObjectId = keyword; // fallback to keyword if not found
+        if (matches.length > 0) {
+          keywordObjectId = matches[0].groupTagId;
         }
+        
         subsetByRankObj[rankCounter].push(keyword + "__" + keywordObjectId);
         subsetByRankObj2[rankCounter].push(keyword);
-        
         
         // Move to next rank every 4 keywords to limit total ranks
         if (subsetByRankObj[rankCounter].length >= 4) {
@@ -24834,31 +25367,23 @@ const addNewPost_INTERNAL_API = async (req, res) => {
           if (!keyword || keyword === 'undefined') {
             continue;
           }
-          // ❌ REMOVED: Don't add to generatedKeywords
-          // req.body.generatedKeywords.push(keyword);
           
           if (!subsetByRankObj[rankCounter]) {
             subsetByRankObj[rankCounter] = [];
             subsetByRankObj2[rankCounter] = [];
           }
           
-          // Find the ObjectId for this keyword from the API results
-        let keywordObjectId = keyword; // fallback to keyword if not found
-        for (let result of results) {
-          if (result.GroupTagTitle && result.GroupTagTitle.toLowerCase().trim() === keyword.toLowerCase().trim()) {
-            keywordObjectId = result._id;
-            break;
+          // Use static file lookup to get GroupTagId
+          var matches = lookupTag(keyword);
+          var keywordObjectId = keyword; // fallback to keyword if not found
+          if (matches.length > 0) {
+            keywordObjectId = matches[0].groupTagId;
           }
-        }
-        subsetByRankObj[rankCounter].push(keyword + "__" + keywordObjectId);
+          
+          subsetByRankObj[rankCounter].push(keyword + "__" + keywordObjectId);
           subsetByRankObj2[rankCounter].push(keyword);
         }
       }
-      
-      // ❌ REMOVED: Don't concatenate - this would add all keywords to generatedKeywords
-      // We need to keep only the primary keyword ID for proper image filtering
-      // Concatenate selectedKeywords with generatedKeywords (like old code)
-      // req.body.generatedKeywords = req.body.selectedKeywords.concat(req.body.generatedKeywords);
     }
     
     // Sort by rank keys and convert to arrays (like old code)
@@ -24900,6 +25425,7 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         MediaSelectionCriteria2: req.body.MediaSelectionCriteria2 || null,
         PostStatement: postStatement || "",
         PostStreamType: postStreamType,
+        postTags: req.body.postTags || null, // ✅ Added: Pass postTags to versions
         // ===== RANK SYSTEM DATA =====
         subsetByRank: req.body.subsetByRank || [],
         subsetByRankObj2: req.body.subsetByRankObj2 || {},
@@ -25147,6 +25673,7 @@ const addNewPost_INTERNAL_API = async (req, res) => {
             : null,
           keywords: req.body.Keywords || [],
           selectedKeywords: req.body.SelectedKeywords || [],
+          postTags: req.body.postTags || null, // ✅ Added: Include postTags in BlendSettings
           PostStatement: postStatement || "",
           PostStreamType: postStreamType,
           UpdatedOn: Date.now(),

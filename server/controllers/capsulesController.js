@@ -10934,6 +10934,7 @@ var getUserMixedFeedPosts = async function (req, res) {
           PageId: { $first: "$PageId" },
           PostId: { $first: "$PostId" },
           PostStatement: { $first: "$PostStatement" },
+          postTags: { $first: "$postTags" }, // ✅ Added: Include postTags from SyncedPost
           PostOwnerId: { $first: "$PostOwnerId" },
           SyncedBy: { $first: "$SyncedBy" },
           ReceiverEmails: { $first: "$ReceiverEmails" },
@@ -10965,6 +10966,7 @@ var getUserMixedFeedPosts = async function (req, res) {
           PageId: 1,
           PostId: 1,
           PostStatement: 1,
+          postTags: 1, // ✅ Added: Include postTags from SyncedPost
           PostOwnerId: 1,
           SyncedBy: 1,
           ReceiverEmails: 1,
@@ -11699,6 +11701,7 @@ var getUserMixedFeedPosts = async function (req, res) {
           AutoId: 1,
           ContentType: 1,
           PostStatement: 1,
+          postTags: 1, // ✅ Added: Include postTags from SyncedPost
           VisualUrls: 1,
           BlendMode: 1,
           hexcode_blendedImage_temp: 1,
@@ -12389,6 +12392,7 @@ var getUserFeedPosts = async function (req, res) {
           PageId: 1,
           PostId: 1,
           PostStatement: 1,
+          postTags: 1, // ✅ Added: Include postTags from SyncedPost
           PostOwnerId: 1,
           SyncedBy: 1,
           ReceiverEmails: 1,
@@ -13093,6 +13097,7 @@ var getUserFeedPosts = async function (req, res) {
           AutoId: 1,
           ContentType: 1,
           PostStatement: 1,
+          postTags: 1, // ✅ Added: Include postTags from SyncedPost
           VisualUrls: 1,
           BlendMode: 1,
           hexcode_blendedImage_temp: 1,
@@ -15564,6 +15569,7 @@ var getStreamPostsOptimized = async function (req, res) {
           PageId: 1,
           PostId: 1,
           PostStatement: 1,
+          postTags: 1, // ✅ Added: Include postTags from SyncedPost
           PostOwnerId: 1,
           SyncedBy: 1,
           ReceiverEmails: 1,

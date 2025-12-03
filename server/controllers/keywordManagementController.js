@@ -2,6 +2,13 @@ var keywordModel = require('./../models/groupTagsModel.js');
 var mongoose = require('mongoose');
 var keywordModel_allTags = require('./../models/allTagsModel.js');
 
+// Import static file loader for keyword parsing
+const { 
+  isLoaded: isTagIndexLoaded, 
+  loadTagIndex, 
+  parseDescriptionForKeywords 
+} = require('../utilities/staticGroupTagsLoader');
+
 // Find all group tags
 var findAll = function(req, res){    
 	
@@ -1275,7 +1282,90 @@ var keywordParsar_aggregate = function( req , res ){
 //exports.keywordParsar = keywordParsar_3;	//map-reduce based faster algorithm.
 //exports.keywordParsar = keywordParsar_4
 //exports.keywordParsar = keywordParsar_3_alltags;	//map-reduce based faster algorithm + alltags collection - cron job is updating it on hourly basis.
-exports.keywordParsar = keywordParsar_aggregate;
+//exports.keywordParsar = keywordParsar_aggregate;
+
+/**
+ * NEW: Static file based keyword parser
+ * Uses the pre-loaded static index instead of querying MongoDB
+ * 
+ * Flow:
+ * 1. Parse user description into words
+ * 2. Find matching GroupTags from static file (where GroupTagTitle matches)
+ * 3. Return GroupTag + first 5 tags from each matching GroupTag
+ */
+var keywordParsar_static = async function(req, res) {
+  // Session check
+  var login_user_id = "";
+  if (req.session && req.session.user) {
+    if (req.session.user._id != undefined) {
+      login_user_id = req.session.user._id;
+    } else {
+      res.json({ "status": "error", "message": "Access Denied" });
+      return;
+    }
+  } else {
+    res.json({ "status": "error", "message": "Access Denied" });
+    return;
+  }
+
+  var inputText = req.body.inputText ? req.body.inputText : "";
+  
+  console.log("🔍 [keywordParsar_static] Parsing:", inputText);
+
+  // Ensure static index is loaded
+  if (!isTagIndexLoaded()) {
+    console.log("   ⏳ Loading static index...");
+    try {
+      await loadTagIndex();
+    } catch (error) {
+      console.error("   ❌ Failed to load static index:", error.message);
+      res.json({
+        "code": "500",
+        "msg": "Failed to load keyword index",
+        "response": {
+          "inputText": inputText,
+          "matchedArr": [],
+          "suggestedArr": [],
+          "newGT": [],
+          "removeGT": [],
+          "result": []
+        }
+      });
+      return;
+    }
+  }
+
+  try {
+    // Use static file to parse description and find matching GroupTags
+    // Returns first 5 tags per GroupTag
+    const result = parseDescriptionForKeywords(inputText, 5);
+    
+    console.log("   ✅ Found", result.suggestedArr.length, "keyword matches");
+    
+    res.json({
+      "code": "200",
+      "msg": "Success",
+      "response": result
+    });
+  } catch (error) {
+    console.error("   ❌ Error parsing keywords:", error.message);
+    res.json({
+      "code": "500",
+      "msg": "Error parsing keywords",
+      "response": {
+        "inputText": inputText,
+        "matchedArr": [],
+        "suggestedArr": [],
+        "newGT": [],
+        "removeGT": [],
+        "result": []
+      }
+    });
+  }
+};
+
+// Use static file version for keyword parsing
+exports.keywordParsar = keywordParsar_static;
 
 var test_duplicate = function(req, res){    
 	keywordModel.find({$or:[{status:1},{status:3}]},function(err,result){

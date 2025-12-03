@@ -20,6 +20,10 @@ var SyncedpostsSchema = new mongoose.Schema({
 	PostStatement : {
 		type : String
 	},
+	postTags: {
+		type: String,
+		default: null
+	},
 	PostOwnerId : {
 		type : mongoose.Schema.Types.ObjectId,
 		ref : 'user'

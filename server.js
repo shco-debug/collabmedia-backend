@@ -29,6 +29,9 @@ const bodyParser = require("body-parser");
 // Load environment variables
 require("dotenv").config();
 
+// Static GroupTags loader - for keyword lookups without database queries
+const { loadTagIndex } = require("./server/utilities/staticGroupTagsLoader.js");
+
 // Debug: Log what FRONTEND_URL is being loaded from .env
 console.log('📋 Environment Variables Loaded:');
 console.log('   - FRONTEND_URL from .env:', process.env.FRONTEND_URL || 'NOT SET');
@@ -584,8 +587,18 @@ if (process.env.VERCEL !== '1') {
   const httpPort = process.env.PORT || 3002;
   
   // Connect to MongoDB first, then start the server
-  connectToMongoDB().then((connected) => {
+  connectToMongoDB().then(async (connected) => {
     if (connected) {
+      // Load static GroupTags index for keyword lookups
+      console.log(`📂 Loading static GroupTags index...`);
+      try {
+        await loadTagIndex();
+        console.log(`✅ Static GroupTags index loaded`);
+      } catch (indexErr) {
+        console.error(`⚠️ Failed to load static GroupTags index:`, indexErr.message);
+        console.log(`   Server will continue, but keyword lookups may be slower`);
+      }
+      
       // Always use HTTP server (HTTPS disabled)
       const httpServer = app.listen(httpPort, () => {
         // Set very long timeout for buyNow operations (10 hours = 36000000ms)

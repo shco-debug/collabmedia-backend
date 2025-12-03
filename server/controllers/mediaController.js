@@ -1661,107 +1661,489 @@ const updateMediaToBoard = async (req, res) => {
   }
 };
 
-// Main function to add tags to uploaded media
-const addTagsToUploadedMedia = async (req, res) => {
-  try {
-    const data = await media.findById(req.body.MediaID);
-    if (!data) {
-      return res.json({ code: "404", message: "Media not found" });
+// Helper function to fetch and process GroupTags in batches
+const processGroupTagsBatch = async (mediaID, queryOptions = {}, batchSize = 200) => {
+  // Default query: fetch active GroupTags (status 1 or 3), not deleted
+  const defaultQuery = {
+    IsDeleted: { $ne: 1 },
+    $or: [{ status: 1 }, { status: 3 }]
+  };
+
+  // Merge with custom query options if provided
+  const query = { ...defaultQuery, ...queryOptions };
+
+  console.log(`🔍 Fetching GroupTags from collection with query:`, JSON.stringify(query));
+
+  // Fetch all GroupTags matching the query
+  const allGroupTags = await groupTags.find(query).select('_id').lean();
+  const totalGroupTags = allGroupTags.length;
+
+  if (totalGroupTags === 0) {
+    console.log(`⚠️ No GroupTags found matching the query`);
+    return [];
+  }
+
+  console.log(`📦 Found ${totalGroupTags} GroupTags. Processing in batches of ${batchSize}`);
+
+  // Extract GroupTag IDs
+  const groupTagIds = allGroupTags.map(gt => gt._id);
+
+  // Split into batches
+  const batches = [];
+  for (let i = 0; i < groupTagIds.length; i += batchSize) {
+    batches.push(groupTagIds.slice(i, i + batchSize));
+  }
+
+  console.log(`📦 Processing ${totalGroupTags} GroupTags in ${batches.length} batch(es) of ${batchSize}`);
+
+  // Get current media data to preserve existing GroupTags
+  const mediaData = await media.findById(mediaID);
+  if (!mediaData) {
+    throw new Error("Media not found");
+  }
+
+  // Start with existing GroupTags (convert to array of objects if needed)
+  let existingGroupTags = [];
+  if (Array.isArray(mediaData.GroupTags) && mediaData.GroupTags.length > 0) {
+    // Handle both string IDs and object format
+    existingGroupTags = mediaData.GroupTags.map(gt => {
+      if (typeof gt === 'string' || gt instanceof ObjectId) {
+        return { GroupTagID: String(gt) };
+      }
+      return gt.GroupTagID ? gt : { GroupTagID: String(gt) };
+    });
+  }
+
+  // Track all GroupTag IDs to avoid duplicates
+  const existingGroupTagIds = new Set(
+    existingGroupTags.map(gt => String(gt.GroupTagID))
+  );
+
+  let totalAdded = 0;
+
+  // Process each batch
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+    const batch = batches[batchIndex];
+    console.log(`🔄 Processing batch ${batchIndex + 1}/${batches.length} (${batch.length} GroupTags)`);
+
+    // Add new GroupTags from this batch (avoid duplicates)
+    const newGroupTags = [];
+    for (const gtId of batch) {
+      const gtIdString = String(gtId);
+      if (!existingGroupTagIds.has(gtIdString)) {
+        newGroupTags.push({ GroupTagID: gtIdString });
+        existingGroupTagIds.add(gtIdString);
+        totalAdded++;
+      }
     }
 
-    console.log("add--tags to uploaded media--");
-    var fields = {
-      GroupTags: data.GroupTags.length == 0 ? [] : data.GroupTags,
-      Status: 3,
-      MetaMetaTags: req.body.mmt,
-      IsPrivate: req.body.isPrivate ? req.body.isPrivate : 0,
-      MetaTags: null,
-      TagType: null,
-      Posts: {},
-      ViewsCount: 1,
+    // Combine existing and new GroupTags
+    const updatedGroupTags = [...existingGroupTags, ...newGroupTags];
+
+    // Update media with this batch
+    await media.updateOne(
+      { _id: mediaID },
+      { $set: { GroupTags: updatedGroupTags } }
+    );
+
+    // Increment MediaCount for each GroupTag in this batch
+    for (const gtId of batch) {
+      try {
+        await groupTags.updateOne(
+          { _id: gtId },
+          { $inc: { MediaCount: 1 } }
+        );
+      } catch (error) {
+        console.error(`⚠️ Error incrementing MediaCount for GroupTag ${gtId}:`, error.message);
+      }
+    }
+
+    // Update existingGroupTags for next batch
+    existingGroupTags = updatedGroupTags;
+
+    console.log(`✅ Batch ${batchIndex + 1}/${batches.length} completed (${newGroupTags.length} new GroupTags added, ${totalAdded} total so far)`);
+  }
+
+  console.log(`✅ All batches processed. Total GroupTags assigned: ${existingGroupTags.length} (${totalAdded} newly added)`);
+  return {
+    totalProcessed: totalGroupTags,
+    totalAssigned: existingGroupTags.length,
+    newlyAdded: totalAdded,
+    batchesProcessed: batches.length
+  };
+};
+
+// Helper function to find media matching a GroupTag based on metadata
+// Returns media IDs that match any tag within the GroupTag
+const findMatchingMediaForGroupTag = async (groupTag) => {
+  try {
+    // Get all active tags from the GroupTag
+    const activeTags = Array.isArray(groupTag.Tags) 
+      ? groupTag.Tags.filter(tag => tag?.status === 1 || tag?.status === undefined)
+      : [];
+
+    if (activeTags.length === 0) {
+      console.log(`⚠️ GroupTag ${groupTag.GroupTagTitle || groupTag._id} has no active tags`);
+      return [];
+    }
+
+    // Build query to find media where any tag from GroupTag matches metadata fields
+    const tagTitles = activeTags.map(tag => tag.TagTitle).filter(Boolean);
+    if (tagTitles.length === 0) {
+      return [];
+    }
+
+    // Build $or conditions for each metadata field with each tag title
+    const orConditions = [];
+    
+    // For array fields, use $in with exact matches (case-insensitive via regex)
+    for (const tagTitle of tagTitles) {
+      const escapedTitle = tagTitle.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+      const regex = new RegExp(`^${escapedTitle}$`, "i");
+      
+      orConditions.push({ "MetaData.Subjects": regex });
+      orConditions.push({ "MetaData.Metaphors": regex });
+      orConditions.push({ "MetaData.Concepts": regex });
+      orConditions.push({ "MetaData.Attributes": regex });
+      orConditions.push({ "MetaData.Feelings": regex });
+      orConditions.push({ "MetaData.Verbs": regex });
+    }
+    
+    // For Prompt field, use regex with all tags
+    if (tagTitles.length > 0) {
+      const promptRegex = tagTitles.map(t => t.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join("|");
+      orConditions.push({ "Prompt": { $regex: promptRegex, $options: "i" } });
+    }
+
+    const query = {
+      IsDeleted: { $ne: 1 },
+      $or: orConditions
     };
 
-    // Default private logic
-    fields.IsPrivate = defaultPrivateCase__Checker(data);
+    const matchingMedia = await media.find(query).select('_id MetaData Prompt').lean();
+    return matchingMedia;
+  } catch (error) {
+    console.error(`Error finding matching media for GroupTag ${groupTag._id}:`, error.message);
+    return [];
+  }
+};
 
-    fields.Posts.Users = [];
+// Helper function to find which metadata field a tag matches
+const findMatchingMetadataField = (tagTitle, mediaData) => {
+  const tagTitleLower = tagTitle.toLowerCase().trim();
+  
+  // Check each metadata field
+  if (mediaData.MetaData?.Subjects) {
+    const subjects = Array.isArray(mediaData.MetaData.Subjects) ? mediaData.MetaData.Subjects : [];
+    if (subjects.some(s => s.toLowerCase().trim() === tagTitleLower)) {
+      return "MetaData.Subjects";
+    }
+  }
+  
+  if (mediaData.MetaData?.Metaphors) {
+    const metaphors = Array.isArray(mediaData.MetaData.Metaphors) ? mediaData.MetaData.Metaphors : [];
+    if (metaphors.some(m => m.toLowerCase().trim() === tagTitleLower)) {
+      return "MetaData.Metaphors";
+    }
+  }
+  
+  if (mediaData.MetaData?.Concepts) {
+    const concepts = Array.isArray(mediaData.MetaData.Concepts) ? mediaData.MetaData.Concepts : [];
+    if (concepts.some(c => c.toLowerCase().trim() === tagTitleLower)) {
+      return "MetaData.Concepts";
+    }
+  }
+  
+  if (mediaData.MetaData?.Attributes) {
+    const attributes = Array.isArray(mediaData.MetaData.Attributes) ? mediaData.MetaData.Attributes : [];
+    if (attributes.some(a => a.toLowerCase().trim() === tagTitleLower)) {
+      return "MetaData.Attributes";
+    }
+  }
+  
+  if (mediaData.MetaData?.Feelings) {
+    const feelings = Array.isArray(mediaData.MetaData.Feelings) ? mediaData.MetaData.Feelings : [];
+    if (feelings.some(f => f.toLowerCase().trim() === tagTitleLower)) {
+      return "MetaData.Feelings";
+    }
+  }
+  
+  if (mediaData.MetaData?.Verbs) {
+    const verbs = Array.isArray(mediaData.MetaData.Verbs) ? mediaData.MetaData.Verbs : [];
+    if (verbs.some(v => v.toLowerCase().trim() === tagTitleLower)) {
+      return "MetaData.Verbs";
+    }
+  }
+  
+  if (mediaData.Prompt && typeof mediaData.Prompt === 'string') {
+    const promptWords = mediaData.Prompt.toLowerCase().split(/[,\s]+/);
+    if (promptWords.includes(tagTitleLower)) {
+      return "Prompt";
+    }
+  }
+  
+  return null;
+};
 
-    // Get user FSGs from the owner field instead of session
-    let userFSGs = [];
-    if (req.body.owner) {
+// Helper function to assign GroupTag to media in batches
+// Creates multiple GroupTag entries (one per matching tag) like the example structure
+const assignGroupTagToMediaBatch = async (groupTag, matchingMediaArray, batchSize = 200) => {
+  if (!matchingMediaArray || matchingMediaArray.length === 0) {
+    return { processed: 0, assigned: 0, skipped: 0 };
+  }
+
+  // Get active tags from GroupTag
+  const activeTags = Array.isArray(groupTag.Tags) 
+    ? groupTag.Tags.filter(tag => tag?.status === 1 || tag?.status === undefined)
+    : [];
+
+  if (activeTags.length === 0) {
+    console.log(`  ⚠️ No active tags in GroupTag ${groupTag.GroupTagTitle || groupTag._id}`);
+    return { processed: 0, assigned: 0, skipped: 0 };
+  }
+
+  const groupTagIdString = String(groupTag._id);
+  const groupTagTitle = groupTag.GroupTagTitle || "";
+
+  // OPTIMIZATION: Batch fetch all media with GroupTags in one query
+  const mediaIds = matchingMediaArray.map(m => m._id).filter(Boolean);
+  
+  if (mediaIds.length === 0) {
+    console.log(`  ⚠️ No valid media IDs found`);
+    return { processed: 0, assigned: 0, skipped: 0 };
+  }
+  
+  const mediaDocs = await media.find({ _id: { $in: mediaIds } }).select('_id GroupTags').lean();
+  const mediaMap = new Map(mediaDocs.map(doc => [String(doc._id), doc]));
+
+  // Prepare bulk operations for faster updates
+  const mediaBulkOps = [];
+  const mediaIdsToUpdate = new Set();
+  let totalAssigned = 0;
+  let totalSkipped = 0;
+
+  // Process all media in one pass (no individual queries)
+  for (const mediaItem of matchingMediaArray) {
+    try {
+      const mediaId = mediaItem._id;
+      const mediaDoc = mediaMap.get(String(mediaId));
+      
+      if (!mediaDoc) {
+        continue;
+      }
+
+      const existingGroupTags = Array.isArray(mediaDoc.GroupTags) ? mediaDoc.GroupTags : [];
+      const existingTagSet = new Set();
+      
+      // Build set of existing tag combinations for O(1) lookup
+      existingGroupTags.forEach(gt => {
+        if (typeof gt !== 'string' && gt.GroupTagID && gt.TagID) {
+          existingTagSet.add(`${String(gt.GroupTagID)}:${String(gt.TagID)}`);
+        }
+      });
+
+      // Find all matching tags from this GroupTag for this media
+      const newGroupTagEntries = [];
+      
+      for (const tag of activeTags) {
+        if (!tag.TagTitle) continue;
+
+        // Check if this specific tag matches any metadata field (use mediaItem which has MetaData)
+        const matchedFrom = findMatchingMetadataField(tag.TagTitle, mediaItem);
+        if (!matchedFrom) {
+          continue; // This tag doesn't match this media
+        }
+
+        // Fast duplicate check using Set
+        const tagIdString = String(tag._id);
+        const tagKey = `${groupTagIdString}:${tagIdString}`;
+        
+        if (!existingTagSet.has(tagKey)) {
+          newGroupTagEntries.push({
+            GroupTagID: groupTagIdString,
+            GroupTagTitle: groupTagTitle,
+            TagID: tagIdString,
+            TagTitle: tag.TagTitle,
+            TagType: tag.TagType || "",
+            MatchedFrom: matchedFrom
+          });
+          existingTagSet.add(tagKey); // Prevent duplicates in same batch
+        }
+      }
+
+      // Prepare bulk update operation
+      if (newGroupTagEntries.length > 0) {
+        const updatedGroupTags = [...existingGroupTags, ...newGroupTagEntries];
+        mediaBulkOps.push({
+          updateOne: {
+            filter: { _id: mediaId },
+            update: { $set: { GroupTags: updatedGroupTags } }
+          }
+        });
+        mediaIdsToUpdate.add(String(mediaId));
+        totalAssigned += newGroupTagEntries.length;
+      } else {
+        totalSkipped++;
+      }
+    } catch (error) {
+      console.error(`  ⚠️ Error processing media ${mediaItem._id}:`, error.message);
+    }
+  }
+
+  // OPTIMIZATION: Execute bulk updates in batches of 500 (much faster than individual updates)
+  const bulkBatchSize = 500;
+  for (let i = 0; i < mediaBulkOps.length; i += bulkBatchSize) {
+    const bulkBatch = mediaBulkOps.slice(i, i + bulkBatchSize);
+    try {
+      await media.bulkWrite(bulkBatch, { ordered: false });
+      console.log(`  💾 Bulk updated ${bulkBatch.length} media documents (batch ${Math.floor(i/bulkBatchSize) + 1})`);
+    } catch (error) {
+      console.error(`  ⚠️ Bulk update error:`, error.message);
+    }
+  }
+
+  // OPTIMIZATION: Single update for MediaCount (increment by number of unique media)
+  if (mediaIdsToUpdate.size > 0) {
+    try {
+      await groupTags.updateOne(
+        { _id: groupTag._id },
+        { $inc: { MediaCount: mediaIdsToUpdate.size } }
+      );
+    } catch (error) {
+      console.error(`  ⚠️ Error updating MediaCount:`, error.message);
+    }
+  }
+
+  return { processed: matchingMediaArray.length, assigned: totalAssigned, skipped: totalSkipped };
+};
+
+// Main function to automatically fetch GroupTags and assign them to matching media
+// If groupTagId is provided, processes only that GroupTag
+// If not provided, processes all active GroupTags automatically
+const addTagsToUploadedMedia = async (req, res) => {
+  try {
+    // Check if a specific groupTagId is provided
+    const groupTagId = req.body.groupTagId;
+    
+    let allGroupTags = [];
+    
+    if (groupTagId) {
+      // Process only the specified GroupTag
+      console.log(`🚀 Starting GroupTag assignment for specific GroupTag: ${groupTagId}`);
+      
       try {
-        const userData = await user.findById(req.body.owner);
-        if (userData && userData.FSGsArr2) {
-          userFSGs = userData.FSGsArr2;
+        const groupTag = await groupTags.findOne({ 
+          _id: new ObjectId(groupTagId),
+          IsDeleted: { $ne: 1 }
+        }).lean();
+        
+        if (!groupTag) {
+          return res.json({ 
+            code: "404", 
+            message: `GroupTag with ID ${groupTagId} not found or is deleted`,
+            totalGroupTags: 0,
+            results: []
+          });
         }
+        
+        allGroupTags = [groupTag];
+        console.log(`📋 Processing single GroupTag: ${groupTag.GroupTagTitle || groupTagId}`);
       } catch (error) {
-        console.log("Error fetching user FSGs:", error);
-        userFSGs = [];
+        return res.json({ 
+          code: "400", 
+          message: `Invalid groupTagId format: ${groupTagId}`,
+          error: error.message,
+          totalGroupTags: 0,
+          results: []
+        });
       }
-    }
-
-    fields.Posts.Users.push({ UserFSGs: userFSGs });
-
-    if (req.body.gt) {
-      fields.GroupTags.push({
-        GroupTagID: req.body.gt,
-      });
-    }
-
-    fields.Photographer = null;
-    req.body.id = req.body.MediaID;
-    var query = { _id: req.body.MediaID };
-
-    // Handle Montage type differently
-    if (req.body.data?.MediaType == "Montage") {
-      fields.Status = 1;
-      await media.updateOne(query, { $set: fields });
     } else {
-      await media.updateOne(query, { $set: fields });
+      // Process all active GroupTags automatically
+      console.log("🚀 Starting automatic GroupTag assignment to media (bulk mode)");
+
+      // Fetch all active GroupTags from collection
+      const queryOptions = {
+        IsDeleted: { $ne: 1 },
+        $or: [{ status: 1 }, { status: 3 }]
+      };
+
+      // Allow custom query from request if provided
+      const finalQuery = req.body.queryOptions ? { ...queryOptions, ...req.body.queryOptions } : queryOptions;
+
+      console.log(`🔍 Fetching GroupTags with query:`, JSON.stringify(finalQuery));
+      allGroupTags = await groupTags.find(finalQuery).lean();
+      
+      if (!allGroupTags || allGroupTags.length === 0) {
+        return res.json({ 
+          code: "200", 
+          message: "No GroupTags found to process",
+          totalGroupTags: 0,
+          results: []
+        });
+      }
+
+      console.log(`📋 Found ${allGroupTags.length} GroupTags to process (bulk mode)`);
     }
 
-    // Handle additional tags if provided
-    if (req.body.Tags) {
-      await addTags_toGT(req.body.MediaID, req.body.Tags);
+    const results = [];
+    let totalMediaProcessed = 0;
+    let totalMediaAssigned = 0;
+
+    // Process each GroupTag
+    for (let i = 0; i < allGroupTags.length; i++) {
+      const groupTag = allGroupTags[i];
+      console.log(`\n🏷️ Processing GroupTag ${i + 1}/${allGroupTags.length}: ${groupTag.GroupTagTitle || groupTag._id}`);
+
+      // Find matching media for this GroupTag
+      const matchingMediaIds = await findMatchingMediaForGroupTag(groupTag);
+      
+      if (matchingMediaIds.length === 0) {
+        console.log(`  ⚠️ No matching media found for GroupTag: ${groupTag.GroupTagTitle}`);
+        results.push({
+          groupTagId: String(groupTag._id),
+          groupTagTitle: groupTag.GroupTagTitle,
+          mediaFound: 0,
+          mediaAssigned: 0,
+          mediaSkipped: 0
+        });
+        continue;
+      }
+
+      console.log(`  ✅ Found ${matchingMediaIds.length} matching media`);
+
+      // Assign GroupTag to media in batches of 200
+      const batchResult = await assignGroupTagToMediaBatch(groupTag, matchingMediaIds, 200);
+
+      totalMediaProcessed += batchResult.processed;
+      totalMediaAssigned += batchResult.assigned;
+
+      results.push({
+        groupTagId: String(groupTag._id),
+        groupTagTitle: groupTag.GroupTagTitle,
+        mediaFound: matchingMediaIds.length,
+        mediaAssigned: batchResult.assigned,
+        mediaSkipped: batchResult.skipped
+      });
+
+      console.log(`  ✅ Completed: ${batchResult.assigned} assigned, ${batchResult.skipped} skipped`);
     }
 
-    // Fetch updated media data for response
-    const updatedData = await media.findById(query, {
-      Posts: false,
-      Stamps: false,
-      Marks: false,
+    console.log(`\n🎉 Processing complete!`);
+    console.log(`   Total GroupTags processed: ${allGroupTags.length}`);
+    console.log(`   Total media processed: ${totalMediaProcessed}`);
+    console.log(`   Total media assigned: ${totalMediaAssigned}`);
+
+    res.json({
+      code: "200",
+      message: "GroupTags assigned to matching media successfully",
+      summary: {
+        totalGroupTags: allGroupTags.length,
+        totalMediaProcessed: totalMediaProcessed,
+        totalMediaAssigned: totalMediaAssigned
+      },
+      results: results
     });
-    if (!updatedData) {
-      return res.json({ code: "404", message: "Updated media not found" });
-    }
 
-    // Handle Montage type special logic
-    if (req.body.data?.MediaType == "Montage") {
-      const montageData = await media.findById(req.body.MediaID, {
-        OwnStatement: 1,
-        Content: 1,
-        IsPrivate: 1,
-      });
-      if (montageData) {
-        console.log("---- in else ---");
-        req.body.Statement = montageData.OwnStatement
-          ? montageData.OwnStatement
-          : "";
-
-        if (req.body.PostId) {
-          await updateMediaToBoard(req, res);
-        } else {
-          await addMediaToBoard(req, res);
-        }
-
-        if (!montageData.IsPrivate) {
-          // Note: __updateMontagePrivacy function would need to be implemented
-          console.log("Montage privacy update would go here");
-        }
-      }
-    } else {
-      res.json({ code: "200", message: "success", response: updatedData });
-    }
   } catch (error) {
     console.error("Error in addTagsToUploadedMedia:", error);
     res.json({
@@ -5560,63 +5942,126 @@ const matchAndUpdateMediaForTag = async (groupTagDoc, tagDoc) => {
 
 const backfillMediaTagsForGroup = async (req, res) => {
   try {
-    const groupTagId = req.body.groupTagId || req.query.groupTagId;
-    if (!groupTagId) {
-      return res.status(400).json({
-        code: 400,
-        message: "groupTagId is required",
+    console.log("🚀 Starting automatic GroupTag assignment to media (backfillMediaTagsForGroup)");
+
+    // Fetch all active GroupTags from collection (no payload required)
+    const queryOptions = {
+      IsDeleted: { $ne: 1 },
+      $or: [{ status: 1 }, { status: 3 }]
+    };
+
+    // Allow custom query from request if provided (optional)
+    const finalQuery = req.body.queryOptions ? { ...queryOptions, ...req.body.queryOptions } : queryOptions;
+
+    console.log(`🔍 Fetching GroupTags with query:`, JSON.stringify(finalQuery));
+    const allGroupTags = await groupTags.find(finalQuery).lean();
+    
+    if (!allGroupTags || allGroupTags.length === 0) {
+      return res.json({ 
+        code: 200, 
+        message: "No GroupTags found to process",
+        totalGroupTags: 0,
+        results: []
       });
     }
 
-    const groupTagDoc = await groupTags
-      .findOne({
-        _id: groupTagId,
-        status: { $in: [1, 3] },
-      })
-      .lean();
+    console.log(`📋 Found ${allGroupTags.length} GroupTags to process`);
 
-    if (!groupTagDoc) {
-      return res.status(404).json({
-        code: 404,
-        message: "Group tag not found or inactive",
-      });
+    const results = [];
+    let totalMediaProcessed = 0;
+    let totalMediaAssigned = 0;
+
+    // OPTIMIZATION: Process GroupTags in parallel batches for better performance
+    const groupTagBatchSize = 5; // Process 5 GroupTags in parallel
+    const groupTagBatches = [];
+    for (let i = 0; i < allGroupTags.length; i += groupTagBatchSize) {
+      groupTagBatches.push(allGroupTags.slice(i, i + groupTagBatchSize));
     }
 
-    const tagList = Array.isArray(groupTagDoc.Tags)
-      ? groupTagDoc.Tags.filter((tag) => tag?.status === 1)
-      : [];
+    // Process each batch of GroupTags in parallel
+    for (let batchIdx = 0; batchIdx < groupTagBatches.length; batchIdx++) {
+      const groupTagBatch = groupTagBatches[batchIdx];
+      console.log(`\n🔄 Processing GroupTag batch ${batchIdx + 1}/${groupTagBatches.length} (${groupTagBatch.length} GroupTags in parallel)`);
 
-    if (!tagList.length) {
-      return res.status(400).json({
-        code: 400,
-        message: "Selected group tag does not have active tags to process",
+      // Process GroupTags in parallel within the batch
+      const batchPromises = groupTagBatch.map(async (groupTag, idx) => {
+        const globalIdx = batchIdx * groupTagBatchSize + idx + 1;
+        console.log(`  🏷️ Processing GroupTag ${globalIdx}/${allGroupTags.length}: ${groupTag.GroupTagTitle || groupTag._id}`);
+
+        try {
+          // Find matching media for this GroupTag (returns array of media objects with metadata)
+          const matchingMediaArray = await findMatchingMediaForGroupTag(groupTag);
+          
+          if (matchingMediaArray.length === 0) {
+            console.log(`    ⚠️ No matching media found for GroupTag: ${groupTag.GroupTagTitle}`);
+            return {
+              groupTagId: String(groupTag._id),
+              groupTagTitle: groupTag.GroupTagTitle,
+              mediaFound: 0,
+              mediaAssigned: 0,
+              mediaSkipped: 0,
+              batchesProcessed: 0
+            };
+          }
+
+          console.log(`    ✅ Found ${matchingMediaArray.length} matching media`);
+
+          // Assign GroupTag to media (uses bulk operations internally)
+          const batchResult = await assignGroupTagToMediaBatch(groupTag, matchingMediaArray, 200);
+
+          console.log(`    ✅ Completed: ${batchResult.assigned} assigned, ${batchResult.skipped} skipped`);
+
+          return {
+            groupTagId: String(groupTag._id),
+            groupTagTitle: groupTag.GroupTagTitle,
+            mediaFound: matchingMediaArray.length,
+            mediaAssigned: batchResult.assigned,
+            mediaSkipped: batchResult.skipped,
+            batchesProcessed: Math.ceil(matchingMediaArray.length / 200)
+          };
+        } catch (error) {
+          console.error(`    ❌ Error processing GroupTag ${groupTag.GroupTagTitle}:`, error.message);
+          return {
+            groupTagId: String(groupTag._id),
+            groupTagTitle: groupTag.GroupTagTitle,
+            mediaFound: 0,
+            mediaAssigned: 0,
+            mediaSkipped: 0,
+            batchesProcessed: 0,
+            error: error.message
+          };
+        }
       });
+
+      // Wait for all GroupTags in this batch to complete
+      const batchResults = await Promise.all(batchPromises);
+      results.push(...batchResults);
+
+      // Update totals
+      batchResults.forEach(result => {
+        totalMediaProcessed += result.mediaFound || 0;
+        totalMediaAssigned += result.mediaAssigned || 0;
+      });
+
+      console.log(`  ✅ Batch ${batchIdx + 1} completed`);
     }
 
-    const tagResults = [];
-    let totalMediaUpdated = 0;
-
-    for (const tag of tagList) {
-      const result = await matchAndUpdateMediaForTag(groupTagDoc, tag);
-      totalMediaUpdated += result.matchedMedia;
-      tagResults.push({
-        tagId: String(tag._id),
-        tagTitle: tag.TagTitle,
-        tagType: tag.TagType,
-        metadataPaths: result.metadataPaths,
-        mediaUpdated: result.matchedMedia,
-      });
-    }
+    console.log(`\n🎉 Processing complete!`);
+    console.log(`   Total GroupTags processed: ${allGroupTags.length}`);
+    console.log(`   Total media processed: ${totalMediaProcessed}`);
+    console.log(`   Total media assigned: ${totalMediaAssigned}`);
 
     return res.json({
       code: 200,
-      message: "Backfill completed",
-      groupTagId: String(groupTagDoc._id),
-      groupTagTitle: groupTagDoc.GroupTagTitle,
-      tagsProcessed: tagResults.length,
-      totalMediaUpdated,
-      tagResults,
+      message: "Backfill completed - GroupTags assigned to matching media successfully",
+      summary: {
+        totalGroupTags: allGroupTags.length,
+        totalMediaProcessed: totalMediaProcessed,
+        totalMediaAssigned: totalMediaAssigned
+      },
+      results: results
     });
+
   } catch (error) {
     console.error("backfillMediaTagsForGroup error:", error);
     return res.status(500).json({

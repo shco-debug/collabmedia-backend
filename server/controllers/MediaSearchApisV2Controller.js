@@ -3156,36 +3156,10 @@ var getSearchGalleryMedias = async function (req, res) {
 			keywordGroupTagIds = selectedKeywords.map(kw => kw.groupTagId).filter(id => id);
 			keywordTagIds = selectedKeywords.map(kw => kw.tagId).filter(id => id);
 			
-			// Validate that the specified tags actually exist in the GroupTags
-			// Query GroupTags collection to verify the tags exist
-			if (keywordTagIds.length > 0) {
-				try {
-					// Find GroupTags that contain at least one of the specified tag IDs in their Tags array
-					var validationResult = await GroupTag.find({
-						_id: { $in: keywordGroupTagIds },
-						'Tags._id': { $in: keywordTagIds.map(id => new mongoose.Types.ObjectId(id)) },
-						status: { $in: [1, 3] }
-					}, { _id: 1 });
-					
-					// Extract the validated GroupTag IDs
-					validatedGroupTagIds = validationResult.map(gt => String(gt._id));
-					
-					// If no GroupTags were validated, fall back to using the provided GroupTag IDs
-					if (validatedGroupTagIds.length === 0) {
-						validatedGroupTagIds = keywordGroupTagIds;
-					}
-					
-					validatedTagIds = keywordTagIds;
-				} catch (validationError) {
-					console.log('Tag validation error, using provided GroupTag IDs:', validationError.message);
-					validatedGroupTagIds = keywordGroupTagIds;
-					validatedTagIds = keywordTagIds;
-				}
-			} else {
-				// No tag IDs provided, use GroupTag IDs directly
-				validatedGroupTagIds = keywordGroupTagIds;
-				validatedTagIds = [];
-			}
+			// Use provided IDs directly (no MongoDB validation needed - using static file)
+			// Store the tag pairs for proper query matching
+			validatedGroupTagIds = keywordGroupTagIds;
+			validatedTagIds = keywordTagIds;
 		}
 	}
 	
@@ -3195,6 +3169,21 @@ var getSearchGalleryMedias = async function (req, res) {
 		selectedGroupTagIds = selectedKeywords;
 	}
 	selectedGroupTagIds = selectedGroupTagIds.filter(Boolean);
+	
+	// Remove duplicates from selectedGroupTagIds
+	var uniqueGroupTagIds = [];
+	for(var i = 0; i < selectedGroupTagIds.length; i++) {
+		if(uniqueGroupTagIds.indexOf(selectedGroupTagIds[i]) < 0) {
+			uniqueGroupTagIds.push(selectedGroupTagIds[i]);
+		}
+	}
+	selectedGroupTagIds = uniqueGroupTagIds;
+	
+	// Add groupTagID if provided and not already in the array
+	if(groupTagID && selectedGroupTagIds.indexOf(groupTagID) < 0) {
+		selectedGroupTagIds.push(groupTagID);
+	}
+	
 	var selectedTagIds = validatedTagIds.length ? validatedTagIds : keywordTagIds;
 	selectedTagIds = selectedTagIds.filter(Boolean);
 	
@@ -3238,11 +3227,27 @@ var getSearchGalleryMedias = async function (req, res) {
 		}
 	}
 	
-	selectedKeywords = selectedKeywords.concat(familySetArr);
-	if(groupTagID){
-		if(selectedKeywords.indexOf(groupTagID) < 0) {
-			selectedKeywords.push(groupTagID)
+	// Add familySetArr GroupTagIDs to selectedGroupTagIds (already deduplicated above)
+	if(familySetArr.length > 0) {
+		for(var i = 0; i < familySetArr.length; i++) {
+			if(selectedGroupTagIds.indexOf(familySetArr[i]) < 0) {
+				selectedGroupTagIds.push(familySetArr[i]);
+			}
 		}
+	}
+	
+	console.log('🔍 [getSearchGalleryMedias] Processing payload:');
+	console.log('   📌 groupTagID:', groupTagID || 'none');
+	console.log('   📌 selectedKeywords count:', selectedKeywords.length);
+	if(selectedKeywords.length > 0 && typeof selectedKeywords[0] === 'object') {
+		console.log('   📌 selectedKeywords details:');
+		for(var i = 0; i < selectedKeywords.length; i++) {
+			console.log(`      [${i}] groupTagId: ${selectedKeywords[i].groupTagId ? selectedKeywords[i].groupTagId.substring(0, 8) + '...' : 'none'}, tagId: ${selectedKeywords[i].tagId ? selectedKeywords[i].tagId.substring(0, 8) + '...' : 'none'}, title: ${selectedKeywords[i].title || 'none'}`);
+		}
+	}
+	console.log('   📌 Final selectedGroupTagIds (unique):', selectedGroupTagIds.length, 'IDs');
+	if(selectedGroupTagIds.length > 0) {
+		console.log('   📌 GroupTagIDs:', selectedGroupTagIds.map(id => id.substring(0, 8) + '...'));
 	}
 	
 	var conditions = {
@@ -3261,25 +3266,13 @@ var getSearchGalleryMedias = async function (req, res) {
 		InAppropFlagCount : { $lt:5 }
 	};
 	
+	// Note: Tag matching conditions are set later in aggregateStages section
+	// This section just sets base conditions
 	if(selectedGroupTagIds.length){
 		conditions["MetaMetaTags"] = {
 			$nin : []
 		};
-		
-		if (selectedTagIds.length) {
-			conditions["GroupTags"] = {
-				$elemMatch: {
-					GroupTagID: { $in : selectedGroupTagIds },
-					TagID: { $in : selectedTagIds }
-				}
-			};
-		} else {
-			conditions["GroupTags.GroupTagID"] = { $in : selectedGroupTagIds };
-		}
-		conditions["$or"] = [
-			{MediaType : "Image"},
-			{MediaType : "Link" , LinkType: "image" , IsUnsplashImage : {$exists:true}, IsUnsplashImage : true}
-		];
+		// Tag matching will be handled in aggregateStages section below
 	}
 	
 	var fields = {};	
@@ -3291,24 +3284,36 @@ var getSearchGalleryMedias = async function (req, res) {
 	
 	var aggregateStages = [];
 	if(selectedGroupTagIds.length) {
-		if (selectedTagIds.length) {
-			conditions["GroupTags"] = {
-				$elemMatch: {
-					GroupTagID: { $in : selectedGroupTagIds },
-					TagID: { $in : selectedTagIds }
-				}
-			};
-		} else {
-			conditions["GroupTags.GroupTagID"] = {
-				$in : selectedGroupTagIds
-			};
-		}
+		console.log('🔍 [getSearchGalleryMedias] Matching by GroupTagID:', selectedGroupTagIds);
+		console.log('   📌 Selected GroupTagIDs:', selectedGroupTagIds.map(id => id.substring(0, 8) + '...'));
 		
+		// Always match by GroupTagID only (ignore TagID)
+		// Find media that has ANY of these GroupTagIDs in their GroupTags array
+		conditions["GroupTags.GroupTagID"] = {
+			$in : selectedGroupTagIds
+		};
+		
+		// Set MediaType conditions
 		conditions["$or"] = [
 			{ MediaType : "Image", AddedHow: "uploadImageTool", Source: "ChatGPT_MJ" },
 			{ MediaType : "Image" },
 			{ MediaType : "Link", LinkType : "image", IsUnsplashImage : {$exists : true}, IsUnsplashImage : true }
-		]
+		];
+		
+		console.log('🔍 [getSearchGalleryMedias] Final query conditions:');
+		console.log('   Base conditions:', {
+			IsDeleted: conditions.IsDeleted,
+			Status: conditions.Status,
+			UploadedBy: conditions.UploadedBy,
+			InAppropFlagCount: conditions.InAppropFlagCount
+		});
+		if (conditions["GroupTags.GroupTagID"]) {
+			console.log('   ✅ GroupTags.GroupTagID:', JSON.stringify(conditions["GroupTags.GroupTagID"], null, 2));
+			console.log('   📊 Will match media with ANY of these GroupTagIDs in GroupTags array (TagID ignored)');
+		}
+		if (conditions.$or) {
+			console.log('   ✅ MediaType filter:', conditions.$or.length, 'options');
+		}
 		
 		aggregateStages.push ({ $match : conditions });
 		
@@ -3330,9 +3335,10 @@ var getSearchGalleryMedias = async function (req, res) {
 		var concatBranches = [];
 		var counter = 0;
 		for (var i = (totalSets.length-1); i >= 0; i--) {
+			// After $unwind, $GroupTags is an object, so we need to access GroupTagID
 			switchBranches.push(
 				{
-				  case: {$in : [ "$GroupTags", totalSets[i] ]},
+				  case: {$in : [ "$GroupTags.GroupTagID", totalSets[i] ]},
 				  then: (i+1)
 				}
 			);
@@ -3341,7 +3347,7 @@ var getSearchGalleryMedias = async function (req, res) {
 				$cond: {
 				  if: {
 					$and: [{
-					  $in : [ "$GroupTags", totalSets[i] ]
+					  $in : [ "$GroupTags.GroupTagID", totalSets[i] ]
 					}]
 				  },
 				  then: String(maxRank - i),
@@ -3434,7 +3440,25 @@ var getSearchGalleryMedias = async function (req, res) {
 	//var mediaCount = await media.find(conditions, fields).count();
 	//mediaCount = mediaCount ? mediaCount : 0;
 	
-	var results = await media.aggregate(aggregateStages).allowDiskUse(true).exec();
+		// Quick test: Check if any media has these GroupTagIDs
+		var testQuery = {
+			IsDeleted: 0,
+			Status: 1,
+			"GroupTags.GroupTagID": { $in: selectedGroupTagIds }
+		};
+		var testCount = await media.countDocuments(testQuery);
+		console.log(`🔍 [getSearchGalleryMedias] Quick test: Found ${testCount} media documents with GroupTagIDs:`, selectedGroupTagIds.map(id => id.substring(0, 8) + '...'));
+		
+		if (testCount === 0) {
+			console.log('   ⚠️ WARNING: No media found with these GroupTagIDs!');
+			console.log('   💡 Solution: Run the cron job to populate GroupTags:');
+			console.log('      node collabmedia-backend/server/scripts/assignPromptGroupTags.js --all');
+		}
+		
+		console.log('🔍 [getSearchGalleryMedias] Executing aggregation pipeline...');
+		var results = await media.aggregate(aggregateStages).allowDiskUse(true).exec();
+	console.log('   ✅ Aggregation completed, results written to collection:', outCollection);
+	
 	var stuff = {name: outCollection};
 	var Model = createModelForName(stuff.name);
 	var userMedia_userIdmodel = Model;
@@ -3447,7 +3471,74 @@ var getSearchGalleryMedias = async function (req, res) {
 	
 	var result = await userMedia_userIdmodel.find({}).sort(sortObj).limit(pageLimit).exec();
 	result = Array.isArray(result) ? result : [];
-	await __fullfillMediaLimit_3_withRules(result , pageLimit , mTypeArr , res , groupTagID, switchExpression);
+	console.log(`   📊 Found ${result.length} media documents matching the query`);
+	console.log(`   📄 Returning page ${page} with ${per_page} per page (limit: ${pageLimit})`);
+	
+	if (result.length === 0) {
+		console.log('   ⚠️ WARNING: No media found! Possible reasons:');
+		console.log('      1. Media collection does not have GroupTags populated');
+		console.log('      2. No media has these GroupTagIDs in their GroupTags array');
+		console.log('      3. Run the cron job: node collabmedia-backend/server/scripts/assignPromptGroupTags.js --all');
+		console.log('      4. Check if media has GroupTags with GroupTagID:', selectedGroupTagIds);
+	}
+	
+	// When selectedKeywords are provided, return ONLY matching media (no fill with extra media)
+	if (selectedKeywords.length > 0) {
+		console.log('   ✅ Returning ONLY matching media (no fill with extra media)');
+		
+		// Format results for response - result[i] already has the structure from aggregation
+		var outputRecords = [];
+		for (var i = 0; i < result.length; i++) {
+			var doc = result[i];
+			var valueObj = doc.value || {};
+			
+			// Ensure URL is extracted from Location if not already in value.URL
+			var mediaURL = valueObj.URL;
+			if (!mediaURL && valueObj.Location && Array.isArray(valueObj.Location) && valueObj.Location.length > 0) {
+				mediaURL = valueObj.Location[0].URL || '';
+			}
+			
+			// Build the formatted object matching the expected structure
+			var formattedObj = {
+				_id: doc._id || valueObj._id,
+				value: {
+					_id: doc._id || valueObj._id,
+					Title: valueObj.Title || '',
+					Prompt: valueObj.Prompt || '',
+					Locator: valueObj.Locator || '',
+					Location: valueObj.Location || [],
+					MediaType: valueObj.MediaType || '',
+					ContentType: valueObj.ContentType || '',
+					UploadedOn: valueObj.UploadedOn || new Date(),
+					UploaderID: valueObj.UploaderID || '',
+					UploadedBy: valueObj.UploadedBy || '',
+					Content: valueObj.Content || '',
+					URL: mediaURL || '',
+					thumbnail: valueObj.thumbnail || '',
+					IsPrivate: valueObj.IsPrivate !== undefined ? valueObj.IsPrivate : 0,
+					RandomSortId: valueObj.RandomSortId || '',
+					IsUnsplashImage: valueObj.IsUnsplashImage !== undefined ? valueObj.IsUnsplashImage : false,
+					ViewsCount: valueObj.ViewsCount || 0,
+					Ranks: Array.isArray(valueObj.Ranks) ? valueObj.Ranks : []
+				}
+			};
+			
+			outputRecords.push(formattedObj);
+		}
+		
+		return res.json({
+			code: "200",
+			msg: "Success",
+			response: outputRecords,
+			count: outputRecords.length,
+			total: outputRecords.length,
+			page: page,
+			per_page: per_page
+		});
+	} else {
+		// No selectedKeywords - use the fill function (old behavior)
+		await __fullfillMediaLimit_3_withRules(result , pageLimit , mTypeArr , res , groupTagID, switchExpression);
+	}
 }
 
 exports.getSearchGalleryMedias = getSearchGalleryMedias;
