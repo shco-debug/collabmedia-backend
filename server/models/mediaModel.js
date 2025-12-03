@@ -128,7 +128,9 @@ var mediaSchema = new mongoose.Schema({
 	PostStreamType: {type: String},
 	QuestionPostId: {type: mongoose.Schema.Types.ObjectId},
 	PostLinkUrl: {type: String},
-	Themes: {type: Array, default: []}
+	Themes: {type: Array, default: []},
+	postTags: {type: String, default: null}, // Tag for posts - each post has one keyword, all versions share the same postTag
+	PostCommentsArr: {type: Array, default: []} // Post comments array
 	//Descriptors : {type : Array , default : []}			//adding for new keywords hierarchy - Text Search
 },{ collection: 'media', shardKey: {_id: 1} });
 

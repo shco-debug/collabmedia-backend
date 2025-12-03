@@ -33,10 +33,9 @@ module.exports = (app) => {
 	require('./../env/default_2.js')(app);
 	
 	// ============================================================================
-	// HTTPS URL Helper Function
+	// HTTP URL Helper Function
 	// ============================================================================
-	// This function ensures all URLs use HTTPS when the request is secure
-	// or when in production environment
+	// This function provides URL helpers (HTTP only - HTTPS disabled)
 	app.use((req, res, next) => {
 		// Helper to get base URL with correct protocol
 		req.getBaseUrl = function() {
@@ -45,11 +44,7 @@ module.exports = (app) => {
 			const protocol = isSecure ? 'https' : 'http';
 			const host = req.get('host') || 'localhost:3002';
 			
-			// In production, always use HTTPS (except localhost)
-			if (process.env.NODE_ENV === 'production' && !host.includes('localhost')) {
-				return `https://${host}`;
-			}
-			
+			// Use protocol from request (no forced HTTPS)
 			return `${protocol}://${host}`;
 		};
 		
@@ -58,11 +53,7 @@ module.exports = (app) => {
 			const frontendUrl = process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL;
 			if (!frontendUrl) return '';
 			
-			// In production, always use HTTPS (except localhost)
-			if (process.env.NODE_ENV === 'production' && !frontendUrl.includes('localhost')) {
-				return frontendUrl.replace(/^http:\/\//, 'https://');
-			}
-			
+			// Return as-is (no forced HTTPS conversion)
 			return frontendUrl;
 		};
 		
@@ -72,11 +63,7 @@ module.exports = (app) => {
 			const siteUrl = process.env.SITE_URL || process.env.FRONTEND_URL || process.env.NEXT_PUBLIC_SITE_URL;
 			if (!siteUrl) return '';
 			
-			// Ensure HTTPS in production
-			if (process.env.NODE_ENV === 'production' && !siteUrl.includes('localhost') && siteUrl.startsWith('http://')) {
-				return siteUrl.replace(/^http:\/\//, 'https://');
-			}
-			
+			// Return as-is (no forced HTTPS conversion)
 			return siteUrl;
 		};
 		

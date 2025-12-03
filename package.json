@@ -93,6 +93,7 @@
     "grunt-contrib-nodeunit": "^5.0.0",
     "grunt-contrib-uglify": "^5.2.2",
     "grunt-processhtml": "^0.4.4",
-    "nodemon": "^3.1.9"
+    "nodemon": "^3.1.9",
+    "stream-json": "^1.9.1"
   }
 }

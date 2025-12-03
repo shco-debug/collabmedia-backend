@@ -15,6 +15,10 @@ var PageStreamSchema = new mongoose.Schema({
 		type : Array,
 		default : []
 	},
+	postTags: {
+		type: String,
+		default: null
+	},
 	Status : { 
 		type: Boolean,
 		default : true
