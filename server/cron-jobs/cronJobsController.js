@@ -23,6 +23,7 @@ var ObjectId = mongoose.Types.ObjectId;
 const cheerio = require('cheerio');
 var userController = require('./../controllers/userController.js');
 var user = require('./../models/userModel.js');
+var mediaController = require('./../controllers/mediaController.js');
 
 var updateMediaCountsPerGt = function () {
 	//console.log("---------------Cron job called successfully : updateMediaCountsPerGt-------------------");
@@ -3622,3 +3623,59 @@ var expireDueSubscriptionsApi = async function (req, res) {
 };
 
 exports.expireDueSubscriptionsApi = expireDueSubscriptionsApi;
+
+// ============================================================================
+// Cron Job: assignGroupTagsFromPrompt - Runs nightly to assign tags from Prompt field
+// ============================================================================
+var assignGroupTagsFromPromptCron = async function () {
+	console.log('@@@@@@@@---------------------------Running assignGroupTagsFromPromptCron-----------------------------@@@@@@@@@');
+	console.log('⏰ Started at:', new Date().toISOString());
+	
+	try {
+		// Create mock req/res objects to call the function directly
+		const mockReq = {
+			body: {
+				processAll: true,
+				// No source filter means it will default to UnsplashImage_Tool and ChatGPT_MJ
+				// Optional: Add source filter if needed
+				// source: 'ChatGPT_MJ' // Uncomment to process only ChatGPT_MJ
+			}
+		};
+		
+		const mockRes = {
+			json: function(data) {
+				console.log('✅ Function Response:', JSON.stringify(data, null, 2));
+				
+				if (data && data.code === 200) {
+					const summary = data.summary || {};
+					console.log('🎉 Cron job completed successfully!');
+					console.log(`   Total Count: ${summary.totalCount || 0}`);
+					console.log(`   Processed: ${summary.processed || 0}`);
+					console.log(`   Updated: ${summary.updated || 0}`);
+					console.log(`   Skipped: ${summary.skipped || 0}`);
+					console.log(`   No Prompt: ${summary.noPrompt || 0}`);
+					console.log(`   Total Tags Assigned: ${summary.totalTagsAssigned || 0}`);
+				} else {
+					console.warn('⚠️ Function returned non-success response:', data);
+				}
+				
+				console.log('⏰ Completed at:', new Date().toISOString());
+				console.log('@@@@@@@@---------------------------assignGroupTagsFromPromptCron Complete-----------------------------@@@@@@@@@');
+			},
+			status: function(code) {
+				this.statusCode = code;
+				return this;
+			}
+		};
+		
+		// Call the function directly
+		await mediaController.assignGroupTagsFromPrompt(mockReq, mockRes);
+		
+	} catch (error) {
+		console.error('❌ Error in assignGroupTagsFromPromptCron:', error.message);
+		console.error('   Full error:', error);
+		console.log('@@@@@@@@---------------------------assignGroupTagsFromPromptCron Failed-----------------------------@@@@@@@@@');
+	}
+};
+
+exports.assignGroupTagsFromPromptCron = assignGroupTagsFromPromptCron;

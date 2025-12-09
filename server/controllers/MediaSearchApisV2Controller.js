@@ -3187,6 +3187,15 @@ var getSearchGalleryMedias = async function (req, res) {
 	var selectedTagIds = validatedTagIds.length ? validatedTagIds : keywordTagIds;
 	selectedTagIds = selectedTagIds.filter(Boolean);
 	
+	// Remove duplicates from selectedTagIds
+	var uniqueTagIds = [];
+	for(var i = 0; i < selectedTagIds.length; i++) {
+		if(uniqueTagIds.indexOf(selectedTagIds[i]) < 0) {
+			uniqueTagIds.push(selectedTagIds[i]);
+		}
+	}
+	selectedTagIds = uniqueTagIds;
+	
 	var allWords = [];
 	for(var i = 0; i < mp_selectedWords.length; i++) {
 		mp_selectedWords[i] = typeof mp_selectedWords[i] == 'string' ? mp_selectedWords[i] : null;
@@ -3283,14 +3292,14 @@ var getSearchGalleryMedias = async function (req, res) {
 	var limit = page*per_page;	//48
 	
 	var aggregateStages = [];
-	if(selectedGroupTagIds.length) {
-		console.log('🔍 [getSearchGalleryMedias] Matching by GroupTagID:', selectedGroupTagIds);
-		console.log('   📌 Selected GroupTagIDs:', selectedGroupTagIds.map(id => id.substring(0, 8) + '...'));
+	if(selectedTagIds.length) {
+		console.log('🔍 [getSearchGalleryMedias] Matching by TagID:', selectedTagIds);
+		console.log('   📌 Selected TagIDs:', selectedTagIds.map(id => id.substring(0, 8) + '...'));
 		
-		// Always match by GroupTagID only (ignore TagID)
-		// Find media that has ANY of these GroupTagIDs in their GroupTags array
-		conditions["GroupTags.GroupTagID"] = {
-			$in : selectedGroupTagIds
+		// Match by TagID (not GroupTagID)
+		// Find media that has ANY of these TagIDs in their GroupTags array
+		conditions["GroupTags.TagID"] = {
+			$in : selectedTagIds
 		};
 		
 		// Set MediaType conditions
@@ -3307,9 +3316,9 @@ var getSearchGalleryMedias = async function (req, res) {
 			UploadedBy: conditions.UploadedBy,
 			InAppropFlagCount: conditions.InAppropFlagCount
 		});
-		if (conditions["GroupTags.GroupTagID"]) {
-			console.log('   ✅ GroupTags.GroupTagID:', JSON.stringify(conditions["GroupTags.GroupTagID"], null, 2));
-			console.log('   📊 Will match media with ANY of these GroupTagIDs in GroupTags array (TagID ignored)');
+		if (conditions["GroupTags.TagID"]) {
+			console.log('   ✅ GroupTags.TagID:', JSON.stringify(conditions["GroupTags.TagID"], null, 2));
+			console.log('   📊 Will match media with ANY of these TagIDs in GroupTags array (GroupTagID ignored)');
 		}
 		if (conditions.$or) {
 			console.log('   ✅ MediaType filter:', conditions.$or.length, 'options');
@@ -3440,17 +3449,17 @@ var getSearchGalleryMedias = async function (req, res) {
 	//var mediaCount = await media.find(conditions, fields).count();
 	//mediaCount = mediaCount ? mediaCount : 0;
 	
-		// Quick test: Check if any media has these GroupTagIDs
+		// Quick test: Check if any media has these TagIDs
 		var testQuery = {
 			IsDeleted: 0,
 			Status: 1,
-			"GroupTags.GroupTagID": { $in: selectedGroupTagIds }
+			"GroupTags.TagID": { $in: selectedTagIds }
 		};
 		var testCount = await media.countDocuments(testQuery);
-		console.log(`🔍 [getSearchGalleryMedias] Quick test: Found ${testCount} media documents with GroupTagIDs:`, selectedGroupTagIds.map(id => id.substring(0, 8) + '...'));
+		console.log(`🔍 [getSearchGalleryMedias] Quick test: Found ${testCount} media documents with TagIDs:`, selectedTagIds.map(id => id.substring(0, 8) + '...'));
 		
 		if (testCount === 0) {
-			console.log('   ⚠️ WARNING: No media found with these GroupTagIDs!');
+			console.log('   ⚠️ WARNING: No media found with these TagIDs!');
 			console.log('   💡 Solution: Run the cron job to populate GroupTags:');
 			console.log('      node collabmedia-backend/server/scripts/assignPromptGroupTags.js --all');
 		}
@@ -3477,9 +3486,9 @@ var getSearchGalleryMedias = async function (req, res) {
 	if (result.length === 0) {
 		console.log('   ⚠️ WARNING: No media found! Possible reasons:');
 		console.log('      1. Media collection does not have GroupTags populated');
-		console.log('      2. No media has these GroupTagIDs in their GroupTags array');
+		console.log('      2. No media has these TagIDs in their GroupTags array');
 		console.log('      3. Run the cron job: node collabmedia-backend/server/scripts/assignPromptGroupTags.js --all');
-		console.log('      4. Check if media has GroupTags with GroupTagID:', selectedGroupTagIds);
+		console.log('      4. Check if media has GroupTags with TagID:', selectedTagIds);
 	}
 	
 	// When selectedKeywords are provided, return ONLY matching media (no fill with extra media)

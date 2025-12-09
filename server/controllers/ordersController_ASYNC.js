@@ -51,6 +51,9 @@ var formidable = require("formidable");
 var mediaController = require("./../controllers/mediaController.js");
 var EmailTemplate = require("./../models/emailTemplateModel.js");
 var AppSetting = require("./../models/appSettingModel.js");
+var CommonAlgo = require('./../components/commonAlgorithms.js');
+const cheerio = require('cheerio');
+var crypto = require('crypto');
 
 // Import journal controller functions for direct calls (no HTTP)
 var journalController = require("./journalControllerV2.js");
@@ -448,6 +451,13 @@ function __getEmailEngineDataSetsFromSelectedBlendImages_NDays(
                 .blendMode
             : "hard-light";
 
+          // ✅ FIX: Preserve hexcode_blendedImage from SelectedBlendImages to ensure consistency
+          emailDataSet.hexcode_blendedImage = currentPostObj.SelectedBlendImages[
+            selectBlendImageCounter
+          ].hexcode_blendedImage
+            ? currentPostObj.SelectedBlendImages[selectBlendImageCounter].hexcode_blendedImage
+            : null;
+
           // Populate SelectedKeywords from the blend configuration
           emailDataSet.SelectedKeywords = currentPostObj.SelectedBlendImages[
             selectBlendImageCounter
@@ -542,6 +552,38 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
       
       console.log(`📧 First purchase - Found ${allSyncedPosts.length} SyncedPosts created by API calls`);
 
+      // ✅ FIX: Populate VisualUrls from PostImage if empty (for 1MJ, 1Unsplash posts)
+      for (let i = 0; i < allSyncedPosts.length; i++) {
+        const post = allSyncedPosts[i];
+        if (post.EmailEngineDataSets && post.EmailEngineDataSets.length > 0) {
+          for (let j = 0; j < post.EmailEngineDataSets.length; j++) {
+            const emailDataSet = post.EmailEngineDataSets[j];
+            if (!emailDataSet.VisualUrls || emailDataSet.VisualUrls.length === 0) {
+              if (post.PostImage) {
+                // Use PostImage for both VisualUrls[0] and VisualUrls[1] for single image posts
+                emailDataSet.VisualUrls = [post.PostImage, post.PostImage];
+                console.log(`✅ Populated VisualUrls from PostImage for SyncedPost ${post._id} in map: ${post.PostImage}`);
+              } else if (post.MediaType === "1MJPost" || post.MediaType === "1UnsplashPost") {
+                // For 1MJ/1Unsplash, try to get image from Media collection
+                try {
+                  const Media = require('./../models/mediaModel.js');
+                  const mediaDoc = await Media.findOne({ _id: post.PostId }, { MediaURL: 1, thumbnail: 1, Location: 1 }).lean();
+                  if (mediaDoc) {
+                    const imageUrl = mediaDoc.MediaURL || mediaDoc.thumbnail || (mediaDoc.Location && mediaDoc.Location[0] && mediaDoc.Location[0].URL);
+                    if (imageUrl) {
+                      emailDataSet.VisualUrls = [imageUrl, imageUrl];
+                      console.log(`✅ Populated VisualUrls from Media collection for SyncedPost ${post._id} in map: ${imageUrl}`);
+                    }
+                  }
+                } catch (mediaErr) {
+                  console.log(`⚠️ Error fetching Media for SyncedPost ${post._id} in map:`, mediaErr.message);
+                }
+              }
+            }
+          }
+        }
+      }
+
       //2) save SyncedPostsMap here
       var dataToSave = {
         CapsuleId: new ObjectId(StreamId),
@@ -627,6 +669,33 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
             EmailEngineDataSets[i].AfterDays;
           tmpObj.EmailEngineDataSets[0].DateOfDelivery =
             EmailEngineDataSets[i].DateOfDelivery;
+          
+          // ✅ FIX: Populate VisualUrls from PostImage if empty (for 1MJ, 1Unsplash posts)
+          if (tmpObj.EmailEngineDataSets && tmpObj.EmailEngineDataSets[0]) {
+            if (!tmpObj.EmailEngineDataSets[0].VisualUrls || tmpObj.EmailEngineDataSets[0].VisualUrls.length === 0) {
+              if (tmpObj.PostImage) {
+                // Use PostImage for both VisualUrls[0] and VisualUrls[1] for single image posts
+                tmpObj.EmailEngineDataSets[0].VisualUrls = [tmpObj.PostImage, tmpObj.PostImage];
+                console.log(`✅ Populated VisualUrls from PostImage for SyncedPost ${tmpObj._id}: ${tmpObj.PostImage}`);
+              } else if (tmpObj.MediaType === "1MJPost" || tmpObj.MediaType === "1UnsplashPost") {
+                // For 1MJ/1Unsplash, try to get image from Media collection
+                try {
+                  const Media = require('./../models/mediaModel.js');
+                  const mediaDoc = await Media.findOne({ _id: tmpObj.PostId }, { MediaURL: 1, thumbnail: 1, Location: 1 }).lean();
+                  if (mediaDoc) {
+                    const imageUrl = mediaDoc.MediaURL || mediaDoc.thumbnail || (mediaDoc.Location && mediaDoc.Location[0] && mediaDoc.Location[0].URL);
+                    if (imageUrl) {
+                      tmpObj.EmailEngineDataSets[0].VisualUrls = [imageUrl, imageUrl];
+                      console.log(`✅ Populated VisualUrls from Media collection for SyncedPost ${tmpObj._id}: ${imageUrl}`);
+                    }
+                  }
+                } catch (mediaErr) {
+                  console.log(`⚠️ Error fetching Media for SyncedPost ${tmpObj._id}:`, mediaErr.message);
+                }
+              }
+            }
+          }
+          
           await SyncedPost(tmpObj).save();
         }
       }
@@ -706,6 +775,33 @@ async function mapPostsAsPerSettings(CapsuleData, firstTimeFlag) {
               EmailEngineDataSets[i].AfterDays;
             tmpObj.EmailEngineDataSets[0].DateOfDelivery =
               EmailEngineDataSets[i].DateOfDelivery;
+            
+            // ✅ FIX: Populate VisualUrls from PostImage if empty (for 1MJ, 1Unsplash posts)
+            if (tmpObj.EmailEngineDataSets && tmpObj.EmailEngineDataSets[0]) {
+              if (!tmpObj.EmailEngineDataSets[0].VisualUrls || tmpObj.EmailEngineDataSets[0].VisualUrls.length === 0) {
+                if (tmpObj.PostImage) {
+                  // Use PostImage for both VisualUrls[0] and VisualUrls[1] for single image posts
+                  tmpObj.EmailEngineDataSets[0].VisualUrls = [tmpObj.PostImage, tmpObj.PostImage];
+                  console.log(`✅ Populated VisualUrls from PostImage for SyncedPost ${tmpObj._id}: ${tmpObj.PostImage}`);
+                } else if (tmpObj.MediaType === "1MJPost" || tmpObj.MediaType === "1UnsplashPost") {
+                  // For 1MJ/1Unsplash, try to get image from Media collection
+                  try {
+                    const Media = require('./../models/mediaModel.js');
+                    const mediaDoc = await Media.findOne({ _id: tmpObj.PostId }, { MediaURL: 1, thumbnail: 1, Location: 1 }).lean();
+                    if (mediaDoc) {
+                      const imageUrl = mediaDoc.MediaURL || mediaDoc.thumbnail || (mediaDoc.Location && mediaDoc.Location[0] && mediaDoc.Location[0].URL);
+                      if (imageUrl) {
+                        tmpObj.EmailEngineDataSets[0].VisualUrls = [imageUrl, imageUrl];
+                        console.log(`✅ Populated VisualUrls from Media collection for SyncedPost ${tmpObj._id}: ${imageUrl}`);
+                      }
+                    }
+                  } catch (mediaErr) {
+                    console.log(`⚠️ Error fetching Media for SyncedPost ${tmpObj._id}:`, mediaErr.message);
+                  }
+                }
+              }
+            }
+            
             await SyncedPost(tmpObj).save();
           }
         }
@@ -4411,6 +4507,14 @@ async function capsule__createNewInstances_perCartItem(
         };
 
         await createCapsuleInstance(CapsuleData, owner, req, ctloop);
+        
+        // ✅ Send instant emails for posts that should be delivered immediately (DateOfDelivery <= today)
+        try {
+          await sendInstantEmailsForNewStream(CapsuleData._id, owner.UserEmail);
+        } catch (emailError) {
+          console.error(`⚠️ Error sending instant emails for capsule ${CapsuleData._id}:`, emailError);
+          // Don't fail the purchase if email sending fails
+        }
       }
     } else {
       return {
@@ -4782,6 +4886,358 @@ exports.saveAndLaunch = saveAndLaunch;
 exports.publish = publishV2; //publish;
 
 exports.capsule__checkCompleteness = capsule__checkCompleteness;
+
+// ✅ Function to send instant emails for posts that should be delivered immediately (DateOfDelivery <= today)
+async function sendInstantEmailsForNewStream(capsuleId, ownerEmail) {
+  console.log(`\n📧 ===== INSTANT EMAIL DELIVERY START =====`);
+  console.log(`📧 Capsule ID: ${capsuleId}`);
+  console.log(`📧 Owner Email: ${ownerEmail}`);
+  console.log(`📧 Current Date/Time: ${new Date().toISOString()}`);
+  
+  try {
+    const todayEnd = new Date();
+    todayEnd.setHours(23, 59, 59, 999);
+    console.log(`📧 Today End (cutoff): ${todayEnd.toISOString()}`);
+    console.log(`📧 Looking for posts with DateOfDelivery <= ${todayEnd.toISOString()}`);
+    
+    // Find SyncedPosts for this capsule that should be delivered immediately (DateOfDelivery <= today)
+    console.log(`🔍 Querying SyncedPosts for capsule ${capsuleId}...`);
+    const syncedPostsResults = await SyncedPost.aggregate([
+      {
+        $match: {
+          CapsuleId: new ObjectId(capsuleId),
+          IsDeleted: false,
+          Status: true,
+          "EmailEngineDataSets.Delivered": false
+        }
+      },
+      { $unwind: "$EmailEngineDataSets" },
+      {
+        $project: {
+          _id: "$_id",
+          CapsuleId: "$CapsuleId",
+          PageId: "$PageId",
+          PostId: "$PostId",
+          PostStatement: "$PostStatement",
+          SyncedBy: "$SyncedBy",
+          ReceiverEmails: "$ReceiverEmails",
+          CreatedOn: "$CreatedOn",
+          Delivered: "$EmailEngineDataSets.Delivered",
+          VisualUrls: "$EmailEngineDataSets.VisualUrls",
+          SoundFileUrl: "$EmailEngineDataSets.SoundFileUrl",
+          TextAboveVisual: "$EmailEngineDataSets.TextAboveVisual",
+          TextBelowVisual: "$EmailEngineDataSets.TextBelowVisual",
+          DateOfDelivery: "$EmailEngineDataSets.DateOfDelivery",
+          BlendMode: "$EmailEngineDataSets.BlendMode",
+          EmailTemplate: "$EmailTemplate",
+          Subject: "$EmailSubject",
+          IsOnetimeStream: "$IsOnetimeStream",
+          IsOnlyPostImage: "$IsOnlyPostImage"
+        }
+      },
+      {
+        $match: {
+          DateOfDelivery: { $lte: todayEnd },
+          Delivered: false
+        }
+      },
+      {
+        $lookup: {
+          from: "users",
+          localField: "SyncedBy",
+          foreignField: "_id",
+          as: "SharedByUser"
+        }
+      },
+      {
+        $lookup: {
+          from: "capsules",
+          localField: "CapsuleId",
+          foreignField: "_id",
+          as: "CapsuleData"
+        }
+      }
+    ]).allowDiskUse(true);
+    
+    console.log(`📊 Query completed. Found ${syncedPostsResults.length} post(s) matching criteria`);
+    
+    if (syncedPostsResults.length === 0) {
+      console.log(`⚠️ No posts to deliver immediately for capsule ${capsuleId}`);
+      console.log(`   (All posts may have future delivery dates or are already delivered)`);
+      console.log(`📧 ===== INSTANT EMAIL DELIVERY END (NO POSTS) =====\n`);
+      return;
+    }
+    
+    console.log(`✅ Found ${syncedPostsResults.length} post(s) to deliver immediately`);
+    console.log(`📋 Post details:`);
+    syncedPostsResults.forEach((post, idx) => {
+      console.log(`   ${idx + 1}. Post ID: ${post._id}`);
+      console.log(`      - DateOfDelivery: ${post.DateOfDelivery ? new Date(post.DateOfDelivery).toISOString() : 'N/A'}`);
+      console.log(`      - PostId: ${post.PostId}`);
+      console.log(`      - ReceiverEmails: ${post.ReceiverEmails ? post.ReceiverEmails.length : 0} recipient(s)`);
+      console.log(`      - Delivered: ${post.Delivered}`);
+    });
+    
+    // Process each post (reuse logic from cron job)
+    let emailsSentCount = 0;
+    let emailsFailedCount = 0;
+    let postsProcessedCount = 0;
+    
+    for (let loop = 0; loop < syncedPostsResults.length; loop++) {
+      const dataRecord = syncedPostsResults[loop];
+      postsProcessedCount++;
+      
+      console.log(`\n📬 Processing post ${loop + 1}/${syncedPostsResults.length}:`);
+      console.log(`   Post ID: ${dataRecord._id}`);
+      console.log(`   DateOfDelivery: ${dataRecord.DateOfDelivery ? new Date(dataRecord.DateOfDelivery).toISOString() : 'N/A'}`);
+      console.log(`   PostId: ${dataRecord.PostId}`);
+      console.log(`   ReceiverEmails: ${dataRecord.ReceiverEmails ? dataRecord.ReceiverEmails.length : 0} recipient(s)`);
+      
+      // Set defaults
+      dataRecord.VisualUrls = dataRecord.VisualUrls || [];
+      dataRecord.PostStatement = dataRecord.PostStatement || "";
+      dataRecord.Subject = dataRecord.Subject || null;
+      dataRecord.TextAboveVisual = dataRecord.TextAboveVisual || "";
+      dataRecord.TextBelowVisual = dataRecord.TextBelowVisual || "";
+      dataRecord.SoundFileUrl = dataRecord.SoundFileUrl || "";
+      dataRecord.BlendMode = dataRecord.BlendMode || 'hard-light';
+      dataRecord.EmailTemplate = dataRecord.EmailTemplate || 'ImaginativeThinker';
+      dataRecord.CapsuleData = Array.isArray(dataRecord.CapsuleData) && dataRecord.CapsuleData.length > 0 ? dataRecord.CapsuleData[0] : {};
+      dataRecord.CapsuleData.MetaData = dataRecord.CapsuleData.MetaData || {};
+      dataRecord.CapsuleData.MetaData.publisher = dataRecord.CapsuleData.MetaData.publisher || 'The Scrpt Co.';
+      
+      if (dataRecord.CapsuleData.IsDeleted) {
+        console.log(`   ⏭️ Skipping deleted capsule for SyncedPost: ${dataRecord._id}`);
+        continue;
+      }
+      
+      console.log(`   ✅ Capsule is active, proceeding with email preparation...`);
+      
+      // Get blend images
+      let PostImage1 = "";
+      let PostImage2 = "";
+      
+      if (dataRecord.VisualUrls.length == 1) {
+        PostImage1 = dataRecord.VisualUrls[0];
+        PostImage2 = dataRecord.VisualUrls[0];
+      } else if (dataRecord.VisualUrls.length == 2) {
+        PostImage1 = dataRecord.VisualUrls[0];
+        PostImage2 = dataRecord.VisualUrls[1];
+      }
+      
+      // Clean PostStatement
+      let PostStatement = dataRecord.PostStatement;
+      PostStatement = PostStatement.replace(/style=/gi, '');
+      PostStatement = PostStatement.replace(/<h[1-6].*?(?=\>)\>/gi, '<span>');
+      PostStatement = PostStatement.replace(/<\/h[1-6].*?(?=\>)\>/gi, '</span>');
+      PostStatement = PostStatement.replace(/<strong.*?(?=\>)\>/gi, '<span>');
+      PostStatement = PostStatement.replace(/<\/strong.*?(?=\>)\>/gi, '</span>');
+      PostStatement = PostStatement.replace(/<a.*?(?=\>)\>/gi, '<span>');
+      PostStatement = PostStatement.replace(/<\/a.*?(?=\>)\>/gi, '</span>');
+      
+      const $ = cheerio.load(PostStatement);
+      $('.post-tooltip-box').remove();
+      PostStatement = $.html();
+      
+      // Use Surprise__Post_2Image template
+      const templateName = "Surprise__Post_2Image";
+      
+      // Check for blended image
+      const blendImage1 = PostImage1;
+      const blendImage2 = PostImage2;
+      const blendOption = dataRecord.BlendMode;
+      let blendedImage = null;
+      
+      if (blendImage1 && blendImage2 && blendOption) {
+        const data = blendImage1 + blendImage2 + blendOption;
+        const hexcode = crypto.createHash('md5').update(data).digest("hex");
+        if (hexcode) {
+          const file_name = hexcode + '.png';
+          const uploadDir = __dirname + '/../../media-assets/streamposts';
+          
+          if (fs.existsSync(uploadDir + "/" + file_name)) {
+            const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.HOST_URL || process.HOST_URL || 'https://ahaday.com';
+            blendedImage = `${baseUrl}/streamposts/${hexcode}.png`;
+          }
+        }
+      }
+      
+      if (!blendedImage && (blendImage1 == blendImage2)) {
+        blendedImage = blendImage1.replace('/Media/img/300/', '/Media/img/600/');
+      }
+      
+      // Find the template
+      console.log(`   📧 Looking for email template: ${templateName}...`);
+      let results = await EmailTemplate.find({ name: templateName }, {});
+      
+      if (!results.length) {
+        console.log(`   ❌ No email template found for: ${templateName} - skipping SyncedPost: ${dataRecord._id}`);
+        continue;
+      }
+      
+      console.log(`   ✅ Email template found: ${templateName}`);
+      
+      // Handle sound file
+      if (dataRecord.SoundFileUrl) {
+        dataRecord.SoundFileUrl = '<p style="display: block;"><span style="font-size: 18px;"><br></span></p><p style="clear: both;display: block;"><em style="font-size: 18px; background-color: transparent;"><video width="320" height="240" controls><source src="' + dataRecord.SoundFileUrl + '" type="video/mp4">Your browser does not support the video tag.</video></em></p>';
+      }
+      
+      const SharedByUser = Array.isArray(dataRecord.SharedByUser) && dataRecord.SharedByUser.length > 0 ? dataRecord.SharedByUser[0] : {};
+      const SharedByUserName = SharedByUser.Name ? SharedByUser.Name.split(' ')[0] : "";
+      const baseUrl = process.env.FRONTEND_URL || process.FRONTEND_URL || process.env.HOST_URL || process.HOST_URL || 'https://ahaday.com';
+      const PostURL = `${baseUrl}/streams?pid=${dataRecord.CapsuleData._id}__${dataRecord.PostId}__${blendedImage}`;
+      
+      const PostImage1_600 = PostImage1.replace('/Media/img/300/', '/Media/img/600/');
+      const PostImage2_600 = PostImage2.replace('/Media/img/300/', '/Media/img/600/');
+      
+      let newHtml = results[0].description.replace(/{SharedByUserName}/g, SharedByUserName);
+      
+      // If blended image exists, use it and hide separate images
+      if (blendedImage) {
+        newHtml = newHtml.replace(/{BlendedImage}/g, blendedImage);
+        newHtml = newHtml.replace(/{PostImage1}/g, '');
+        newHtml = newHtml.replace(/{PostImage2}/g, '');
+      } else {
+        newHtml = newHtml.replace(/{PostImage1}/g, PostImage1_600);
+        newHtml = newHtml.replace(/{PostImage2}/g, PostImage2_600);
+        newHtml = newHtml.replace(/{BlendedImage}/g, '');
+      }
+      
+      newHtml = newHtml.replace(/{TextAboveVisual}/g, dataRecord.TextAboveVisual);
+      newHtml = newHtml.replace(/{TextBelowVisual}/g, dataRecord.TextBelowVisual);
+      newHtml = newHtml.replace(/{PostStatement}/g, PostStatement);
+      newHtml = newHtml.replace(/{PostURL}/g, PostURL);
+      newHtml = newHtml.replace(/{SoundFileUrl}/g, dataRecord.SoundFileUrl);
+      newHtml = newHtml.replace(/{BlendMode}/g, dataRecord.BlendMode);
+      newHtml = newHtml.replace(/{publisher}/g, dataRecord.CapsuleData.MetaData.publisher);
+      
+      let subject = dataRecord.Subject || results[0].subject || 'Scrpt - ' + SharedByUserName + ' shared a post with you!';
+      
+      // Find users and send emails
+      try {
+        const UserData = await User.find({ 
+          'Email': { $in: dataRecord.ReceiverEmails }, 
+          Status: 1, 
+          IsDeleted: false 
+        }, { 
+          Name: true, 
+          Email: true, 
+          UnsubscribedStreams: true 
+        });
+        
+        console.log(`   👥 Found ${UserData.length} registered user(s) for recipients`);
+        
+        if (UserData.length) {
+          const EmailBeaconHash = (+new Date(String(dataRecord.DateOfDelivery))).toString(36).slice(-8);
+          let EmailBeaconImg = '';
+          
+          console.log(`   📧 Preparing to send emails to ${UserData.length} recipient(s)...`);
+          
+          for (let i = 0; i < UserData.length; i++) {
+            const RecipientName = UserData[i].Name ? UserData[i].Name.split(' ')[0] : "";
+            const shareWithEmail = UserData[i].Email || null;
+            
+            const userUnsubscribedStreams = UserData[i].UnsubscribedStreams || [];
+            
+            if (shareWithEmail && (userUnsubscribedStreams.indexOf(String(dataRecord.CapsuleId)) < 0)) {
+              // Create personalized tracking pixel
+              if (dataRecord.CapsuleId && dataRecord.PageId && dataRecord.PostId && EmailBeaconHash) {
+                EmailBeaconImg = `<img src='${baseUrl}/assets/img/email-stats.png?CapsuleId=${dataRecord.CapsuleId}&PageId=${dataRecord.PageId}&PostId=${dataRecord.PostId}&EmailIndex=${EmailBeaconHash}&UserEmail=${shareWithEmail}' />`;
+              }
+              
+              if (dataRecord.Subject) {
+                dataRecord.Subject = dataRecord.Subject.replace(/{SharedByUserName}/g, SharedByUserName);
+                dataRecord.Subject = dataRecord.Subject.replace(/{RecipientName}/g, RecipientName);
+                subject = dataRecord.Subject;
+              }
+              
+              console.log(`   📧 [${i + 1}/${UserData.length}] Sending instant email to: ${shareWithEmail}`);
+              console.log(`      Recipient Name: ${RecipientName}`);
+              console.log(`      Subject: ${subject.replace(/{RecipientName}/g, RecipientName).replace(/{SharedByUserName}/g, SharedByUserName)}`);
+              
+              try {
+                const unsubscribeUrl = `${baseUrl}/unsubscribe/${CommonAlgo.commonModule.strToCustomHash(shareWithEmail)}`;
+                const htmlWithUnsubscribe = newHtml.replace(/{UnsubscribeUrl}/g, unsubscribeUrl);
+                
+                // Send email using same function as cron job
+                console.log(`      🔧 Initializing email transporter...`);
+                const transporter = nodemailer.createTransport(process.EMAIL_ENGINE.info.smtpOptions);
+                const finalHtml = htmlWithUnsubscribe
+                  .replace(/{RecipientName}/g, RecipientName)
+                  .replace(/{EmailBeaconImg}/g, EmailBeaconImg)
+                  .replace(/{SubscriberId}/g, CommonAlgo.commonModule.strToCustomHash(shareWithEmail));
+                const finalSubject = subject
+                  .replace(/{RecipientName}/g, RecipientName)
+                  .replace(/{SharedByUserName}/g, SharedByUserName);
+                
+                const mailOptions = {
+                  from: process.EMAIL_ENGINE.info.senderLine,
+                  to: shareWithEmail,
+                  subject: finalSubject,
+                  text: process.HOST_URL + '/login',
+                  html: finalHtml
+                };
+                
+                console.log(`      📤 Sending email via SMTP...`);
+                const emailResult = await transporter.sendMail(mailOptions);
+                console.log(`      ✅ Successfully sent instant email to: ${shareWithEmail}`);
+                console.log(`         Email ID: ${emailResult.messageId || 'N/A'}`);
+                console.log(`         Response: ${emailResult.response || 'N/A'}`);
+                emailsSentCount++;
+                
+                // Mark as delivered
+                console.log(`      💾 Marking post as delivered in database...`);
+                const updateResult = await SyncedPost.updateOne(
+                  {
+                    _id: dataRecord._id,
+                    "EmailEngineDataSets.DateOfDelivery": dataRecord.DateOfDelivery
+                  },
+                  {
+                    $set: {
+                      "EmailEngineDataSets.$.Delivered": true
+                    }
+                  }
+                );
+                console.log(`      ✅ Marked as delivered for SyncedPost: ${dataRecord._id}`);
+                console.log(`         Update result: ${updateResult.modifiedCount} document(s) modified`);
+              } catch (sendError) {
+                console.error(`      ❌ Failed to send instant email to ${shareWithEmail}:`);
+                console.error(`         Error: ${sendError.message}`);
+                console.error(`         Stack: ${sendError.stack}`);
+                emailsFailedCount++;
+              }
+            } else {
+              console.log(`   ⏭️ [${i + 1}/${UserData.length}] Skipping email to ${shareWithEmail} - unsubscribed or no email`);
+            }
+          }
+        } else {
+          console.log(`   ⚠️ No registered users found for recipient emails: ${dataRecord.ReceiverEmails.join(', ')}`);
+        }
+      } catch (userFindError) {
+        console.error(`   ❌ Error finding users for SyncedPost ${dataRecord._id}:`);
+        console.error(`      Error: ${userFindError.message}`);
+        console.error(`      Stack: ${userFindError.stack}`);
+      }
+      
+      console.log(`   ✅ Finished processing post ${loop + 1}/${syncedPostsResults.length}`);
+    }
+    
+    console.log(`\n📊 ===== INSTANT EMAIL DELIVERY SUMMARY =====`);
+    console.log(`📊 Capsule ID: ${capsuleId}`);
+    console.log(`📊 Posts Processed: ${postsProcessedCount}`);
+    console.log(`📊 Emails Sent Successfully: ${emailsSentCount}`);
+    console.log(`📊 Emails Failed: ${emailsFailedCount}`);
+    console.log(`📊 Total Recipients: ${emailsSentCount + emailsFailedCount}`);
+    console.log(`📧 ===== INSTANT EMAIL DELIVERY END =====\n`);
+  } catch (error) {
+    console.error(`\n❌ ===== INSTANT EMAIL DELIVERY ERROR =====`);
+    console.error(`❌ Capsule ID: ${capsuleId}`);
+    console.error(`❌ Error: ${error.message}`);
+    console.error(`❌ Stack: ${error.stack}`);
+    console.error(`📧 ===== INSTANT EMAIL DELIVERY END (ERROR) =====\n`);
+    throw error;
+  }
+}
 
 exports.buyNow = buyNow;
 exports.createCelebrityInstance = createCelebrityInstance;

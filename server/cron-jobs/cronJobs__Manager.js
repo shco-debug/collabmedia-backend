@@ -140,6 +140,14 @@ CronEngine.schedule('0 30 1 * * *', function () {
 });
 console.log('✅ expireDueSubscriptions schedule set (Daily at 1:30 AM UTC).');
 
+//#) CronJobs to assign GroupTags from Prompt field - Daily at 3:00 AM UTC
+const assignTagsCronSchedule = process.env.ASSIGN_TAGS_CRON_SCHEDULE || '0 0 3 * * *'; // Daily at 3:00 AM UTC
+CronEngine.schedule(assignTagsCronSchedule, function () {
+    console.log('@@@@@@@@---------------------------Running CronJobsModule.assignGroupTagsFromPromptCron-----------------------------@@@@@@@@@');
+    CronJobsModule.assignGroupTagsFromPromptCron();
+});
+console.log(`✅ assignGroupTagsFromPromptCron schedule set: ${assignTagsCronSchedule} (Daily at 3:00 AM UTC)`);
+
 function reportAdmin (message , emails) {
 	var message = message ? message : null;
 	var emails = emails ? emails : [];

@@ -201,6 +201,7 @@ module.exports = function(req, res, next){
 		var frontendApiPrefix = '/journal';
 		var unprotectedRoutes = [
 			'/addNewPost_INTERNAL_API',  // Internal API calls (server-to-server)
+			'/addComments_INTERNAL_API',  // Internal API calls (server-to-server)
 			'/addBlendImages_INTERNAL_API',
 			'/generatePostBlendImage_INTERNAL_API',
 			'/resetUsedMediaForPage_INTERNAL_API',

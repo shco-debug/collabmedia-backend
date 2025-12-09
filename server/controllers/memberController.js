@@ -3,8 +3,11 @@ var group = require('./../models/groupModel.js');
 var friend = require('./../models/friendsModel.js');
 var musicLibObj = require('./../models/musiclibraryModel.js');
 var Relationship = require('./../models/relationshipModel.js');
+var EmailTemplate = require('./../models/emailTemplateModel.js');
 
 var mongoose = require("mongoose");
+var nodemailer = require("nodemailer");
+var smtpTransport = require("nodemailer-smtp-transport");
 
 var mp3Duration = require('mp3-duration');
 var ffmetadata = require("ffmetadata");
@@ -61,24 +64,47 @@ ___________________________________________________________________________
 */
 
 const addFriend = async function(req, res) {
+    console.log('='.repeat(80));
+    console.log('📧 [addFriend] START - Friend invitation request received');
+    console.log('📧 [addFriend] Request body:', {
+        email: req.body.email,
+        name: req.body.name,
+        relation: req.body.relation
+    });
+    
     try {
         // Check if user is authenticated
         if (!req.session || !req.session.user || !req.session.user._id) {
+            console.log('❌ [addFriend] User not authenticated');
             return res.json({'code': 401, 'error': 'User not authenticated. Please login first.'});
         }
 
+        console.log('✅ [addFriend] User authenticated:', {
+            userId: req.session.user._id,
+            userName: req.session.user.Name,
+            userEmail: req.session.user.Email
+        });
+
         // Validate input
         if (!req.body.email || !req.body.name) {
+            console.log('❌ [addFriend] Missing required fields:', {
+                hasEmail: !!req.body.email,
+                hasName: !!req.body.name
+            });
             return res.json({'code': 400, 'error': 'Email and name are required'});
         }
 
         // Basic email validation
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(req.body.email)) {
+            console.log('❌ [addFriend] Invalid email format:', req.body.email);
             return res.json({'code': 400, 'error': 'Invalid email format'});
         }
+        
+        console.log('✅ [addFriend] Input validation passed');
 
         // Check if user exists in database
+        console.log('🔍 [addFriend] Checking if friend email exists in database:', req.body.email);
         let frndData = await user.findOne({
             Email: { $regex: new RegExp(req.body.email, "i") }, 
             IsDeleted: false
@@ -86,10 +112,16 @@ const addFriend = async function(req, res) {
 
         let IsRegistered = frndData != undefined && frndData != null;
         let userCreated = false;
+        
+        console.log('👤 [addFriend] Friend user lookup result:', {
+            isRegistered: IsRegistered,
+            foundUserId: frndData?._id,
+            foundUserName: frndData?.Name
+        });
 
         // If user doesn't exist, create a temporary user record
         if (!IsRegistered) {
-            console.log(`User ${req.body.email} not found. Creating temporary user record...`);
+            console.log(`📝 [addFriend] User ${req.body.email} not found. Creating temporary user record...`);
             
             // Create a temporary user with minimal data
             const tempUser = new user();
@@ -107,14 +139,15 @@ const addFriend = async function(req, res) {
                 frndData = await tempUser.save();
                 IsRegistered = true;
                 userCreated = true;
-                console.log(`Temporary user created with ID: ${frndData._id}`);
+                console.log(`✅ [addFriend] Temporary user created with ID: ${frndData._id}`);
             } catch (createError) {
-                console.error('Error creating temporary user:', createError);
+                console.error('❌ [addFriend] Error creating temporary user:', createError);
                 return res.json({'code': 500, 'error': 'Failed to create user record'});
             }
         }
 
         // Check if friendship already exists
+        console.log('🔍 [addFriend] Checking for existing friendship...');
         const existingFriendship = await friend.find({
             'UserID': req.session.user._id,
             'Friend.Email': { $regex: new RegExp(req.body.email, "i") },
@@ -124,12 +157,15 @@ const addFriend = async function(req, res) {
 
         if (existingFriendship.length > 0) {
             const existingStatus = existingFriendship[0].Status;
+            console.log('⚠️ [addFriend] Friendship already exists with status:', existingStatus);
             if (existingStatus === 1) {
                 return res.json({'code': 400, 'msg': 'Already a friend'});
             } else {
                 return res.json({'code': 400, 'msg': 'Friend request already sent'});
             }
         }
+        
+        console.log('✅ [addFriend] No existing friendship found, proceeding...');
 
         // Parse relationship - use relationship system instead of hardcoded IDs
         let rel = req.body.relation ? req.body.relation.split('~') : ['Friend', ''];
@@ -193,13 +229,41 @@ const addFriend = async function(req, res) {
         let initialStatus = 1; // Default: accepted
         let message = 'Friend added successfully';
 
-        if (!IsRegistered) {
-            // For non-registered users, set as pending and send invitation
+        console.log('📊 [addFriend] Determining friend request status...');
+        console.log('📊 [addFriend] IsRegistered:', IsRegistered);
+        console.log('📊 [addFriend] userCreated (was user just created?):', userCreated);
+        
+        // IMPORTANT: Use userCreated flag instead of IsRegistered
+        // Because if we just created the user, IsRegistered will be true, but we still need to send email
+        if (userCreated) {
+            // For newly created (non-registered) users, set as pending and send invitation
             initialStatus = 0; // Pending
             message = 'Friend request sent. Invitation email will be sent.';
             
-            // TODO: Send invitation email here
-            // await sendInvitationEmail(req.body.email, req.session.user.Name);
+            console.log('📧 [addFriend] ========== EMAIL NOTIFICATION SECTION ==========');
+            console.log('📧 [addFriend] Friend was JUST CREATED (not previously registered) - email SHOULD be sent');
+            console.log('📧 [addFriend] Email recipient:', req.body.email);
+            console.log('📧 [addFriend] Recipient name:', req.body.name);
+            console.log('📧 [addFriend] Inviter name:', req.session.user.Name);
+            console.log('📧 [addFriend] Inviter email:', req.session.user.Email);
+            console.log('📧 [addFriend] Attempting to send invitation email...');
+            
+            // Send invitation email
+            try {
+                const emailResult = await sendInvitationEmail(req.body.email, req.body.name, req.session.user.Name, req.session.user.Email);
+                if (emailResult.success) {
+                    console.log('✅ [addFriend] Invitation email sent successfully!');
+                    console.log('   - Message ID:', emailResult.messageId);
+                } else {
+                    console.log('⚠️ [addFriend] Failed to send invitation email:', emailResult.error);
+                }
+            } catch (emailError) {
+                console.error('❌ [addFriend] Error sending invitation email:', emailError);
+            }
+            
+            console.log('📧 [addFriend] ================================================');
+        } else {
+            console.log('📧 [addFriend] Friend WAS already registered - no email needed');
         }
 
         // Create and save friendship
@@ -212,10 +276,13 @@ const addFriend = async function(req, res) {
             ModifiedOn: Date.now()
         });
 
+        console.log('💾 [addFriend] Saving friendship to database...');
         await friendship.save();
+        console.log('✅ [addFriend] Friendship saved successfully');
 
         // Create reverse friendship if friend is registered
         if (IsRegistered) {
+            console.log('🔄 [addFriend] Creating reverse friendship (friend is registered)...');
             const reverseFriendData = {
                 IsRegistered: true,
                 Email: req.session.user.Email,
@@ -237,7 +304,19 @@ const addFriend = async function(req, res) {
             });
 
             await reverseFriendship.save();
+            console.log('✅ [addFriend] Reverse friendship saved successfully');
         }
+        
+        console.log('✅ [addFriend] SUCCESS - Returning response');
+        console.log('📊 [addFriend] Response data:', {
+            code: 200,
+            msg: message,
+            isRegistered: IsRegistered,
+            userCreated: userCreated,
+            status: initialStatus,
+            friendId: frndData._id
+        });
+        console.log('='.repeat(80));
         
         res.json({
             'code': 200, 
@@ -249,7 +328,9 @@ const addFriend = async function(req, res) {
         });
         
     } catch (error) {
-        console.error('Error in addFriend:', error);
+        console.error('❌ [addFriend] ERROR:', error);
+        console.error('❌ [addFriend] Error stack:', error.stack);
+        console.log('='.repeat(80));
         res.json({'code': 400, 'error': error.message});
     }
 }
@@ -1175,34 +1256,143 @@ const getPendingFriendRequests = async function(req, res) {
 };
 
 // Send invitation email (placeholder function)
-const sendInvitationEmail = async function(email, inviterName) {
+const sendInvitationEmail = async function(recipientEmail, recipientName, inviterName, inviterEmail) {
+    console.log('📧 [sendInvitationEmail] START');
+    console.log('📧 [sendInvitationEmail] Recipient:', recipientEmail);
+    console.log('📧 [sendInvitationEmail] Recipient Name:', recipientName);
+    console.log('📧 [sendInvitationEmail] Inviter:', inviterName, inviterEmail);
+    
     try {
-        // TODO: Implement email sending logic
-        console.log(`Sending invitation email to ${email} from ${inviterName}`);
+        // Get email template from database
+        const emailTemplateCondition = { name: "Friend__Invitation" };
+        const emailTemplates = await EmailTemplate.find(emailTemplateCondition, {}).exec();
         
-        // Example email template:
-        const emailContent = {
-            to: email,
-            subject: `${inviterName} wants to connect with you on CollabMedia`,
-            body: `
-                Hi there!
-                
-                ${inviterName} has added you as a friend on CollabMedia and would like to connect with you.
-                
-                To accept this friend request and join CollabMedia, please click the link below:
-                [Sign Up Link]
-                
-                Best regards,
-                The CollabMedia Team
-            `
+        if (!emailTemplates || emailTemplates.length === 0) {
+            console.log('⚠️ [sendInvitationEmail] No email template found for "Friend__Invitation"');
+            console.log('📧 [sendInvitationEmail] Using default email content');
+            
+            // Use default email if template not found
+            const defaultSubject = `${inviterName} wants to connect with you on CollabMedia`;
+            const defaultHtml = `
+                <html>
+                <body>
+                    <p>Hi ${recipientName || 'there'}!</p>
+                    <p>${inviterName} has added you as a friend on CollabMedia and would like to connect with you.</p>
+                    <p>To accept this friend request and join CollabMedia, please sign up using this email address.</p>
+                    <p>Best regards,<br>The CollabMedia Team</p>
+                </body>
+                </html>
+            `;
+            
+            return await sendEmailDirectly(recipientEmail, defaultSubject, defaultHtml, inviterEmail);
+        }
+        
+        // Use template from database
+        const template = emailTemplates[0];
+        let emailSubject = template.subject || `${inviterName} wants to connect with you`;
+        let emailHtml = template.description || '';
+        
+        // Replace template variables
+        emailSubject = emailSubject
+            .replace(/{InviterName}/g, inviterName)
+            .replace(/{RecipientName}/g, recipientName || 'there');
+        
+        emailHtml = emailHtml
+            .replace(/{InviterName}/g, inviterName)
+            .replace(/{RecipientName}/g, recipientName || 'there')
+            .replace(/{InviterEmail}/g, inviterEmail);
+        
+        console.log('📧 [sendInvitationEmail] Using email template from database');
+        return await sendEmailDirectly(recipientEmail, emailSubject, emailHtml, inviterEmail);
+        
+    } catch (error) {
+        console.error('❌ [sendInvitationEmail] Error:', error);
+        console.error('❌ [sendInvitationEmail] Error stack:', error.stack);
+        return { 
+            success: false, 
+            error: error.message 
+        };
+    }
+};
+
+const sendEmailDirectly = async function(toEmail, subject, htmlContent, replyToEmail) {
+    console.log('📧 [sendEmailDirectly] Preparing to send email...');
+    
+    try {
+        // Get SMTP configuration
+        const smtpConfig = process.EMAIL_ENGINE?.info?.smtpOptions;
+        const senderLine = process.EMAIL_ENGINE?.info?.senderLine;
+        
+        if (!smtpConfig) {
+            console.error('❌ [sendEmailDirectly] SMTP configuration not found');
+            console.error('❌ [sendEmailDirectly] process.EMAIL_ENGINE:', !!process.EMAIL_ENGINE);
+            return { 
+                success: false, 
+                error: 'SMTP configuration missing. Please check EMAIL_ENGINE configuration.' 
+            };
+        }
+        
+        console.log('✅ [sendEmailDirectly] SMTP config found');
+        console.log('📧 [sendEmailDirectly] Sender:', senderLine);
+        
+        // Create transporter
+        const transporter = nodemailer.createTransport({
+            ...smtpConfig,
+            pool: true,
+            maxConnections: 5,
+            maxMessages: 100,
+            logger: false,
+            debug: process.env.NODE_ENV === 'development'
+        });
+        
+        // Verify SMTP connection
+        try {
+            await transporter.verify();
+            console.log('✅ [sendEmailDirectly] SMTP connection verified');
+        } catch (verifyError) {
+            console.error('⚠️ [sendEmailDirectly] SMTP verification failed, proceeding anyway:', verifyError.message);
+        }
+        
+        // Prepare email
+        const mailOptions = {
+            from: senderLine,
+            to: toEmail,
+            replyTo: replyToEmail,
+            subject: subject,
+            html: htmlContent,
+            text: htmlContent.replace(/<[^>]*>/g, '').replace(/\n\s*\n/g, '\n') // Simple HTML to text conversion
         };
         
-        // await emailService.send(emailContent);
+        console.log('📧 [sendEmailDirectly] Sending email...');
+        const info = await transporter.sendMail(mailOptions);
         
-         } catch (error) {
-         console.error('Error sending invitation email:', error);
-     }
- };
+        console.log('✅ [sendEmailDirectly] Email sent successfully!');
+        console.log('   - To:', toEmail);
+        console.log('   - Message ID:', info.messageId);
+        console.log('   - Response:', info.response);
+        
+        // Close transporter
+        transporter.close();
+        
+        return { 
+            success: true, 
+            messageId: info.messageId,
+            recipient: toEmail 
+        };
+        
+    } catch (error) {
+        console.error('❌ [sendEmailDirectly] Error sending email:', error);
+        console.error('   - Recipient:', toEmail);
+        console.error('   - Error message:', error.message);
+        console.error('   - Error stack:', error.stack);
+        
+        return { 
+            success: false, 
+            error: error.message,
+            recipient: toEmail 
+        };
+    }
+};
 
 // Export all functions at the end
 exports.acceptFriendRequest = acceptFriendRequest;
