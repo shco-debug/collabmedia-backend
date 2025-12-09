@@ -8050,6 +8050,17 @@ var getCapsulePosts = async function (req, res) {
       return res.json({ code: "400", message: "capsule_id is required" });
     }
 
+    console.log("=".repeat(80));
+    console.log("🔍 getCapsulePosts - DEBUG START");
+    console.log("📋 Request params:", {
+      capsuleId: capsuleId,
+      type: req.body.type || "all",
+      skip: req.body.skip || 0,
+      limit: req.body.limit || 20,
+      selectedKeyword: req.body.selectedKeyword || null
+    });
+    console.log("=".repeat(80));
+
     // Build aggregation pipeline
     const pipeline = [
       // Start with chapters that belong to this capsule
@@ -8096,6 +8107,7 @@ var getCapsulePosts = async function (req, res) {
         },
       },
       // Lookup the actual media documents
+      // Handle both string IDs and ObjectIds in media collection and Pages.Medias array
       {
         $lookup: {
           from: "media",
@@ -8103,7 +8115,28 @@ var getCapsulePosts = async function (req, res) {
           pipeline: [
             {
               $match: {
-                $expr: { $eq: ["$_id", { $toObjectId: "$$mediaId" }] },
+                $expr: {
+                  $or: [
+                    // Case 1: Try matching as ObjectIds (if mediaId can be converted to ObjectId)
+                    // Use $convert with onError to safely handle non-ObjectId strings
+                    { 
+                      $eq: [
+                        "$_id", 
+                        { 
+                          $convert: { 
+                            input: "$$mediaId", 
+                            to: "objectId", 
+                            onError: null, 
+                            onNull: null 
+                          } 
+                        } 
+                      ] 
+                    },
+                    // Case 2: Match as strings (handles all combinations: both strings, or mixed)
+                    // This covers: both strings, ObjectId _id with string mediaId, string _id with ObjectId mediaId
+                    { $eq: [{ $toString: "$_id" }, { $toString: "$$mediaId" }] }
+                  ]
+                },
               },
             },
           ],
@@ -8396,159 +8429,99 @@ var getCapsulePosts = async function (req, res) {
       },
     ];
 
-    // Debug: Log the pipeline and test each step
-    console.log("=== DEBUG: getCapsulePosts ===");
-    console.log("CapsuleId:", capsuleId);
-    console.log("Request body:", JSON.stringify(req.body, null, 2));
-    console.log("Pipeline length:", pipeline.length);
-
-    // Debug: Check if chapters exist for this capsule
-    const chaptersCount = await Chapter.countDocuments({
+    // DEBUG: Check chapters and pages before aggregation
+    const Chapter = require('./../models/chapterModel.js');
+    const Page = require('./../models/pageModel.js');
+    const Media = require('./../models/mediaModel.js');
+    
+    console.log("📊 DEBUG: Checking chapters, pages, and media...");
+    
+    // Get all chapters for this capsule
+    const chapters = await Chapter.find({
       CapsuleId: new mongoose.Types.ObjectId(capsuleId),
-      IsDeleted: { $ne: true },
+      IsDeleted: { $ne: true }
+    }).lean();
+    console.log(`📚 Found ${chapters.length} chapters`);
+    
+    // Get all page IDs from chapters
+    const allPageIds = [];
+    chapters.forEach(chapter => {
+      if (chapter.pages && Array.isArray(chapter.pages)) {
+        allPageIds.push(...chapter.pages);
+      }
     });
-    console.log("Chapters found for capsule:", chaptersCount);
+    console.log(`📄 Found ${allPageIds.length} page IDs in chapters`);
     
-    // Debug: Check total media count by type in the database
-    const Media = require("./../models/mediaModel.js");
-    const videoCount = await Media.countDocuments({ MediaType: "Video", IsDeleted: { $ne: 1 } });
-    const audioCount = await Media.countDocuments({ MediaType: "Audio", IsDeleted: { $ne: 1 } });
-    const imageCount = await Media.countDocuments({ MediaType: "Image", IsDeleted: { $ne: 1 } });
-    const mj1Count = await Media.countDocuments({ MediaType: "1MJPost", IsDeleted: { $ne: 1 } });
-    const mj2Count = await Media.countDocuments({ MediaType: "2MJPost", IsDeleted: { $ne: 1 } });
-    const unsplash1Count = await Media.countDocuments({ MediaType: "1UnsplashPost", IsDeleted: { $ne: 1 } });
-    const unsplash2Count = await Media.countDocuments({ MediaType: "2UnsplashPost", IsDeleted: { $ne: 1 } });
-    const notesCount = await Media.countDocuments({ MediaType: "Notes", IsDeleted: { $ne: 1 } });
+    // Get all pages and their media IDs
+    const pages = await Page.find({
+      _id: { $in: allPageIds },
+      IsDeleted: { $ne: true }
+    }).select('_id Title Medias').lean();
+    console.log(`📄 Found ${pages.length} pages (after filtering deleted)`);
     
-    console.log("=== TOTAL MEDIA COUNT BY TYPE ===");
-    console.log(`Video: ${videoCount}`);
-    console.log(`Audio: ${audioCount}`);
-    console.log(`Image: ${imageCount}`);
-    console.log(`1MJPost: ${mj1Count}`);
-    console.log(`2MJPost: ${mj2Count}`);
-    console.log(`1UnsplashPost: ${unsplash1Count}`);
-    console.log(`2UnsplashPost: ${unsplash2Count}`);
-    console.log(`Notes: ${notesCount}`);
-    console.log("=== END TOTAL MEDIA COUNT ===");
-
-    // Debug: Check if any chapters have pages
-    const chaptersWithPages = await Chapter.find({
-      CapsuleId: new mongoose.Types.ObjectId(capsuleId),
-      IsDeleted: { $ne: true },
-      pages: { $exists: true, $ne: [] },
-    }).select("_id pages");
-    console.log("Chapters with pages:", chaptersWithPages.length);
-    if (chaptersWithPages.length > 0) {
-      console.log("Sample chapter pages:", chaptersWithPages[0].pages);
-    }
-
-    // Debug: Test each step of the pipeline
-    console.log("\n=== Testing Pipeline Steps ===");
-
-    // Step 1: Test basic chapter match
-    const step1 = await Chapter.aggregate([
-      {
-        $match: {
-          CapsuleId: new mongoose.Types.ObjectId(capsuleId),
-          IsDeleted: { $ne: true },
-        },
-      },
-    ]);
-    console.log("Step 1 - Chapters matched:", step1.length);
-
-    // Step 2: Test with unwind pages
-    const step2 = await Chapter.aggregate([
-      {
-        $match: {
-          CapsuleId: new mongoose.Types.ObjectId(capsuleId),
-          IsDeleted: { $ne: true },
-        },
-      },
-      {
-        $unwind: {
-          path: "$pages",
-          preserveNullAndEmptyArrays: false,
-        },
-      },
-    ]);
-    console.log("Step 2 - After unwind pages:", step2.length);
-
-    // Step 3: Test with page lookup
-    const step3 = await Chapter.aggregate([
-      {
-        $match: {
-          CapsuleId: new mongoose.Types.ObjectId(capsuleId),
-          IsDeleted: { $ne: true },
-        },
-      },
-      {
-        $unwind: {
-          path: "$pages",
-          preserveNullAndEmptyArrays: false,
-        },
-      },
-      {
-        $lookup: {
-          from: "Pages",
-          localField: "pages",
-          foreignField: "_id",
-          as: "pageDoc",
-        },
-      },
-    ]);
-    console.log("Step 3 - After page lookup:", step3.length);
-    if (step3.length > 0) {
-      console.log("Sample pageDoc:", step3[0].pageDoc);
-    }
-
-    // Step 4: Test with page unwind
-    const step4 = await Chapter.aggregate([
-      {
-        $match: {
-          CapsuleId: new mongoose.Types.ObjectId(capsuleId),
-          IsDeleted: { $ne: true },
-        },
-      },
-      {
-        $unwind: {
-          path: "$pages",
-          preserveNullAndEmptyArrays: false,
-        },
-      },
-      {
-        $lookup: {
-          from: "Pages",
-          localField: "pages",
-          foreignField: "_id",
-          as: "pageDoc",
-        },
-      },
-      {
-        $unwind: {
-          path: "$pageDoc",
-          preserveNullAndEmptyArrays: false,
-        },
-      },
-    ]);
-    console.log("Step 4 - After page unwind:", step4.length);
-    if (step4.length > 0) {
-      console.log("Sample pageDoc.Medias:", step4[0].pageDoc.Medias);
-    }
-
-    const posts = await Chapter.aggregate(pipeline);
-    console.log("Final posts found:", posts.length);
+    // Collect all media IDs from pages
+    const allMediaIds = [];
+    pages.forEach(page => {
+      if (page.Medias && Array.isArray(page.Medias)) {
+        allMediaIds.push(...page.Medias);
+        console.log(`  📄 Page ${page._id} (${page.Title || 'No title'}) has ${page.Medias.length} media IDs:`, 
+          page.Medias.slice(0, 3).map(m => m.toString()).join(', '), 
+          page.Medias.length > 3 ? '...' : ''
+        );
+      }
+    });
+    console.log(`🎬 Total media IDs found in pages: ${allMediaIds.length}`);
     
-    // Debug: Log the MediaTypes of found posts
-    if (posts.length > 0) {
-      console.log("=== POST TYPES DEBUG ===");
-      posts.forEach((post, index) => {
-        console.log(`Post ${index + 1}: MediaType = "${post.MediaType}", Location = ${post.Location ? post.Location.length : 0} items`);
-        if (post.Location && post.Location.length > 0) {
-          console.log(`  - Location[0].URL: ${post.Location[0].URL ? 'EXISTS' : 'MISSING'}`);
+    // Check how many media documents actually exist (handle both ObjectId and string)
+    const mediaObjectIds = allMediaIds.map(id => {
+      try {
+        return mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id;
+      } catch {
+        return id;
+      }
+    });
+    
+    const existingMedia = await Media.find({
+      $or: [
+        { _id: { $in: mediaObjectIds } },
+        { _id: { $in: allMediaIds.map(id => id.toString()) } }
+      ],
+      IsDeleted: { $ne: 1 }
+    }).select('_id MediaType').lean();
+    
+    console.log(`✅ Found ${existingMedia.length} existing media documents in media collection`);
+    console.log(`📋 Media IDs that exist:`, existingMedia.slice(0, 5).map(m => m._id.toString()).join(', '), 
+      existingMedia.length > 5 ? '...' : ''
+    );
+    
+    // Check media types
+    const mediaTypeCounts = {};
+    existingMedia.forEach(media => {
+      const type = media.MediaType || 'Unknown';
+      mediaTypeCounts[type] = (mediaTypeCounts[type] || 0) + 1;
+    });
+    console.log(`📊 Media by type:`, mediaTypeCounts);
+    
+    // Apply type filter if specified
+    if (req.body.type && req.body.type !== "all") {
+      const filteredMedia = existingMedia.filter(media => {
+        const type = media.MediaType || '';
+        if (req.body.type === "Image") {
+          return type === "Link" || type === "1MJPost" || type === "2MJPost" || 
+                 type === "1UnsplashPost" || type === "2UnsplashPost";
         }
+        return type === req.body.type;
       });
-      console.log("=== END POST TYPES DEBUG ===");
+      console.log(`🔍 After type filter "${req.body.type}": ${filteredMedia.length} media documents`);
     }
+    
+    console.log("=".repeat(80));
+    console.log("🚀 Running aggregation pipeline...");
+    
+    const posts = await Chapter.aggregate(pipeline);
+    
+    console.log(`✅ Aggregation complete: Found ${posts.length} posts`);
+    console.log("=".repeat(80));
 
     // Add user's interaction status for each post and clean up user data
     if (req.session.user && req.session.user._id) {
@@ -8592,6 +8565,19 @@ var getCapsulePosts = async function (req, res) {
     countPipeline.push({ $count: "total" });
     const countResult = await Chapter.aggregate(countPipeline);
     const totalCount = countResult.length > 0 ? countResult[0].total : 0;
+    
+    console.log("=".repeat(80));
+    console.log("📊 FINAL RESULTS:");
+    console.log(`  📝 Posts returned: ${posts.length}`);
+    console.log(`  📊 Total count (before pagination): ${totalCount}`);
+    console.log(`  ⏭️  Skip: ${req.body.skip || 0}`);
+    console.log(`  📏 Limit: ${req.body.limit || 20}`);
+    console.log(`  🔍 Type filter: ${req.body.type || "all"}`);
+    console.log(`  🏷️  Keyword filter: ${req.body.selectedKeyword || "none"}`);
+    if (posts.length === 2) {
+      console.log(`  ✅ Only 2 posts found - this is correct if only 2 media documents exist`);
+    }
+    console.log("=".repeat(80));
 
     // Remove allBlendConfigurations from BlendSettings before sending response
     const cleanedPosts = posts.map(post => {
@@ -8619,7 +8605,6 @@ var getCapsulePosts = async function (req, res) {
       },
     });
   } catch (error) {
-    console.error("Error in getCapsulePosts:", error);
     res.json({
       code: "500",
       message: "Something went wrong",
@@ -12136,7 +12121,6 @@ var getUserFeedPosts = async function (req, res) {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     
-    const todayStart = new Date(today);
     const todayEnd = new Date(today);
     todayEnd.setHours(23, 59, 59, 999);
     
@@ -12146,16 +12130,17 @@ var getUserFeedPosts = async function (req, res) {
     console.log(`📅 Today's date (date only): ${todayDateStr}`);
     console.log(`📅 Current date/time: ${new Date().toISOString()}`);
     
-    // ✅ Count posts for today using date-only comparison (ignores time)
     const t_count = Date.now();
-    let totalCountResult = await SyncedPost.aggregate([
-      { 
-        $match: {
-          CapsuleId: { $in: userCapsuleIds },
-          IsDeleted: false,
-          Status: true
-        }
-      },
+    
+    // ✅ Build base pipeline (reusable for both counting and querying) - Same as getStreamPostsOptimized
+    const baseMatch = {
+      CapsuleId: { $in: userCapsuleIds },
+      IsDeleted: false,
+      Status: true
+    };
+    
+    const basePipeline = [
+      { $match: baseMatch },
       {
         $addFields: {
           firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] },
@@ -12167,132 +12152,37 @@ var getUserFeedPosts = async function (req, res) {
             }
           }
         }
-      },
-      {
-        $match: {
-          DateOfDeliveryDateOnly: todayDateStr
-        }
-      },
+      }
+    ];
+    
+    // ✅ Count posts for the current mode (today or older) - Same as getStreamPostsOptimized
+    const currentModeMatch = loadOlderPosts
+      ? { DateOfDeliveryDateOnly: { $lt: todayDateStr } }
+      : { DateOfDeliveryDateOnly: todayDateStr };
+    
+    let totalCountResult = await SyncedPost.aggregate([
+      ...basePipeline,
+      { $match: currentModeMatch },
       { $count: "total" }
     ], { maxTimeMS: 5000, allowDiskUse: true });
     
-    let totalCountToday = totalCountResult[0]?.total || 0;
-    let usePastPosts = false;
-    let totalCount = totalCountToday;
+    let totalCount = totalCountResult[0]?.total || 0;
     
-    // If loadOlderPosts flag is set, directly load past posts
-    if (loadOlderPosts) {
-      console.log(`📅 Load older posts flag is set, loading past posts only`);
-      usePastPosts = true;
-      
-      // ✅ Count past posts using date-only comparison
-      totalCountResult = await SyncedPost.aggregate([
-        { 
-          $match: {
-            CapsuleId: { $in: userCapsuleIds },
-            IsDeleted: false,
-            Status: true
-          }
-        },
-        {
-          $addFields: {
-            firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] },
-            DateOfDeliveryDateOnly: {
-              $dateToString: { 
-                format: "%Y-%m-%d", 
-                date: { $arrayElemAt: ["$EmailEngineDataSets.DateOfDelivery", 0] },
-                timezone: "UTC"
-              }
-            }
-          }
-        },
-        {
-          $match: {
-            DateOfDeliveryDateOnly: { $lt: todayDateStr }
-          }
-        },
-        { $count: "total" }
-      ], { maxTimeMS: 5000, allowDiskUse: true });
-      
-      totalCount = totalCountResult[0]?.total || 0;
-      console.log(`📊 Found ${totalCount} past posts [${Date.now() - t_count}ms]`);
-    } else if (totalCountToday === 0) {
-      // If no posts for today, fallback to past posts
-      console.log(`📅 No posts found for today, falling back to past posts`);
-      usePastPosts = true;
-      
-      // ✅ Count past posts using date-only comparison
-      totalCountResult = await SyncedPost.aggregate([
-        { 
-          $match: {
-            CapsuleId: { $in: userCapsuleIds },
-            IsDeleted: false,
-            Status: true
-          }
-        },
-        {
-          $addFields: {
-            firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] },
-            DateOfDeliveryDateOnly: {
-              $dateToString: { 
-                format: "%Y-%m-%d", 
-                date: { $arrayElemAt: ["$EmailEngineDataSets.DateOfDelivery", 0] },
-                timezone: "UTC"
-              }
-            }
-          }
-        },
-        {
-          $match: {
-            DateOfDeliveryDateOnly: { $lt: todayDateStr }
-          }
-        },
-        { $count: "total" }
-      ], { maxTimeMS: 5000, allowDiskUse: true });
-      
-      totalCount = totalCountResult[0]?.total || 0;
-      console.log(`📊 Found ${totalCount} past posts [${Date.now() - t_count}ms]`);
-    } else {
-      totalCount = totalCountToday;
+    // ✅ Always count older posts to determine button visibility - Same as getStreamPostsOptimized
+    const olderCountResult = await SyncedPost.aggregate([
+      ...basePipeline,
+      { $match: { DateOfDeliveryDateOnly: { $lt: todayDateStr } } },
+      { $count: "total" }
+    ], { maxTimeMS: 5000, allowDiskUse: true });
+    const totalOlderPosts = olderCountResult[0]?.total || 0;
+    const hasOlderPostsAvailable = totalOlderPosts > 0;
+    
+    if (!loadOlderPosts) {
       console.log(`📊 Found ${totalCount} posts for today [${Date.now() - t_count}ms]`);
-      
-      // If we have very few posts for today (less than the limit), also include past posts
-      if (totalCountToday < limit) {
-        console.log(`📅 Only ${totalCountToday} posts for today (less than limit ${limit}), including past posts`);
-        usePastPosts = true;
-        
-        // ✅ Count all posts (today + past) using date-only comparison
-        totalCountResult = await SyncedPost.aggregate([
-          { 
-            $match: {
-              CapsuleId: { $in: userCapsuleIds },
-              IsDeleted: false,
-              Status: true
-            }
-          },
-          {
-            $addFields: {
-              firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] },
-              DateOfDeliveryDateOnly: {
-                $dateToString: { 
-                  format: "%Y-%m-%d", 
-                  date: { $arrayElemAt: ["$EmailEngineDataSets.DateOfDelivery", 0] },
-                  timezone: "UTC"
-                }
-              }
-            }
-          },
-          {
-            $match: {
-              DateOfDeliveryDateOnly: { $lte: todayDateStr }  // Include all posts up to today (today's + past)
-            }
-          },
-          { $count: "total" }
-        ], { maxTimeMS: 5000, allowDiskUse: true });
-        
-        totalCount = totalCountResult[0]?.total || 0;
-        console.log(`📊 Found ${totalCount} total posts (today + past) [${Date.now() - t_count}ms]`);
-      }
+      console.log(`📊 Older posts available: ${totalOlderPosts}`);
+    } else {
+      console.log(`📅 Load older posts flag is set, loading past posts only`);
+      console.log(`📊 Loading older posts: ${totalCount} found [${Date.now() - t_count}ms]`);
     }
     
     if (totalCount === 0) {
@@ -12304,57 +12194,28 @@ var getUserFeedPosts = async function (req, res) {
         count: 0,
         userCapsules: userCapsuleIds.length,
         pagination: { skip: skip, limit: limit, hasMore: false },
+        olderPostsRemaining: totalOlderPosts,
+        hasOlderPosts: hasOlderPostsAvailable,
         filters: { type: type, selectedKeyword: selectedKeyword },
       });
     }
 
-    // ✅ Build pipeline with date-only filtering (same as getStreamPostsOptimized)
+    // ✅ Build aggregation pipeline - reuse base stages, then filter by mode - Same as getStreamPostsOptimized
     const pipeline = [
-      { 
-        $match: {
-          CapsuleId: { $in: userCapsuleIds },
-          IsDeleted: false,
-          Status: true
-        }
-      },
-      
-      // Extract DateOfDelivery first for sorting and date comparison
+      ...basePipeline,
       {
-        $addFields: {
-          firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] }
-        }
+        $match: loadOlderPosts
+          ? { DateOfDeliveryDateOnly: { $lt: todayDateStr } }
+          : { DateOfDeliveryDateOnly: todayDateStr }
       },
       {
         $addFields: {
-          DateOfDeliveryForSort: "$firstDataSet.DateOfDelivery",
-          // ✅ Extract date only (YYYY-MM-DD) for comparison - ignore time completely
-          DateOfDeliveryDateOnly: {
-            $dateToString: { 
-              format: "%Y-%m-%d", 
-              date: "$firstDataSet.DateOfDelivery",
-              timezone: "UTC"
-            }
-          }
+          DateOfDeliveryForSort: "$firstDataSet.DateOfDelivery"
         }
-      },
-      
-      // ✅ Filter by date only (not time) - compare date strings
-      {
-        $match: usePastPosts
-          ? (totalCountToday < limit && !loadOlderPosts && totalCountToday > 0)
-            ? {
-                DateOfDeliveryDateOnly: { $lte: todayDateStr }  // Include today + past
-              }
-            : {
-                DateOfDeliveryDateOnly: { $lt: todayDateStr }  // Past only
-              }
-          : {
-              DateOfDeliveryDateOnly: todayDateStr  // Today only
-            }
       },
       
       // Sort by DateOfDelivery (most recent first for past posts, or CreatedOn for today's posts)
-      { $sort: usePastPosts 
+      { $sort: loadOlderPosts 
           ? { DateOfDeliveryForSort: -1, _id: -1 }  // Most recent past posts first
           : { CreatedOn: -1, _id: -1 }              // Today's posts by creation date
       },
@@ -12578,13 +12439,25 @@ var getUserFeedPosts = async function (req, res) {
       {
         $lookup: {
           from: "StreamLikes",
-          let: { syncedPostId: "$_id" },
+          let: { 
+            syncedPostId: "$_id",  // SyncedPost's _id
+            postId: "$PostId"      // Media document's _id (from SyncedPost.PostId)
+          },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ["$SocialPostId", "$$syncedPostId"] },
+                    // Match if SocialPostId equals either SyncedPost._id OR SyncedPost.PostId
+                    // Handle both ObjectId and string formats
+                    {
+                      $or: [
+                        { $eq: ["$SocialPostId", "$$syncedPostId"] },
+                        { $eq: [{ $toString: "$SocialPostId" }, { $toString: "$$syncedPostId" }] },
+                        { $eq: ["$SocialPostId", "$$postId"] },
+                        { $eq: [{ $toString: "$SocialPostId" }, { $toString: "$$postId" }] }
+                      ]
+                    },
                     { $ne: ["$IsDeleted", true] },
                     { $ne: ["$IsDeleted", 1] }
                   ]
@@ -12630,7 +12503,8 @@ var getUserFeedPosts = async function (req, res) {
         $lookup: {
           from: "StreamComments",
           let: { 
-            syncedPostId: "$_id",  // Use SyncedPost _id (not PostId) since comments use SyncedPost._id as SocialPostId
+            syncedPostId: "$_id",  // SyncedPost's _id
+            postId: "$PostId",     // Media document's _id (from SyncedPost.PostId)
             capsuleId: "$capsuleId"
           },
           pipeline: [
@@ -12641,7 +12515,16 @@ var getUserFeedPosts = async function (req, res) {
                   {
                     $expr: { 
                       $and: [
-                        { $eq: ["$SocialPostId", "$$syncedPostId"] },
+                        // Match if SocialPostId equals either SyncedPost._id OR SyncedPost.PostId
+                        // Handle both ObjectId and string formats
+                        {
+                          $or: [
+                            { $eq: ["$SocialPostId", "$$syncedPostId"] },
+                            { $eq: [{ $toString: "$SocialPostId" }, { $toString: "$$syncedPostId" }] },
+                            { $eq: ["$SocialPostId", "$$postId"] },
+                            { $eq: [{ $toString: "$SocialPostId" }, { $toString: "$$postId" }] }
+                          ]
+                        },
                         { $ne: ["$IsDeleted", true] },
                         { $ne: ["$IsDeleted", 1] }
                       ]
@@ -13227,97 +13110,13 @@ var getUserFeedPosts = async function (req, res) {
       return post;
     }));
 
-    // ✅ Calculate remaining older posts count
-    const t_older_count = Date.now();
-    
-    // Count total older posts (DateOfDelivery < todayStart) that match user's capsules
-    const olderPostsConditions = {
-      CapsuleId: { $in: userCapsuleIds },
-      IsDeleted: false,
-      Status: true,
-      'EmailEngineDataSets.DateOfDelivery': {
-        $lt: todayStart
-      }
-    };
-    
-    // Build aggregation pipeline to count older posts with same filters
-    const olderPostsCountPipeline = [
-      { $match: olderPostsConditions },
-      {
-        $addFields: {
-          firstDataSet: { $arrayElemAt: ["$EmailEngineDataSets", 0] }
-        }
-      },
-      {
-        $lookup: {
-          from: "media",
-          let: { postId: "$PostId" },
-          pipeline: [
-            {
-              $match: {
-                $expr: { $eq: ["$_id", { $toObjectId: "$$postId" }] }
-              }
-            }
-          ],
-          as: "mediaDoc"
-        }
-      },
-      { $unwind: { path: "$mediaDoc", preserveNullAndEmptyArrays: true } }
-    ];
-    
-    // Apply media type filter if specified
-    if (type && type !== "all") {
-      olderPostsCountPipeline.push({
-        $match: {
-          $or: [
-            { "mediaDoc.MediaType": type },
-            ...(type === "Image"
-              ? [
-                  { "mediaDoc.MediaType": "Link", "mediaDoc.LinkType": "image" },
-                  { "mediaDoc.MediaType": "1MJPost" },
-                  { "mediaDoc.MediaType": "2MJPost" },
-                  { "mediaDoc.MediaType": "1UnsplashPost" },
-                  { "mediaDoc.MediaType": "2UnsplashPost" },
-                ]
-              : []),
-            ...(type === "Video"
-              ? [
-                  { "mediaDoc.MediaType": "Link", "mediaDoc.LinkType": { $ne: "image" } },
-                  { "mediaDoc.MediaType": "Video" },
-                  { "mediaDoc.MediaType": "Audio" },
-                ]
-              : []),
-          ],
-        }
-      });
-    }
-    
-    // Count total older posts
-    olderPostsCountPipeline.push({ $count: "total" });
-    
-    const olderPostsCountResult = await SyncedPost.aggregate(
-      olderPostsCountPipeline,
-      { maxTimeMS: 5000, allowDiskUse: true }
-    );
-    
-    const totalOlderPosts = olderPostsCountResult[0]?.total || 0;
-    
-    // Calculate how many older posts have been fetched
-    // If loadOlderPosts is true, skip represents older posts already fetched
-    // Otherwise, count older posts in current response
-    let olderPostsFetched = 0;
-    if (loadOlderPosts) {
-      // We're loading older posts directly, skip represents already fetched older posts
-      olderPostsFetched = skip;
-    } else {
-      // Count older posts in current response
-      olderPostsFetched = cleanedPosts.filter(post => post.isOldPost === true).length;
-    }
-    
-    // Calculate remaining older posts
-    const olderPostsRemaining = Math.max(0, totalOlderPosts - olderPostsFetched);
-    
-    console.log(`📊 Older posts: total=${totalOlderPosts}, fetched=${olderPostsFetched}, remaining=${olderPostsRemaining} [${Date.now() - t_older_count}ms]`);
+    // ✅ Calculate remaining older posts - Same as getStreamPostsOptimized
+    // totalOlderPosts is already calculated above
+    // If loading older posts, calculate remaining based on skip
+    // Otherwise, use the total count
+    const olderPostsRemaining = loadOlderPosts
+      ? Math.max(0, totalOlderPosts - skip - cleanedPosts.length)
+      : totalOlderPosts;
 
     console.log('📤 [BACKEND] getUserFeedPosts - Sending response', {
       endpoint: '/capsules/getUserFeedPosts',
@@ -13328,6 +13127,10 @@ var getUserFeedPosts = async function (req, res) {
       limit,
       olderPostsRemaining: olderPostsRemaining
     });
+
+    const responseHasOlderPosts = loadOlderPosts
+      ? (skip + cleanedPosts.length) < totalOlderPosts
+      : hasOlderPostsAvailable;
 
     res.json({
       code: 200,
@@ -13341,6 +13144,7 @@ var getUserFeedPosts = async function (req, res) {
         hasMore: skip + limit < totalCount,
       },
       olderPostsRemaining: olderPostsRemaining, // ✅ Count of older posts still available in DB
+      hasOlderPosts: responseHasOlderPosts, // ✅ Boolean flag to show/hide "Load Older Posts" button - Same as getStreamPostsOptimized
       filters: {
         type: type,
         selectedKeyword: selectedKeyword,
@@ -15423,6 +15227,11 @@ var getStreamPostsOptimized = async function (req, res) {
     const StreamCommentLikes = require('./../models/StreamCommentLikesModel.js');
     const StreamMember = require('./../models/StreamMembersModel.js');
     
+    // ✅ Get collection name dynamically (same as feed page API)
+    const streamCommentLikesCollection =
+      (StreamCommentLikes.collection && (StreamCommentLikes.collection.collectionName || StreamCommentLikes.collection.name)) ||
+      'streamcommentlikes';
+    
     console.log('🚀 getStreamPostsOptimized - Start');
     console.log('👤 User ID:', loginUserId);
     console.log('🎯 Capsule ID:', capsuleId);
@@ -15774,9 +15583,11 @@ var getStreamPostsOptimized = async function (req, res) {
           capsuleLaunchSettings: "$capsuleData.LaunchSettings",
           capsuleCreatedOn: "$capsuleData.CreatedOn",
           capsuleModifiedOn: "$capsuleData.ModifiedOn",
-          capsuleCreatorName: "$capsuleData.creatorName",
-          capsuleCreatorProfilePic: "$capsuleData.creatorProfilePic",
-          capsuleCreatorId: "$capsuleData.CreaterId",
+          // ✅ FIX: Use uploaderData (from Media.UploaderID) instead of capsuleData.creatorName (from Capsule.CreaterId)
+          // This ensures consistency with getUserFeedPosts - post creator should be the person who uploaded the post
+          capsuleCreatorName: "$uploaderData.Name",
+          capsuleCreatorProfilePic: "$uploaderData.ProfilePic",
+          capsuleCreatorId: "$capsuleData.CreaterId", // Keep CreaterId for reference, but use uploader for display
           pageId: "$PageId",
         }
       },
@@ -15788,13 +15599,25 @@ var getStreamPostsOptimized = async function (req, res) {
       {
         $lookup: {
           from: "StreamLikes",
-          let: { syncedPostId: "$_id" },
+          let: { 
+            syncedPostId: "$_id",  // SyncedPost's _id
+            postId: "$PostId"      // Media document's _id (from SyncedPost.PostId)
+          },
           pipeline: [
             {
               $match: {
                 $expr: {
                   $and: [
-                    { $eq: ["$SocialPostId", "$$syncedPostId"] },
+                    // Match if SocialPostId equals either SyncedPost._id OR SyncedPost.PostId
+                    // Handle both ObjectId and string formats
+                    {
+                      $or: [
+                        { $eq: ["$SocialPostId", "$$syncedPostId"] },
+                        { $eq: [{ $toString: "$SocialPostId" }, { $toString: "$$syncedPostId" }] },
+                        { $eq: ["$SocialPostId", "$$postId"] },
+                        { $eq: [{ $toString: "$SocialPostId" }, { $toString: "$$postId" }] }
+                      ]
+                    },
                     { $ne: ["$IsDeleted", true] },
                     { $ne: ["$IsDeleted", 1] }
                   ]
@@ -15841,7 +15664,8 @@ var getStreamPostsOptimized = async function (req, res) {
         $lookup: {
           from: "StreamComments",
           let: { 
-            postId: "$_id",  // Use SyncedPost _id, not PostId (Media _id)
+            syncedPostId: "$_id",  // SyncedPost's _id
+            postId: "$PostId",     // Media document's _id (from SyncedPost.PostId)
             capsuleId: "$capsuleId"
           },
           pipeline: [
@@ -15851,7 +15675,16 @@ var getStreamPostsOptimized = async function (req, res) {
                   {
                     $expr: { 
                       $and: [
-                        { $eq: [{ $toString: "$SocialPostId" }, { $toString: "$$postId" }] },
+                        // Match if SocialPostId equals either SyncedPost._id OR SyncedPost.PostId
+                        // Handle both ObjectId and string formats
+                        {
+                          $or: [
+                            { $eq: ["$SocialPostId", "$$syncedPostId"] },
+                            { $eq: [{ $toString: "$SocialPostId" }, { $toString: "$$syncedPostId" }] },
+                            { $eq: ["$SocialPostId", "$$postId"] },
+                            { $eq: [{ $toString: "$SocialPostId" }, { $toString: "$$postId" }] }
+                          ]
+                        },
                         { $ne: ["$IsDeleted", true] },
                         { $ne: ["$IsDeleted", 1] }
                       ]
@@ -15903,17 +15736,43 @@ var getStreamPostsOptimized = async function (req, res) {
             },
             {
               $lookup: {
-                from: "StreamCommentLikes",
+                from: streamCommentLikesCollection,
                 let: { commentId: "$_id" },
                 pipeline: [
                   {
                     $match: {
-                      $expr: {
+                      $expr: { 
                         $and: [
+                          // ✅ FIX: Use exact same match as feed page API (simple direct match)
                           { $eq: ["$CommentId", "$$commentId"] },
                           { $ne: ["$IsDeleted", true] },
                           { $ne: ["$IsDeleted", 1] }
                         ]
+                      }
+                    }
+                  },
+                  {
+                    $lookup: {
+                      from: "users",
+                      localField: "LikedById",
+                      foreignField: "_id",
+                      as: "likedByUser"
+                    }
+                  },
+                  { $unwind: { path: "$likedByUser", preserveNullAndEmptyArrays: true } },
+                  {
+                    $project: {
+                      _id: 1,
+                      CommentId: 1,
+                      SocialPageId: 1,
+                      LikedById: 1,
+                      CreatedOn: 1,
+                      likedByUser: {
+                        _id: "$likedByUser._id",
+                        Name: "$likedByUser.Name",
+                        UserName: "$likedByUser.UserName",
+                        ProfilePic: "$likedByUser.ProfilePic",
+                        Email: "$likedByUser.Email"
                       }
                     }
                   }
@@ -15975,14 +15834,21 @@ var getStreamPostsOptimized = async function (req, res) {
                   },
                   {
                     $lookup: {
-                      from: "StreamCommentLikes",
+                      from: streamCommentLikesCollection,
                       let: { replyId: "$_id" },
                       pipeline: [
                         {
                           $match: {
                             $expr: {
                               $and: [
-                                { $eq: ["$CommentId", "$$replyId"] },
+                                // ✅ FIX: Match CommentId (handle both ObjectId and string formats)
+                                {
+                                  $or: [
+                                    { $eq: ["$CommentId", "$$replyId"] },
+                                    { $eq: ["$CommentId", { $toObjectId: { $ifNull: [{ $toString: "$$replyId" }, ""] } }] },
+                                    { $eq: [{ $toString: "$CommentId" }, { $toString: "$$replyId" }] }
+                                  ]
+                                },
                                 { $ne: ["$IsDeleted", true] },
                                 { $ne: ["$IsDeleted", 1] }
                               ]
@@ -16101,6 +15967,61 @@ var getStreamPostsOptimized = async function (req, res) {
               }
             },
             {
+              $addFields: {
+                commentLikesFiltered: {
+                  $filter: {
+                    input: "$commentLikes",
+                    cond: {
+                      $and: [
+                        { $ne: ["$$this.IsDeleted", true] },
+                        { $ne: ["$$this.IsDeleted", 1] }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              $addFields: {
+                // ✅ DEBUG: Ensure commentLikes exists (default to empty array if undefined)
+                commentLikes: { $ifNull: ["$commentLikes", []] },
+                commentLikesFiltered: {
+                  $filter: {
+                    input: { $ifNull: ["$commentLikes", []] },
+                    cond: {
+                      $and: [
+                        { $ne: ["$$this.IsDeleted", true] },
+                        { $ne: ["$$this.IsDeleted", 1] }
+                      ]
+                    }
+                  }
+                }
+              }
+            },
+            {
+              $addFields: {
+                CommentLikeCount: { $size: "$commentLikesFiltered" },
+                likedByCurrentUser: {
+                  $gt: [
+                    {
+                      $size: {
+                        $filter: {
+                          input: "$commentLikesFiltered",
+                          cond: {
+                            $and: [
+                              { $ne: ["$$this", null] },
+                              { $eq: [{ $toString: "$$this.LikedById" }, String(loginUserId)] }
+                            ]
+                          }
+                        }
+                      }
+                    },
+                    0
+                  ]
+                }
+              }
+            },
+            {
               $project: {
                 _id: 1,
                 UserId: 1,
@@ -16108,7 +16029,25 @@ var getStreamPostsOptimized = async function (req, res) {
                 PrivacySetting: 1,
                 CreatedOn: 1,
                 user: { $arrayElemAt: ["$user", 0] },
-                CommentLikeCount: { $size: "$commentLikes" },
+                CommentLikeCount: 1,
+                likedByCurrentUser: { $ifNull: ["$likedByCurrentUser", false] },
+                // ✅ DEBUG: Include commentLikes and commentLikesFiltered to see what lookup returns
+                commentLikes: 1,
+                commentLikesFiltered: 1,
+                likes: {
+                  $map: {
+                    input: "$commentLikesFiltered",
+                    as: "like",
+                    in: {
+                      _id: "$$like._id",
+                      CommentId: "$$like.CommentId",
+                      SocialPageId: "$$like.SocialPageId",
+                      LikedById: "$$like.LikedById",
+                      CreatedOn: "$$like.CreatedOn",
+                      likedByUser: "$$like.likedByUser"
+                    }
+                  }
+                },
                 replies: 1,
                 replyCount: { $ifNull: [{ $arrayElemAt: ["$replyCountDoc.total", 0] }, 0] }
               }
@@ -16162,11 +16101,116 @@ var getStreamPostsOptimized = async function (req, res) {
     console.log(`✅ Aggregation complete: ${posts.length} posts [${Date.now() - t_agg}ms]`);
     console.log(`📊 Expected limit: ${limit}, Actual posts returned: ${posts.length}`);
     
+    // ✅ DEBUG: Check if likes exist in database for sample comments
+    if (posts.length > 0 && posts[0].comments && posts[0].comments.length > 0) {
+      const sampleCommentId = posts[0].comments[0]._id;
+      console.log(`\n🔍 DEBUG: Checking database for likes on comment: ${sampleCommentId}`);
+      try {
+        const StreamCommentLikes = require('../models/StreamCommentLikesModel');
+        const directLikes = await StreamCommentLikes.find({
+          CommentId: sampleCommentId,
+          IsDeleted: { $ne: true }
+        }).limit(5);
+        console.log(`   Found ${directLikes.length} likes in database for this comment`);
+        if (directLikes.length > 0) {
+          console.log(`   Sample like:`, {
+            _id: directLikes[0]._id,
+            CommentId: directLikes[0].CommentId,
+            LikedById: directLikes[0].LikedById,
+            IsDeleted: directLikes[0].IsDeleted
+          });
+        }
+      } catch (dbErr) {
+        console.error(`   Error checking database:`, dbErr.message);
+      }
+    }
+    
     if (posts.length === 0) {
       console.warn(`⚠️ WARNING: No posts returned from aggregation!`);
     } else if (posts.length < limit && posts.length > 0) {
       console.log(`ℹ️ INFO: Returned ${posts.length} posts (less than limit of ${limit})`);
     }
+
+    // ✅ DEBUG: Log comment likes data before cleaning
+    if (posts.length > 0) {
+      console.log('\n🔍 ===== DEBUG: COMMENT LIKES DATA =====');
+      posts.slice(0, 3).forEach((post, postIdx) => {
+        if (post.comments && post.comments.length > 0) {
+          console.log(`\n📝 Post ${postIdx + 1} (${post._id}):`);
+          post.comments.slice(0, 3).forEach((comment, commentIdx) => {
+            console.log(`  💬 Comment ${commentIdx + 1} (${comment._id}):`);
+            console.log(`     - CommentLikeCount: ${comment.CommentLikeCount || 0}`);
+            console.log(`     - commentLikes array length: ${Array.isArray(comment.commentLikes) ? comment.commentLikes.length : 'NOT AN ARRAY'}`);
+            console.log(`     - commentLikesFiltered array length: ${Array.isArray(comment.commentLikesFiltered) ? comment.commentLikesFiltered.length : 'NOT AN ARRAY'}`);
+            console.log(`     - likes array length: ${Array.isArray(comment.likes) ? comment.likes.length : 'NOT AN ARRAY'}`);
+            if (Array.isArray(comment.commentLikes) && comment.commentLikes.length > 0) {
+              console.log(`     - commentLikes sample:`, JSON.stringify(comment.commentLikes[0], null, 2).substring(0, 200));
+            }
+            if (Array.isArray(comment.likes) && comment.likes.length > 0) {
+              console.log(`     - likes sample:`, JSON.stringify(comment.likes[0], null, 2).substring(0, 200));
+            }
+          });
+        }
+      });
+      console.log('🔍 ===== END DEBUG =====\n');
+    }
+
+    // ✅ DEBUG: Log comment likes data before cleaning
+    console.log('\n🔍 ===== DEBUG: COMMENT LIKES DATA (BEFORE CLEANING) =====');
+    if (posts.length > 0) {
+      posts.slice(0, 2).forEach((post, postIdx) => {
+        console.log(`\n📝 Post ${postIdx + 1} (PostId: ${post.PostId}, _id: ${post._id}):`);
+        console.log(`   Total comments: ${post.comments ? post.comments.length : 0}`);
+        
+        if (post.comments && post.comments.length > 0) {
+          post.comments.slice(0, 3).forEach((comment, commentIdx) => {
+            console.log(`\n  💬 Comment ${commentIdx + 1}:`);
+            console.log(`     - CommentId: ${comment._id}`);
+            console.log(`     - CommentLikeCount: ${comment.CommentLikeCount || 0}`);
+            console.log(`     - likedByCurrentUser: ${comment.likedByCurrentUser || false}`);
+            
+            // Check if commentLikes exists (before filtering)
+            if (comment.commentLikes !== undefined) {
+              console.log(`     - commentLikes (raw): ${Array.isArray(comment.commentLikes) ? comment.commentLikes.length + ' items' : typeof comment.commentLikes}`);
+              if (Array.isArray(comment.commentLikes) && comment.commentLikes.length > 0) {
+                console.log(`     - commentLikes[0]:`, JSON.stringify({
+                  _id: comment.commentLikes[0]._id,
+                  CommentId: comment.commentLikes[0].CommentId,
+                  LikedById: comment.commentLikes[0].LikedById,
+                  IsDeleted: comment.commentLikes[0].IsDeleted,
+                  hasLikedByUser: !!comment.commentLikes[0].likedByUser
+                }, null, 2));
+              }
+            } else {
+              console.log(`     - commentLikes: UNDEFINED`);
+            }
+            
+            // Check commentLikesFiltered
+            if (comment.commentLikesFiltered !== undefined) {
+              console.log(`     - commentLikesFiltered: ${Array.isArray(comment.commentLikesFiltered) ? comment.commentLikesFiltered.length + ' items' : typeof comment.commentLikesFiltered}`);
+            } else {
+              console.log(`     - commentLikesFiltered: UNDEFINED`);
+            }
+            
+            // Check final likes array
+            if (comment.likes !== undefined) {
+              console.log(`     - likes (final): ${Array.isArray(comment.likes) ? comment.likes.length + ' items' : typeof comment.likes}`);
+              if (Array.isArray(comment.likes) && comment.likes.length > 0) {
+                console.log(`     - likes[0]:`, JSON.stringify({
+                  _id: comment.likes[0]._id,
+                  CommentId: comment.likes[0].CommentId,
+                  LikedById: comment.likes[0].LikedById,
+                  hasLikedByUser: !!comment.likes[0].likedByUser
+                }, null, 2));
+              }
+            } else {
+              console.log(`     - likes: UNDEFINED`);
+            }
+          });
+        }
+      });
+    }
+    console.log('🔍 ===== END DEBUG =====\n');
 
     // Clean up posts and add audio file data
     const cleanedPosts = await Promise.all(posts.map(async (post) => {

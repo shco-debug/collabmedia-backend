@@ -130,12 +130,28 @@ var mediaSchema = new mongoose.Schema({
 	PostLinkUrl: {type: String},
 	Themes: {type: Array, default: []},
 	postTags: {type: String, default: null}, // Tag for posts - each post has one keyword, all versions share the same postTag
-	PostCommentsArr: {type: Array, default: []} // Post comments array
+	PostCommentsArr: {type: Array, default: []}, // Post comments array
 	//Descriptors : {type : Array , default : []}			//adding for new keywords hierarchy - Text Search
+	
+	// Timestamp fields (optional - won't cause errors for existing documents)
+	createdAt: {type: Date, default: null},
+	updatedAt: {type: Date, default: null}
 },{ collection: 'media', shardKey: {_id: 1} });
 
-// Pre-save middleware to ensure GroupTags maintain proper structure
+// Pre-save middleware to ensure GroupTags maintain proper structure and add timestamps
 mediaSchema.pre('save', function(next) {
+    // Auto-populate createdAt and updatedAt timestamps
+    const now = new Date();
+    if (this.isNew) {
+        // New document - set createdAt if not already set
+        if (!this.createdAt) {
+            this.createdAt = now;
+        }
+    }
+    // Always update updatedAt on save
+    this.updatedAt = now;
+    
+    // Ensure GroupTags maintain proper structure
     if (this.GroupTags && Array.isArray(this.GroupTags)) {
         this.GroupTags = this.GroupTags.map(groupTag => {
             // If it's already in the correct format, keep it

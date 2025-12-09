@@ -1705,23 +1705,30 @@ function addHexcode_blendedImage(EmailEngineDataSets) {
       PostImage2 = dataRecord.VisualUrls[1];
     }
 
+    // ✅ FIX: Preserve hexcode_blendedImage if already present (from SelectedBlendImages)
+    // Only recalculate if missing to ensure consistency across Media, PageStream, and SyncedPosts
+    if (dataRecord.hexcode_blendedImage) {
+      // Hexcode already exists, preserve it
+      continue;
+    }
+    
     //check if blended image exists
     let blendImage1 = PostImage1;
     let blendImage2 = PostImage2;
     let blendOption = dataRecord.BlendMode;
     let blendedImage = null;
 
+    // ✅ FIX: Use the same formula as getHexcodeForBlendPair for consistency
     if (blendImage1 && blendImage2 && blendOption) {
-      let data = blendImage1 + blendImage2 + blendOption;
-      var hexcode = crypto.createHash("md5").update(data).digest("hex");
-      if (hexcode) {
-        blendedImage = `/streamposts/${hexcode}.png`;
-      }
+      const hexMeta = getHexcodeForBlendPair(blendImage1, blendImage2, blendOption);
+      blendedImage = hexMeta.hexcodePath;
     }
-
-    if (!blendedImage && blendImage1 == blendImage2) {
-      blendImage1 = blendImage1.replace("/Media/img/300/", "/Media/img/600/");
-      blendedImage = blendImage1;
+    // ✅ If no blendMode (single image, no blending), use default blendMode to create nice visual blend
+    else if (!blendOption && blendImage1 && blendImage1 == blendImage2) {
+      // Use default blendMode "overlay" to create a nice visual effect when blending image with itself
+      const defaultBlendMode = "overlay";
+      const hexMeta = getHexcodeForBlendPair(blendImage1, blendImage1, defaultBlendMode);
+      blendedImage = hexMeta.hexcodePath;
     }
     dataRecord.hexcode_blendedImage = blendedImage;
     EmailEngineDataSets[i] = dataRecord;
@@ -4711,59 +4718,7 @@ var transferOwnership = function (req, res) {
                                     }
                                   );
                                 }
-                                //console.log("----new page instance created..", result);
-                                /*
-														//add the me in friend list of user now
-														var conditions = {
-															'UserID': req.session.user._id,
-															'Friend.Email':{ $regex : new RegExp(req.body.email, "i") },
-															Status:1,
-															IsDeleted:0
-														};
-														var fields = {};
-
-														friend.find(conditions, fields, function(err,data){
-															if (err) {
-																res.json({'code':404,'error':err});
-															}else{
-																console.log(data);
-																if (data.length == 0) {
-																	console.log('saving data');
-																	var rel = req.body.relation;
-																	rel = rel.split('~');
-																	var newFriendData = {};
-																	newFriendData.IsRegistered = IsRegistered;
-																	if ( IsRegistered ) {
-																		newFriendData.ID = frndData._id;
-																		newFriendData.Pic =  frndData.ProfilePic;
-																		newFriendData.NickName =  frndData.NickName;
-																	}
-
-																	newFriendData.Email = req.body.email;
-																	newFriendData.Name = IsRegistered ? frndData.Name : req.body.name;
-																	newFriendData.Relation =  rel[0].trim();
-																	newFriendData.RelationID =  rel[1].trim();
-
-																	var friendship = new friend();
-																	friendship.UserID = req.session.user._id;
-																	friendship.Friend = newFriendData;
-																	friendship.Status = 1;
-																	friendship.IsDeleted = 0;
-																	friendship.CreatedOn = Date.now();
-																	friendship.ModifiedOn = Date.now();
-																	friendship.save(function(err,data){
-																		if (err) {
-																			res.json(err);
-																		}else{
-																			res.json({'code':200,msg:'data saved'});
-																		}
-																	});
-																}else{
-																	console.log('already friend');
-																	res.json({'code':400,msg:'Already a friend'});
-																}
-															}
-														});*/
+                           
                               } else {
                                 console.log(err);
                               }
@@ -5756,14 +5711,21 @@ var getMediaFromSet = async function (req, callback) {
   req.session = req.session ? req.session : {};
   req.session.user = req.session.user ? req.session.user : {};
   var reqObj = req.body ? req.body : {};
-  console.log("\n🎨 ========================================");
-  console.log("🎨 === IMAGE 1 FILTERING START ===");
-  console.log("🎨 ========================================");
+  var PostStreamType = req.body.PostStreamType || "";
+  // Logging removed for 2MJ posts
+  if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+    console.log("\n🎨 ========================================");
+    console.log("🎨 === IMAGE 1 FILTERING START ===");
+    console.log("🎨 ========================================");
+  }
   var sec = 0;
 
   var timer = setInterval(function () {
     sec++;
-    console.log("getMediaFromSet1 execution time = ", sec + " seconds.");
+    // Logging removed for 2MJ posts
+    if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+      console.log("getMediaFromSet1 execution time = ", sec + " seconds.");
+    }
     
     // No timeout - let it run as long as needed
   }, 1000);
@@ -5784,9 +5746,15 @@ var getMediaFromSet = async function (req, callback) {
   if (SecondaryKeywords.length === 0 && sArr.length > 0) {
     // Convert text keywords to GroupTagIDs using static file
     SecondaryKeywords = await getGroupTagIdsPrioritized(sArr, 500);
-    console.log("🔍 IMAGE 1: Converted sArr to GroupTagIDs:", sArr.length, "words →", SecondaryKeywords.length, "IDs");
+    // Logging removed for 2MJ posts
+    if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+      console.log("🔍 IMAGE 1: Converted sArr to GroupTagIDs:", sArr.length, "words →", SecondaryKeywords.length, "IDs");
+    }
   } else if (SecondaryKeywords.length > 0) {
-    console.log("🔍 IMAGE 1: Using pre-computed SecondaryKeywords:", SecondaryKeywords.length, "IDs");
+    // Logging removed for 2MJ posts
+    if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+      console.log("🔍 IMAGE 1: Using pre-computed SecondaryKeywords:", SecondaryKeywords.length, "IDs");
+    }
   }
   
   // CRITICAL FIX: Check if subsetByRank is empty or not an array
@@ -5863,7 +5831,10 @@ var getMediaFromSet = async function (req, callback) {
         
         if (excludedObjectIds.length > 0) {
           conditions["_id"] = { $nin: excludedObjectIds };
-          console.log(`🚫 IMAGE 1: Excluding ${excludedObjectIds.length} already-used images from page ${pageId}`);
+          // Logging removed for 2MJ posts
+          if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+            console.log(`🚫 IMAGE 1: Excluding ${excludedObjectIds.length} already-used images from page ${pageId}`);
+          }
         }
       }
     } catch (error) {
@@ -5988,10 +5959,16 @@ var getMediaFromSet = async function (req, callback) {
     // We should ONLY filter by primary keywords, not secondary!
     if (selectedKeywords.length > 0) {
       conditions["GroupTags.GroupTagID"] = { $in: selectedKeywords };
-      console.log("✅ IMAGE 1: Using PRIMARY keyword filter ONLY:", selectedKeywords);
-      console.log("✅ IMAGE 1: Secondary keywords will be used for SCORING, not filtering");
+      // Logging removed for 2MJ posts
+      if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+        console.log("✅ IMAGE 1: Using PRIMARY keyword filter ONLY:", selectedKeywords);
+        console.log("✅ IMAGE 1: Secondary keywords will be used for SCORING, not filtering");
+      }
     } else {
-      console.log("⚠️ No primary keyword IDs - using ONLY Media Selection Criteria");
+      // Logging removed for 2MJ posts
+      if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+        console.log("⚠️ No primary keyword IDs - using ONLY Media Selection Criteria");
+      }
     }
 
     var maxRank = totalSets.length;
@@ -6183,7 +6160,10 @@ var getMediaFromSet = async function (req, callback) {
   // SecondaryKeywords matching is done in $group stage via GroupTags.GroupTagID
   // The SecondaryKeywords array (which now contains IDs) is matched against Media.GroupTags
   // This is the same approach as Old Scrpt - matching IDs against GroupTags.GroupTagID
-  console.log("🔍 IMAGE 1: Using GroupTagID matching for secondary keywords:", SecondaryKeywords.length, "IDs");
+  // Logging removed for 2MJ posts
+  if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+    console.log("🔍 IMAGE 1: Using GroupTagID matching for secondary keywords:", SecondaryKeywords.length, "IDs");
+  }
   
   let projectPipeline_1 = {
     _id: "$_id",
@@ -6242,7 +6222,10 @@ var getMediaFromSet = async function (req, callback) {
         typeof mediaSelectionCriteria[property] === "boolean"
           ? [mediaSelectionCriteria[property]]
           : mediaSelectionCriteria[property];
-      console.log(`🎨 MediaCriteria - ${property}: ${JSON.stringify(mediaSelectionCriteria[property])}`);
+      // Logging removed for 2MJ posts
+      if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+        console.log(`🎨 MediaCriteria - ${property}: ${JSON.stringify(mediaSelectionCriteria[property])}`);
+      }
 
       if (!mediaSelectionCriteria[property]) {
         console.log(`🎨 ⚠️ Skipping ${property} - value is falsy`);
@@ -6544,18 +6527,24 @@ var getMediaFromSet = async function (req, callback) {
 // Duplicate function removed
 
 var getMediaFromSet2 = async function (req, callback) {
-  console.log("\n🎨 ========================================");
-  console.log("🎨 === IMAGE 2 FILTERING START ===");
-  console.log("🎨 ========================================");
-
   req.session = req.session ? req.session : {};
   req.session.user = req.session.user ? req.session.user : {};
   var reqObj = req.body ? req.body : {};
+  var PostStreamType = req.body.PostStreamType || "";
+  // Logging removed for 2MJ posts
+  if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+    console.log("\n🎨 ========================================");
+    console.log("🎨 === IMAGE 2 FILTERING START ===");
+    console.log("🎨 ========================================");
+  }
   var sec = 0;
 
   var timer = setInterval(function () {
     sec++;
-    console.log("getMediaFromSet2 execution time = ", sec + " seconds.");
+    // Logging removed for 2MJ posts
+    if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+      console.log("getMediaFromSet2 execution time = ", sec + " seconds.");
+    }
     
     // No timeout - let it run as long as needed
   }, 1000);
@@ -6578,13 +6567,22 @@ var getMediaFromSet2 = async function (req, callback) {
   if (SecondaryKeywords.length === 0 && s2Arr.length > 0) {
     // Convert text keywords to GroupTagIDs using static file
     SecondaryKeywords = await getGroupTagIdsPrioritized(s2Arr, 500);
-    console.log("🔍 IMAGE 2: Converted s2Arr to GroupTagIDs:", s2Arr.length, "words →", SecondaryKeywords.length, "IDs");
+    // Logging removed for 2MJ posts
+    if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+      console.log("🔍 IMAGE 2: Converted s2Arr to GroupTagIDs:", s2Arr.length, "words →", SecondaryKeywords.length, "IDs");
+    }
   } else if (SecondaryKeywords.length > 0) {
-    console.log("🔍 IMAGE 2: Using pre-computed SecondaryKeywords2:", SecondaryKeywords.length, "IDs");
+    // Logging removed for 2MJ posts
+    if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+      console.log("🔍 IMAGE 2: Using pre-computed SecondaryKeywords2:", SecondaryKeywords.length, "IDs");
+    }
   }
   
-  console.log("✅ IMAGE 2: Using PRIMARY keyword filter ONLY:", selectedKeywords.length, "IDs");
-  console.log("✅ IMAGE 2: Secondary keywords will be used for SCORING:", SecondaryKeywords.length, "IDs");
+  // Logging removed for 2MJ posts
+  if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+    console.log("✅ IMAGE 2: Using PRIMARY keyword filter ONLY:", selectedKeywords.length, "IDs");
+    console.log("✅ IMAGE 2: Secondary keywords will be used for SCORING:", SecondaryKeywords.length, "IDs");
+  }
   
   // CRITICAL FIX: Check if subsetByRank is empty or not an array
   if (!subsetByRank || !Array.isArray(subsetByRank) || subsetByRank.length === 0) {
@@ -6662,7 +6660,10 @@ var getMediaFromSet2 = async function (req, callback) {
         
         if (excludedObjectIds.length > 0) {
           conditions["_id"] = { $nin: excludedObjectIds };
-          console.log(`🚫 IMAGE 2: Excluding ${excludedObjectIds.length} already-used images from page ${pageId}`);
+          // Logging removed for 2MJ posts
+          if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+            console.log(`🚫 IMAGE 2: Excluding ${excludedObjectIds.length} already-used images from page ${pageId}`);
+          }
         }
       }
     } catch (error) {
@@ -6772,10 +6773,16 @@ var getMediaFromSet2 = async function (req, callback) {
     // We should ONLY filter by the second primary keyword, not others!
     if (selectedKeywords.length > 0) {
       conditions["GroupTags.GroupTagID"] = { $in: selectedKeywords };
-      console.log("✅ IMAGE 2: Using PRIMARY keyword filter ONLY:", selectedKeywords);
-      console.log("✅ IMAGE 2: Secondary keywords will be used for SCORING, not filtering");
+      // Logging removed for 2MJ posts
+      if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+        console.log("✅ IMAGE 2: Using PRIMARY keyword filter ONLY:", selectedKeywords);
+        console.log("✅ IMAGE 2: Secondary keywords will be used for SCORING, not filtering");
+      }
     } else {
-      console.log("⚠️ No primary keyword IDs - using ONLY Media Selection Criteria");
+      // Logging removed for 2MJ posts
+      if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+        console.log("⚠️ No primary keyword IDs - using ONLY Media Selection Criteria");
+      }
     }
 
     var maxRank = totalSets.length;
@@ -6926,7 +6933,10 @@ var getMediaFromSet2 = async function (req, callback) {
   // SecondaryKeywords matching is done in $group stage via GroupTags.GroupTagID
   // The SecondaryKeywords array (which now contains IDs) is matched against Media.GroupTags
   // This is the same approach as Old Scrpt - matching IDs against GroupTags.GroupTagID
-  console.log("🔍 IMAGE 2: Using GroupTagID matching for secondary keywords:", SecondaryKeywords.length, "IDs");
+  // Logging removed for 2MJ posts
+  if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+    console.log("🔍 IMAGE 2: Using GroupTagID matching for secondary keywords:", SecondaryKeywords.length, "IDs");
+  }
 
   let projectPipeline_1 = {
     _id: "$_id",
@@ -6982,10 +6992,13 @@ var getMediaFromSet2 = async function (req, callback) {
         typeof mediaSelectionCriteria[property] === "boolean"
           ? [mediaSelectionCriteria[property]]
           : mediaSelectionCriteria[property];
-      console.log(`🎨 MediaCriteria - ${property}: ${JSON.stringify(mediaSelectionCriteria[property])}`);
-      console.log(
-        `type of ${property}: typeof ${mediaSelectionCriteria[property]}`
-      );
+      // Logging removed for 2MJ posts
+      if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+        console.log(`🎨 MediaCriteria - ${property}: ${JSON.stringify(mediaSelectionCriteria[property])}`);
+        console.log(
+          `type of ${property}: typeof ${mediaSelectionCriteria[property]}`
+        );
+      }
 
       if (!mediaSelectionCriteria[property]) {
         continue;
@@ -7110,7 +7123,10 @@ var getMediaFromSet2 = async function (req, callback) {
 
   // Use dynamic sorting from database (like old code)
   sortObj = await getStreamMediaFilterSortingOrder();
-  console.log("🔄 Sorting order being used:", JSON.stringify(sortObj, null, 2));
+  // Logging removed for 2MJ posts
+  if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+    console.log("🔄 Sorting order being used:", JSON.stringify(sortObj, null, 2));
+  }
 
   //aggregateStages.push ({ $match : {"value.Ranks" : {$ne : 0}} });
   aggregateStages.push({ $sort: sortObj });
@@ -7125,8 +7141,11 @@ var getMediaFromSet2 = async function (req, callback) {
 
   var returnObj = {};
   // console.log("aggregateStages - ", JSON.stringify(aggregateStages, null, 5));
-  console.log("\n🎯 ========== MONGODB AGGREGATION START ==========");
-  console.log("🎯 Selected keywords:", selectedKeywords);
+  // Logging removed for 2MJ posts
+  if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+    console.log("\n🎯 ========== MONGODB AGGREGATION START ==========");
+    console.log("🎯 Selected keywords:", selectedKeywords);
+  }
   // Log removed
   // Log removed
   // Log removed
@@ -7135,15 +7154,21 @@ var getMediaFromSet2 = async function (req, callback) {
     const aggregationStartTime = Date.now();
     const results = await Media.aggregate(aggregateStages).allowDiskUse(true);
     const aggregationEndTime = Date.now();
-    console.log("✅ MongoDB aggregation completed in", (aggregationEndTime - aggregationStartTime) / 1000, "seconds");
-    console.log("✅ Results count:", results ? results.length : 0);
+    // Logging removed for 2MJ posts
+    if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+      console.log("✅ MongoDB aggregation completed in", (aggregationEndTime - aggregationStartTime) / 1000, "seconds");
+      console.log("✅ Results count:", results ? results.length : 0);
+    }
     
     // Log detailed results with ranks and filters (only for dual image posts)
     // Skip logging for 1UnsplashPost to reduce noise
     
     // CRITICAL FIX: Exit if no results found to prevent infinite loop
     if (!results || results.length === 0) {
-      console.log("❌ No results found - stopping to prevent infinite loop");
+      // Logging removed for 2MJ posts
+      if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+        console.log("❌ No results found - stopping to prevent infinite loop");
+      }
       clearInterval(timer);
       return callback(null, {
         status: "success",
@@ -10306,8 +10331,9 @@ var generatePostBlendImages = async function (req, res) {
         }
 
         if (blendImage1 && blendImage2 && blendOption) {
-          var data = blendImage1 + blendImage2 + blendOption;
-          var hexcode = crypto.createHash("md5").update(data).digest("hex");
+          // ✅ FIX: Use getHexcodeForBlendPair for consistent hexcode calculation
+          const hexMeta = getHexcodeForBlendPair(blendImage1, blendImage2, blendOption);
+          const hexcode = hexMeta.hexcode;
           if (hexcode) {
             var file_name = hexcode + ".png";
             var uploadDir = __dirname + "/../../media-assets/streamposts";
@@ -10362,8 +10388,9 @@ var generatePostBlendImage = async function (req, res) {
     var blendOption = obj.blendMode ? obj.blendMode : "hard-light";
 
     if (blendImage1 && blendImage2 && blendOption) {
-      var data = blendImage1 + blendImage2 + blendOption;
-      var hexcode = crypto.createHash("md5").update(data).digest("hex");
+      // ✅ FIX: Use getHexcodeForBlendPair for consistent hexcode calculation
+      const hexMeta = getHexcodeForBlendPair(blendImage1, blendImage2, blendOption);
+      const hexcode = hexMeta.hexcode;
       if (hexcode) {
         var file_name = hexcode + ".png";
         var uploadDir = __dirname + "/../../media-assets/streamposts";
@@ -10412,8 +10439,9 @@ var generatePostBlendImage_INTERNAL_API = async function (req, res) {
     var mediaId = obj.mediaId ? obj.mediaId : null;
 
     if (blendImage1 && blendImage2 && blendOption) {
-      var data = blendImage1 + blendImage2 + blendOption;
-      var hexcode = crypto.createHash("md5").update(data).digest("hex");
+      // ✅ FIX: Use getHexcodeForBlendPair for consistent hexcode calculation
+      const hexMeta = getHexcodeForBlendPair(blendImage1, blendImage2, blendOption);
+      const hexcode = hexMeta.hexcode;
       if (hexcode) {
         var file_name = hexcode + ".png";
         var uploadDir = __dirname + "/../../media-assets/streamposts";
@@ -21884,18 +21912,21 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       // Image 2: Use SECOND primary keyword only
       req.body.generatedKeywords2 = keyword2Id ? [keyword2Id] : [];
       
-      console.log("✅ SPLIT KEYWORDS for image matching:");
-      console.log(`   📸 Image 1: Primary = "${keywords[0]}" (ID: ${keyword1Id})`);
-      console.log(`   📸 Image 2: Primary = "${keywords[1]}" (ID: ${keyword2Id})`);
-      
-      // Secondary keywords for ranking (from req.body parsed earlier)
-      // sArr = Secondary1 (for Image 1 ranking)
-      // s2Arr = Secondary2 (for Image 2 ranking)
-      if (req.body.sArr && req.body.sArr.length > 0) {
-        console.log(`   🔑 Image 1 Secondary: ${req.body.sArr.length} keywords for ranking`);
-      }
-      if (req.body.s2Arr && req.body.s2Arr.length > 0) {
-        console.log(`   🔑 Image 2 Secondary: ${req.body.s2Arr.length} keywords for ranking`);
+      // Logging removed for 2MJ posts
+      if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+        console.log("✅ SPLIT KEYWORDS for image matching:");
+        console.log(`   📸 Image 1: Primary = "${keywords[0]}" (ID: ${keyword1Id})`);
+        console.log(`   📸 Image 2: Primary = "${keywords[1]}" (ID: ${keyword2Id})`);
+        
+        // Secondary keywords for ranking (from req.body parsed earlier)
+        // sArr = Secondary1 (for Image 1 ranking)
+        // s2Arr = Secondary2 (for Image 2 ranking)
+        if (req.body.sArr && req.body.sArr.length > 0) {
+          console.log(`   🔑 Image 1 Secondary: ${req.body.sArr.length} keywords for ranking`);
+        }
+        if (req.body.s2Arr && req.body.s2Arr.length > 0) {
+          console.log(`   🔑 Image 2 Secondary: ${req.body.s2Arr.length} keywords for ranking`);
+        }
       }
     } else if (keywords && keywords.length === 1) {
       // Only one primary keyword - use for both images
@@ -21925,9 +21956,12 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
   const secondaryIds1 = req.body.SecondaryKeywords || [];
   const secondaryIds2 = req.body.SecondaryKeywords2 || [];
   
-  console.log(`🔄 FALLBACK CONFIG: MIN_IMAGES_REQUIRED = ${MIN_IMAGES_REQUIRED}`);
-  console.log(`🔄 FALLBACK: Secondary IDs ready for Image 1: ${secondaryIds1.length}`);
-  console.log(`🔄 FALLBACK: Secondary IDs ready for Image 2: ${secondaryIds2.length}`);
+  // Logging removed for 2MJ posts
+  if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+    console.log(`🔄 FALLBACK CONFIG: MIN_IMAGES_REQUIRED = ${MIN_IMAGES_REQUIRED}`);
+    console.log(`🔄 FALLBACK: Secondary IDs ready for Image 1: ${secondaryIds1.length}`);
+    console.log(`🔄 FALLBACK: Secondary IDs ready for Image 2: ${secondaryIds2.length}`);
+  }
 
   async_lib.parallel(
     {
@@ -21956,8 +21990,11 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
     },
     async function (err, results) {
       // results now equals to: results.mediaFromFirstSet: 'abc\n', results.mediaFromSecondSet: 'xyz\n'
-      console.log("🔍 DEBUG: mediaFromFirstSet:", results.mediaFromFirstSet ? "Found" : "Empty");
-      console.log("🔍 DEBUG: mediaFromSecondSet:", results.mediaFromSecondSet ? "Found" : "Empty");
+      // Logging removed for 2MJ posts
+      if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+        console.log("🔍 DEBUG: mediaFromFirstSet:", results.mediaFromFirstSet ? "Found" : "Empty");
+        console.log("🔍 DEBUG: mediaFromSecondSet:", results.mediaFromSecondSet ? "Found" : "Empty");
+      }
       
       var MediaSet1 = results.mediaFromFirstSet && results.mediaFromFirstSet.results
         ? results.mediaFromFirstSet.results
@@ -21978,9 +22015,12 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       
       // Fallback for Image 1
       if (MediaSet1.length < MIN_IMAGES_REQUIRED && secondaryIds1.length > 0) {
-        console.log(`\n🔄 ===== FALLBACK TRIGGERED FOR IMAGE 1 =====`);
-        console.log(`   📊 PRIMARY matches: ${MediaSet1.length} (need ${MIN_IMAGES_REQUIRED})`);
-        console.log(`   🔍 Searching for SECONDARY-only matches...`);
+        // Logging removed for 2MJ posts
+        if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+          console.log(`\n🔄 ===== FALLBACK TRIGGERED FOR IMAGE 1 =====`);
+          console.log(`   📊 PRIMARY matches: ${MediaSet1.length} (need ${MIN_IMAGES_REQUIRED})`);
+          console.log(`   🔍 Searching for SECONDARY-only matches...`);
+        }
         
         const needed = MIN_IMAGES_REQUIRED - MediaSet1.length;
         
@@ -21997,7 +22037,10 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
             m => !existingIds1.has(String(m._id))
           );
           
-          console.log(`   📊 SECONDARY-only matches found: ${secondaryOnlyImages.length}`);
+          // Logging removed for 2MJ posts
+          if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+            console.log(`   📊 SECONDARY-only matches found: ${secondaryOnlyImages.length}`);
+          }
           
           // Take only what we need to reach MIN_IMAGES_REQUIRED
           const imagesToAdd = secondaryOnlyImages.slice(0, needed);
@@ -22005,8 +22048,11 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
           // APPEND secondary-only images (primary matches stay at top)
           MediaSet1 = [...MediaSet1, ...imagesToAdd];
           
-          console.log(`   ✅ APPENDED ${imagesToAdd.length} secondary-only images`);
-          console.log(`   📊 TOTAL Image 1: ${MediaSet1.length} images`);
+          // Logging removed for 2MJ posts
+          if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+            console.log(`   ✅ APPENDED ${imagesToAdd.length} secondary-only images`);
+            console.log(`   📊 TOTAL Image 1: ${MediaSet1.length} images`);
+          }
         }
         
         // Restore original keywords for consistency
@@ -22015,9 +22061,12 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       
       // Fallback for Image 2
       if (MediaSet2.length < MIN_IMAGES_REQUIRED && secondaryIds2.length > 0 && PostStreamType !== "1UnsplashPost") {
-        console.log(`\n🔄 ===== FALLBACK TRIGGERED FOR IMAGE 2 =====`);
-        console.log(`   📊 PRIMARY matches: ${MediaSet2.length} (need ${MIN_IMAGES_REQUIRED})`);
-        console.log(`   🔍 Searching for SECONDARY-only matches...`);
+        // Logging removed for 2MJ posts
+        if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+          console.log(`\n🔄 ===== FALLBACK TRIGGERED FOR IMAGE 2 =====`);
+          console.log(`   📊 PRIMARY matches: ${MediaSet2.length} (need ${MIN_IMAGES_REQUIRED})`);
+          console.log(`   🔍 Searching for SECONDARY-only matches...`);
+        }
         
         const needed = MIN_IMAGES_REQUIRED - MediaSet2.length;
         
@@ -22034,7 +22083,10 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
             m => !existingIds2.has(String(m._id))
           );
           
-          console.log(`   📊 SECONDARY-only matches found: ${secondaryOnlyImages.length}`);
+          // Logging removed for 2MJ posts
+          if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+            console.log(`   📊 SECONDARY-only matches found: ${secondaryOnlyImages.length}`);
+          }
           
           // Take only what we need to reach MIN_IMAGES_REQUIRED
           const imagesToAdd = secondaryOnlyImages.slice(0, needed);
@@ -22042,20 +22094,26 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
           // APPEND secondary-only images (primary matches stay at top)
           MediaSet2 = [...MediaSet2, ...imagesToAdd];
           
-          console.log(`   ✅ APPENDED ${imagesToAdd.length} secondary-only images`);
-          console.log(`   📊 TOTAL Image 2: ${MediaSet2.length} images`);
+          // Logging removed for 2MJ posts
+          if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+            console.log(`   ✅ APPENDED ${imagesToAdd.length} secondary-only images`);
+            console.log(`   📊 TOTAL Image 2: ${MediaSet2.length} images`);
+          }
         }
         
         // Restore original keywords for consistency
         req.body.generatedKeywords2 = originalKeywords2;
       }
       
-      console.log(`\n📊 ===== FINAL RESULTS =====`);
-      console.log(`   📸 Image 1: ${MediaSet1.length} images (Primary at top, Secondary-only appended)`);
-      console.log(`   📸 Image 2: ${MediaSet2.length} images (Primary at top, Secondary-only appended)`);
+      // Logging removed for 2MJ posts
+      if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+        console.log(`\n📊 ===== FINAL RESULTS =====`);
+        console.log(`   📸 Image 1: ${MediaSet1.length} images (Primary at top, Secondary-only appended)`);
+        console.log(`   📸 Image 2: ${MediaSet2.length} images (Primary at top, Secondary-only appended)`);
 
-      console.log("🔍 DEBUG: MediaSet1 length:", MediaSet1.length);
-      console.log("🔍 DEBUG: MediaSet2 length:", MediaSet2.length);
+        console.log("🔍 DEBUG: MediaSet1 length:", MediaSet1.length);
+        console.log("🔍 DEBUG: MediaSet2 length:", MediaSet2.length);
+      }
       
       // ✅ FIX: For 1MJ/1Unsplash posts, fetch source image (single image, no blending)
       var sourceImageUrl = null;
@@ -22104,8 +22162,8 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       //   });
       // }
       
-      // Log top 5 from each set for dual image posts
-      if (MediaSet1.length > 0 && MediaSet2.length > 0) {
+      // Log top 5 from each set for dual image posts - removed for 2MJ posts
+      if (MediaSet1.length > 0 && MediaSet2.length > 0 && PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
         console.log("\n📊 ========== IMAGE 1: TOP 5 SELECTED IMAGES ==========");
         const top5Set1 = MediaSet1.slice(0, 5);
         top5Set1.forEach((media, index) => {
@@ -22135,7 +22193,85 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
       }
 
       // CRITICAL FIX: Exit if no results found to prevent infinite loop
+      // EXCEPTION: For 2MJ/2Unsplash posts, if sets are empty, use original images from payload to create versions
       if (MediaSet1.length === 0 && MediaSet2.length === 0) {
+        // For 2MJ/2Unsplash posts, create versions using original images from BlendSettings
+        if (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") {
+          try {
+            const originalMedia = await Media.findById(req.body.PostId).lean();
+            if (originalMedia && originalMedia.BlendSettings) {
+              const blendSettings = originalMedia.BlendSettings;
+              
+              // Check if we have valid images from BlendSettings
+              if (blendSettings.image1Url && blendSettings.image2Url) {
+                console.log("⚠️ No database results for 2MJ/2Unsplash - creating 30 versions using original images from payload");
+                
+                // Create 30 versions using the same images
+                var selectedArr = [];
+                for (var loop = 0; loop < 30; loop++) {
+                  const version = {
+                    blendImage1: blendSettings.image1Url,
+                    blendImage2: blendSettings.image2Url,
+                    isSelected: loop === 0, // First version is selected
+                    blendMode: blendSettings.blendMode || "overlay",
+                    Keywords: blendSettings.keywords || [],
+                    SelectedKeywords: blendSettings.selectedKeywords || [],
+                    postTags: blendSettings.postTags || req.body.postTags || null,
+                    SecondaryKeywordsCount_1: 0,
+                    SecondaryKeywordsMap_1: [],
+                    MediaSelectionCriteriaCount_1: 0,
+                    MediaSelectionCriteriaArr_1: [],
+                    MetaData_1: {},
+                    SecondaryKeywordsCount_2: 0,
+                    SecondaryKeywordsMap_2: [],
+                    MediaSelectionCriteriaCount_2: 0,
+                    MediaSelectionCriteriaArr_2: [],
+                    MetaData_2: {},
+                    hexcode_blendedImage: blendSettings.hexcode_blendedImage || null,
+                    hexcode: blendSettings.hexcode || null,
+                    lightness1: blendSettings.lightness1 || 0.8,
+                    lightness2: blendSettings.lightness2 || 0.8,
+                  };
+                  
+                  // Calculate hexcode if not present
+                  if (!version.hexcode_blendedImage && version.blendImage1 && version.blendImage2 && version.blendMode) {
+                    const hexMeta = getHexcodeForBlendPair(version.blendImage1, version.blendImage2, version.blendMode);
+                    version.hexcode_blendedImage = hexMeta.hexcodePath;
+                    version.hexcode = hexMeta.hexcode;
+                  }
+                  
+                  selectedArr.push(version);
+                }
+                
+                // Save SelectedBlendImages to PageStream
+                var PageId = req.body.PageId ? req.body.PageId : null;
+                var PostId = req.body.PostId ? req.body.PostId : null;
+                
+                if (PageId && PostId) {
+                  var DateToSave = {
+                    PageId: PageId,
+                    PostId: PostId,
+                    PostStatement: PostStatement,
+                    SelectedBlendImages: selectedArr,
+                    postTags: req.body.postTags || null,
+                  };
+                  await PageStream(DateToSave).save();
+                  
+                  console.log(`✅ Created 30 versions for ${PostStreamType} using original images from payload`);
+                  return res.json({
+                    code: "200",
+                    message: "Versions created using original images",
+                    results: selectedArr.length
+                  });
+                }
+              }
+            }
+          } catch (error) {
+            console.log(`⚠️ Error creating versions from original images:`, error.message);
+          }
+        }
+        
+        // For other post types or if 2MJ/2Unsplash fallback failed, exit
         console.log("❌ No media results found in both sets - stopping to prevent infinite loop");
         return res.json({
           code: "204",
@@ -22320,22 +22456,126 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
         // For single image posts, create versions using only source image
         selectedLengthForLoop = set1.length > 30 ? 30 : set1.length;
       } else {
-        // For dual image posts, use minimum of set1 and set2
+        // For dual image posts (2MJ/2Unsplash), use minimum of set1 and set2
         selectedLengthForLoop = set1.length > set2.length ? set2.length : set1.length;
+        
+        // ✅ FIX: Log for 2MJ posts to debug version creation
+        if (PostStreamType === "2MJPost") {
+          console.log(`🔍 2MJ Post - MediaSet1 length: ${set1.length}, MediaSet2 length: ${set2.length}`);
+          console.log(`🔍 2MJ Post - selectedLengthForLoop before cap: ${selectedLengthForLoop}`);
+        }
       }
 
       //save maximum of 30 selection if suggested blend images are more than 30
       selectedLengthForLoop =
         selectedLengthForLoop <= 30 ? selectedLengthForLoop : 30;
+      
+      // ✅ FIX: Log for 2MJ posts
+      if (PostStreamType === "2MJPost") {
+        console.log(`🔍 2MJ Post - selectedLengthForLoop after cap: ${selectedLengthForLoop}`);
+      }
 
       var selectedArr = [];
+      
+      // ✅ FIX: For 2MJ, 1MJ, 2Unsplash, and 1Unsplash posts, add the original post as the first version
+      // NOTE: For Unsplash posts, skip this check if images come from database filter (not from payload)
+      if ((PostStreamType === "2MJPost" || PostStreamType === "1MJPost" || PostStreamType === "2UnsplashPost" || PostStreamType === "1UnsplashPost") && req.body.PostId) {
+        try {
+          const originalMedia = await Media.findById(req.body.PostId).lean();
+          if (originalMedia && originalMedia.BlendSettings) {
+            const blendSettings = originalMedia.BlendSettings;
+            
+            // For 2MJ/2Unsplash posts: need both image1Url and image2Url
+            // For 1MJ/1Unsplash posts: only need image1Url (image2Url is null)
+            const isDualImage = PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost";
+            const hasValidImages = isDualImage 
+              ? (blendSettings.image1Url && blendSettings.image2Url)
+              : (blendSettings.image1Url);
+            
+            // ✅ FIX: For Unsplash posts, only use original version if images are valid (from payload)
+            // If images are empty, skip and use images from database filter instead
+            const isUnsplashPost = PostStreamType === "1UnsplashPost" || PostStreamType === "2UnsplashPost";
+            const shouldSkipUnsplash = isUnsplashPost && (!blendSettings.image1Url || (isDualImage && !blendSettings.image2Url));
+            
+            if (hasValidImages && !shouldSkipUnsplash) {
+              // Create the original post version
+              const originalVersion = {
+                blendImage1: blendSettings.image1Url,
+                blendImage2: isDualImage ? blendSettings.image2Url : null,
+                isSelected: true,
+                blendMode: blendSettings.blendMode || (isDualImage ? "overlay" : "overlay"),
+                Keywords: blendSettings.keywords || [],
+                SelectedKeywords: blendSettings.selectedKeywords || [],
+                postTags: blendSettings.postTags || req.body.postTags || null,
+                SecondaryKeywordsCount_1: 0,
+                SecondaryKeywordsMap_1: [],
+                MediaSelectionCriteriaCount_1: 0,
+                MediaSelectionCriteriaArr_1: [],
+                MetaData_1: {},
+                SecondaryKeywordsCount_2: 0,
+                SecondaryKeywordsMap_2: [],
+                MediaSelectionCriteriaCount_2: 0,
+                MediaSelectionCriteriaArr_2: [],
+                MetaData_2: {},
+                hexcode_blendedImage: blendSettings.hexcode_blendedImage || null,
+                hexcode: blendSettings.hexcode || null,
+                lightness1: blendSettings.lightness1 || 0.8,
+                lightness2: isDualImage ? (blendSettings.lightness2 || 0.8) : null,
+              };
+              
+              // Calculate hexcode if not present
+              // For 1MJ/1Unsplash: use same image for both (blendImage1 == blendImage2)
+              if (!originalVersion.hexcode_blendedImage && originalVersion.blendImage1) {
+                const image1 = originalVersion.blendImage1;
+                const image2 = isDualImage ? originalVersion.blendImage2 : originalVersion.blendImage1;
+                if (image1 && image2 && originalVersion.blendMode) {
+                  const hexMeta = getHexcodeForBlendPair(image1, image2, originalVersion.blendMode);
+                  originalVersion.hexcode_blendedImage = hexMeta.hexcodePath;
+                  originalVersion.hexcode = hexMeta.hexcode;
+                }
+              }
+              
+              selectedArr.push(originalVersion);
+              console.log(`✅ Added original ${PostStreamType} post as first version`);
+              
+              // Reduce loop count by 1 since we already added the original post
+              selectedLengthForLoop = selectedLengthForLoop > 29 ? 29 : selectedLengthForLoop;
+            }
+          }
+        } catch (error) {
+          console.log(`⚠️ Error fetching original ${PostStreamType} post:`, error.message);
+        }
+      }
+      
       for (var loop = 0; loop < selectedLengthForLoop; loop++) {
         var blendImage1, blendImage2;
         
-        // ✅ FIX: For 1MJ/1Unsplash, use source image only (no blending)
+        // ✅ FIX: For 1MJ/1Unsplash, use images from MediaSet1 (found from database filter)
         if (PostStreamType === "1MJPost" || PostStreamType === "1UnsplashPost") {
-          // Use source image for both (single image post)
-          blendImage1 = sourceImageUrl || "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
+          // For 1UnsplashPost: Use image from set1 (found from database filter)
+          // For 1MJPost: Use sourceImageUrl if available (from payload), otherwise use set1
+          if (PostStreamType === "1UnsplashPost" && set1[loop]) {
+            // Use image from database filter results
+            var mediaUrl2_1 = set1[loop].MediaURL2 && set1[loop].MediaURL2[0] && set1[loop].MediaURL2[0].URL
+              ? set1[loop].MediaURL2[0].URL
+              : "";
+            blendImage1 = set1[loop].MediaURL
+              ? set1[loop].MediaURL
+              : (mediaUrl2_1.startsWith("http://") || mediaUrl2_1.startsWith("https://"))
+                ? mediaUrl2_1
+                : mediaUrl2_1
+                  ? "https://www.scrpt.com/assets/Media/img/300/" + mediaUrl2_1
+                  : "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
+          } else {
+            // For 1MJPost: Use sourceImageUrl from payload if available, otherwise use set1
+            if (sourceImageUrl) {
+              blendImage1 = sourceImageUrl;
+            } else if (set1[loop] && set1[loop].MediaURL) {
+              blendImage1 = set1[loop].MediaURL;
+            } else {
+              blendImage1 = "https://www.scrpt.com/assets/Media/img/300/placeholder.png";
+            }
+          }
           blendImage2 = null; // No second image for single image posts
         } else {
           // Dual image posts - use images from both sets
@@ -22503,8 +22743,11 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
             }
           }
 
-          // Save blend settings to Media collection for 2MJ posts and Unsplash posts
-          if ((PostStreamType === "2MJPost" || PostStreamType === "1UnsplashPost" || PostStreamType === "2UnsplashPost") && SelectedBlendImages.length > 0) {
+          // Save blend settings to Media collection for Unsplash posts only
+          // ✅ FIX: For 2MJ posts, DO NOT update Media (Location or BlendSettings) here
+          // Location and BlendSettings for 2MJ posts are set correctly from payload in addNewPost_INTERNAL_API
+          // Only update for Unsplash posts where Location and BlendSettings come from search results
+          if ((PostStreamType === "1UnsplashPost" || PostStreamType === "2UnsplashPost") && SelectedBlendImages.length > 0) {
             try {
               // Extract blend settings from first selected blend image
               const firstBlend = SelectedBlendImages[0];
@@ -22512,20 +22755,20 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
               // Only store MAIN blend settings in Media (first version only)
               // All 30 versions are stored in PageStream collection
               const blendSettings = {
-                blendMode: (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") 
+                blendMode: (PostStreamType === "2UnsplashPost") 
                   ? (firstBlend.blendMode || "overlay") 
                   : null,
                 image1Url: firstBlend.blendImage1 || null,
-                image2Url: (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") 
+                image2Url: (PostStreamType === "2UnsplashPost") 
                   ? (firstBlend.blendImage2 || null) 
                   : null,
                 lightness1: firstBlend.lightness1 || firstBlend.Lightness1 || 0.8,
-                lightness2: (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") 
+                lightness2: (PostStreamType === "2UnsplashPost") 
                   ? (firstBlend.lightness2 || firstBlend.Lightness2 || 0.8) 
                   : null,
                 keywords: firstBlend.Keywords || [],
                 selectedKeywords: firstBlend.SelectedKeywords || [],
-                postTags: req.body.postTags || null, // ✅ Added: Include postTags in BlendSettings
+                postTags: req.body.postTags || null,
                 PostStatement: PostStatement,
                 PostStreamType: PostStreamType,
                 UpdatedOn: Date.now(),
@@ -22535,7 +22778,7 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
               };
 
               // Create Location array (one or two images based on post type)
-              const locationArray = (PostStreamType === "2MJPost" || PostStreamType === "2UnsplashPost") 
+              const locationArray = (PostStreamType === "2UnsplashPost") 
                 ? [
                     { Size: "", URL: firstBlend.blendImage1 || "" },
                     { Size: "", URL: firstBlend.blendImage2 || "" }
@@ -22554,10 +22797,13 @@ var addBlendImages_INTERNAL_API = async function (req, res) {
                   },
                 }
               );
-              console.log(`✅ Blend settings saved for ${PostStreamType} with PostId: ${PostId}`);
-              console.log(`📋 Blend Mode: ${blendSettings.blendMode}`);
-              console.log(`🖼️ Image 1: ${blendSettings.image1Url}`);
-              console.log(`🖼️ Image 2: ${blendSettings.image2Url}`);
+              // Logging removed for 2MJ posts
+              if (PostStreamType !== "2MJPost" && PostStreamType !== "2UnsplashPost") {
+                console.log(`✅ Blend settings saved for ${PostStreamType} with PostId: ${PostId}`);
+                console.log(`📋 Blend Mode: ${blendSettings.blendMode}`);
+                console.log(`🖼️ Image 1: ${blendSettings.image1Url}`);
+                console.log(`🖼️ Image 2: ${blendSettings.image2Url}`);
+              }
             } catch (error) {
               console.log(`❌ Error saving blend settings for ${PostStreamType}:`, error.message);
               // Error updating Media collection - continue without failing
@@ -24219,19 +24465,6 @@ async function __getPostHexCodeOfFirstBlendedImageSet(pageId, postId) {
   return hexcode_blendedImage;
 }
 
-function __getPostHexCodeOfGivenBlendedImageSet(
-  blendImage1,
-  blendImage2,
-  blendMode
-) {
-  const hexMeta = getHexcodeForBlendPair(
-    blendImage1 || null,
-    blendImage2 || null,
-    blendMode
-  );
-  return hexMeta.hexcodePath;
-}
-
 async function __getUserIdByEmail(email) {
   var userData = await User.findOne(
     { Email: { $regex: new RegExp(email, "i") }, IsDeleted: false },
@@ -24239,6 +24472,117 @@ async function __getUserIdByEmail(email) {
   );
   userData = userData === null ? {} : userData;
   return userData._id || null;
+}
+
+/**
+ * Get or create a user by email
+ * If user doesn't exist, creates a new user with default values
+ * Handles duplicate checks and race conditions
+ * @param {string} email - User email address
+ * @returns {string|null} - UserId or null if creation fails
+ */
+async function __getOrCreateUserIdByEmail(email) {
+  if (!email || typeof email !== 'string') {
+    console.log("⚠️ Invalid email provided to __getOrCreateUserIdByEmail:", email);
+    return null;
+  }
+
+  // Normalize email: trim and lowercase for consistent comparison
+  const normalizedEmail = email.trim().toLowerCase();
+
+  // First, try to find existing user (case-insensitive search)
+  // Using regex for case-insensitive match since Email field may have different cases
+  var userData = await User.findOne(
+    { Email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") }, IsDeleted: false },
+    { _id: 1, Email: 1 }
+  );
+
+  if (userData && userData._id) {
+    console.log(`✅ Found existing user for email: ${normalizedEmail} (ID: ${userData._id})`);
+    return userData._id;
+  }
+
+  // User doesn't exist - create a new one
+  try {
+    console.log(`📝 Creating new user for email: ${normalizedEmail}`);
+    
+    // Double-check for duplicates right before creation (handles race conditions)
+    var duplicateCheck = await User.findOne(
+      { Email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") }, IsDeleted: false },
+      { _id: 1 }
+    );
+    
+    if (duplicateCheck && duplicateCheck._id) {
+      console.log(`🔄 User was created by another process - returning existing ID: ${duplicateCheck._id}`);
+      return duplicateCheck._id;
+    }
+    
+    // Extract name from email (part before @) or use default
+    const emailParts = normalizedEmail.split('@');
+    const nameFromEmail = emailParts[0] || 'User';
+    const displayName = nameFromEmail.charAt(0).toUpperCase() + nameFromEmail.slice(1);
+
+    // Generate a unique UserName (required field with unique constraint)
+    // Pattern: emailPrefix_timestamp_random to ensure uniqueness
+    const timestamp = Date.now();
+    const randomSuffix = Math.floor(Math.random() * 10000);
+    let uniqueUsername = `${nameFromEmail}_${timestamp}_${randomSuffix}`;
+    
+    // Check if username already exists and generate a new one if needed
+    let usernameExists = await User.findOne({ UserName: uniqueUsername, IsDeleted: false }, { _id: 1 });
+    let attempts = 0;
+    while (usernameExists && attempts < 5) {
+      uniqueUsername = `${nameFromEmail}_${timestamp}_${randomSuffix}_${attempts}`;
+      usernameExists = await User.findOne({ UserName: uniqueUsername, IsDeleted: false }, { _id: 1 });
+      attempts++;
+    }
+
+    // Generate a random password (users will need to reset it if they want to login)
+    const randomPassword = crypto.randomBytes(16).toString('hex');
+    
+    var newUser = new User();
+    newUser.Email = normalizedEmail; // Use normalized email
+    newUser.Password = newUser.generateHash(randomPassword);
+    newUser.Name = displayName;
+    newUser.NickName = displayName;
+    newUser.UserName = uniqueUsername; // Set unique username to avoid duplicate key error
+    newUser.EmailConfirmationStatus = true; // Auto-confirm since created programmatically
+    newUser.Gender = "other"; // Default gender
+    newUser.Status = true;
+    newUser.IsDeleted = false;
+
+    const savedUser = await newUser.save();
+    
+    if (savedUser && savedUser._id) {
+      console.log(`✅ Successfully created user: ${normalizedEmail} with ID: ${savedUser._id}`);
+      return savedUser._id;
+    } else {
+      console.log(`❌ Failed to create user: ${normalizedEmail} - save returned no _id`);
+      return null;
+    }
+  } catch (error) {
+    console.error(`❌ Error creating user for email ${normalizedEmail}:`, error.message);
+    
+    // If it's a duplicate key error or any error, try to find the user again (handles race conditions)
+    if (error.code === 11000 || error.message.includes('duplicate') || error.message.includes('E11000')) {
+      console.log(`🔄 Duplicate detected - attempting to find user again: ${normalizedEmail}`);
+    } else {
+      console.log(`🔄 Error occurred - checking if user was created: ${normalizedEmail}`);
+    }
+    
+    // Final check: try to find the user one more time (in case it was created by another process)
+    var retryUserData = await User.findOne(
+      { Email: { $regex: new RegExp(`^${normalizedEmail.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`, "i") }, IsDeleted: false },
+      { _id: 1 }
+    );
+    
+    if (retryUserData && retryUserData._id) {
+      console.log(`✅ Found user after error (race condition handled): ${normalizedEmail} (ID: ${retryUserData._id})`);
+      return retryUserData._id;
+    }
+    
+    return null;
+  }
 }
 
 async function __addLikesToStreamComments_StreamTool(
@@ -24250,7 +24594,11 @@ async function __addLikesToStreamComments_StreamTool(
   likesNeeded =
     likesNeeded > likesByEmailIds.length ? likesByEmailIds.length : likesNeeded;
   for (let j = 0; j < likesNeeded; j++) {
-    const UserId = await __getUserIdByEmail(likesByEmailIds[j].trim());
+    const UserId = await __getOrCreateUserIdByEmail(likesByEmailIds[j].trim());
+    if (!UserId) {
+      console.log(`⚠️ Skipping like - could not get/create user for email: ${likesByEmailIds[j]}`);
+      continue;
+    }
     var dataToSave = {
       SocialPageId: new ObjectId(SocialPageId),
       CommentId: new ObjectId(CommentId),
@@ -24286,7 +24634,11 @@ async function __addCommentsToStreamPost_StreamTool(
       postCommentsArr[i].comment &&
       hexcode_blendedImage
     ) {
-      const UserId = await __getUserIdByEmail(postCommentsArr[i].email);
+      const UserId = await __getOrCreateUserIdByEmail(postCommentsArr[i].email);
+      if (!UserId) {
+        console.log(`⚠️ Skipping comment - could not get/create user for email: ${postCommentsArr[i].email}`);
+        continue;
+      }
       var dataToSave = {
         UserId: UserId,
         SocialPageId: SocialPageId ? new ObjectId(SocialPageId) : null,
@@ -24327,7 +24679,8 @@ async function __addCommentsToStreamPost_StreamTool2(
   blendImage1,
   blendImage2,
   blendMode,
-  postCommentsArr
+  postCommentsArr,
+  hexcode_blendedImage
 ) {
   console.log(
     "###########################################------ __addCommentsToStreamPost_StreamTool2 --------#######################################"
@@ -24337,15 +24690,16 @@ async function __addCommentsToStreamPost_StreamTool2(
   blendImage1 = blendImage1 || null;
   blendImage2 = blendImage2 || null;
   blendMode = blendMode || null;
+  hexcode_blendedImage = hexcode_blendedImage || null;
 
   if (SocialPageId && SocialPostId && blendImage1 && blendImage2 && blendMode) {
-    let hexcode_blendedImage = await __getPostHexCodeOfGivenBlendedImageSet(
-      blendImage1,
-      blendImage2,
-      blendMode
-    );
+    // ✅ FIX: Use provided hexcode_blendedImage if available, otherwise calculate it using getHexcodeForBlendPair
+    if (!hexcode_blendedImage) {
+      const hexMeta = getHexcodeForBlendPair(blendImage1, blendImage2, blendMode);
+      hexcode_blendedImage = hexMeta.hexcodePath;
+    }
     console.log(
-      "__getPostHexCodeOfGivenBlendedImageSet -------------------------------- ",
+      "hexcode_blendedImage -------------------------------- ",
       hexcode_blendedImage
     );
     for (let i = 0; i < postCommentsArr.length; i++) {
@@ -24356,7 +24710,11 @@ async function __addCommentsToStreamPost_StreamTool2(
         postCommentsArr[i].comment &&
         hexcode_blendedImage
       ) {
-        const UserId = await __getUserIdByEmail(postCommentsArr[i].email);
+        const UserId = await __getOrCreateUserIdByEmail(postCommentsArr[i].email);
+        if (!UserId) {
+          console.log(`⚠️ Skipping comment - could not get/create user for email: ${postCommentsArr[i].email}`);
+          continue;
+        }
         var dataToSave = {
           UserId: UserId,
           SocialPageId: SocialPageId ? new ObjectId(SocialPageId) : null,
@@ -24972,7 +25330,9 @@ const addNewPost_INTERNAL_API = async (req, res) => {
     const dataToUpload = {
       Location: locationArray,
       AutoId: incNum,
-      UploadedBy: (postStreamType === "Video" || postStreamType === "Audio" || postStreamType === "1VideoPost" || postStreamType === "1AudioPost") ? "admin" : "user",
+      UploadedBy: (postStreamType === "Video" || postStreamType === "Audio" || postStreamType === "1VideoPost" || postStreamType === "1AudioPost" || 
+                   postStreamType === "1MJPost" || postStreamType === "2MJPost" || 
+                   postStreamType === "1UnsplashPost" || postStreamType === "2UnsplashPost") ? "creator" : "user",
       UploadedOn: Date.now(),
       UploaderID: uploaderID, // ✅ Validated - user exists in database
       Source: "Thinkstock",
@@ -25604,26 +25964,9 @@ const addNewPost_INTERNAL_API = async (req, res) => {
       outputArr.push("Keywords not found.");
     }
 
-    // For 2MJ posts, create blend settings directly from the post's own data
-    if (postStreamType === "2MJPost") {
-      console.log("=== 2MJ POST PROCESSING START ===");
-      console.log("📦 2MJ POST PAYLOAD:", JSON.stringify(req.body, null, 2));
-      console.log(
-        "MJImageArr length:",
-        MJImageArr ? MJImageArr.length : "undefined"
-      );
-
-      // Log MJImageArr with truncated imageData
-      if (MJImageArr) {
-        const previewArr = MJImageArr.map((img) => ({
-          fileName: img.fileName,
-          imageDataPreview: img.imageData
-            ? img.imageData.substring(0, 5) + "..."
-            : "none",
-          hasImageData: !!img.imageData,
-        }));
-        console.log("MJImageArr preview:", previewArr);
-      }
+    // For 2MJ/2Unsplash posts, create blend settings directly from the post's own data
+    if (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") {
+      console.log("📦 2MJ/2Unsplash POST PAYLOAD:", JSON.stringify(req.body, null, 2));
 
       try {
         // Get the current Media document to access MJ image URLs
@@ -25632,77 +25975,256 @@ const addNewPost_INTERNAL_API = async (req, res) => {
         let blendImage1 = "";
         let blendImage2 = "";
 
-        // Extract aspectfit URLs from the new payload structure
-        if (req.body.postStreamObj && req.body.postStreamObj.fileArr) {
-          const fileArr = req.body.postStreamObj.fileArr;
-          console.log("🔍 Extracting aspectfit URLs from fileArr:", fileArr.length, "files");
+        // ✅ FIX: For 2UnsplashPost, images come from database filter, not from payload
+        // Only set BlendSettings if we have URLs from payload (for 2MJPost)
+        // For 2UnsplashPost without payload URLs, let addBlendImages_INTERNAL_API handle it
+        if (postStreamType === "2UnsplashPost") {
+          // For Unsplash posts, check if URLs are in payload
+          const hasPayloadUrls = req.body.postStreamObj && req.body.postStreamObj.fileArr && req.body.postStreamObj.fileArr.length >= 2;
           
-          // Get aspectfit URL from first image (fileArr[0])
-          if (fileArr[0] && fileArr[0].version === "aspectfit") {
-            blendImage1 = fileArr[0].url;
-            console.log("✅ Extracted aspectfit URL for image 1:", blendImage1);
+          if (!hasPayloadUrls) {
+            // No URLs in payload - skip setting BlendSettings here
+            // addBlendImages_INTERNAL_API will find images from database and update BlendSettings
+            console.log("✅ 2UnsplashPost: No URLs in payload - will use images from database filter");
+            // Skip the rest of this block - let addBlendImages_INTERNAL_API handle it
+          } else {
+            // Has URLs in payload - use them (shouldn't happen for Unsplash, but handle it)
+            const fileArr = req.body.postStreamObj.fileArr;
+            
+            if (fileArr[0] && fileArr[0].url) {
+              blendImage1 = fileArr[0].url;
+              console.log("✅ Extracted URL for image 1 from payload:", blendImage1);
+            }
+            
+            if (fileArr.length >= 2 && fileArr[1] && fileArr[1].url) {
+              blendImage2 = fileArr[1].url;
+              console.log("✅ Extracted URL for image 2 from payload:", blendImage2);
+            }
+          }
+        } else {
+          // For 2MJPost: Extract URLs from payload (S3 URLs) - prioritize payload over Media.Location
+          // The payload contains the actual S3 URLs that should be used for the post
+          if (req.body.postStreamObj && req.body.postStreamObj.fileArr && req.body.postStreamObj.fileArr.length > 0) {
+            const fileArr = req.body.postStreamObj.fileArr;
+            
+            // Get URL from first image (fileArr[0]) - use it directly since payload already has the correct S3 URLs
+            if (fileArr[0] && fileArr[0].url) {
+              blendImage1 = fileArr[0].url;
+              console.log("✅ Extracted S3 URL for image 1 from payload:", blendImage1);
+            }
+            
+            // Get URL from second image (fileArr[1]) - use it directly since payload already has the correct S3 URLs
+            if (fileArr.length >= 2 && fileArr[1] && fileArr[1].url) {
+              blendImage2 = fileArr[1].url;
+              console.log("✅ Extracted S3 URL for image 2 from payload:", blendImage2);
+            }
           }
           
-          // Get aspectfit URL from second image (fileArr[1])
-          if (fileArr.length >= 2 && fileArr[1] && fileArr[1].version === "aspectfit") {
-            blendImage2 = fileArr[1].url;
-            console.log("✅ Extracted aspectfit URL for image 2:", blendImage2);
+          // ✅ Only fallback to Media.Location if payload structure doesn't exist at all
+          // DO NOT use Media.Location if payload exists - payload should always have the S3 URLs for new posts
+          // Media.Location contains Unsplash URLs from filter process, which should NOT be used here
+          if ((!blendImage1 || !blendImage2) && (!req.body.postStreamObj || !req.body.postStreamObj.fileArr)) {
+            if (currentMedia && currentMedia.Location && currentMedia.Location.length >= 2) {
+              if (!blendImage1) {
+                blendImage1 = currentMedia.Location[0].URL || "";
+              }
+              if (!blendImage2) {
+                blendImage2 = currentMedia.Location[1].URL || "";
+              }
+            }
           }
-        } else if (
-          currentMedia &&
-          currentMedia.Location &&
-          currentMedia.Location.length >= 2
-        ) {
-          // Fallback to Location array URLs if no payload structure found
-          console.log("⚠️ No payload structure found, falling back to Location array URLs");
-          blendImage1 = currentMedia.Location[0].URL || "";
-          blendImage2 = currentMedia.Location[1].URL || "";
         }
-
-        const blendSettings = {
-          blendMode: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
-            ? (req.body.blendMode || "overlay") 
-            : null,
-          image1Url: blendImage1 || "",
-          image2Url: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
-            ? (blendImage2 || "") 
-            : null,
-          lightness1: req.body.lightness1 || req.body.Lightness1 || 0.8,
-          lightness2: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
-            ? (req.body.lightness2 || req.body.Lightness2 || 0.8) 
-            : null,
-          keywords: req.body.Keywords || [],
-          selectedKeywords: req.body.SelectedKeywords || [],
-          postTags: req.body.postTags || null, // ✅ Added: Include postTags in BlendSettings
-          PostStatement: postStatement || "",
-          PostStreamType: postStreamType,
-          UpdatedOn: Date.now(),
-          // No SelectedBlendImages or blend image generation needed for S3 URLs
-        };
-
-        // Save blend settings to Media collection
-        await Media.updateOne(
-          { _id: mediaId },
-          {
-            $set: {
-              BlendSettings: blendSettings,
-            },
-          }
-        );
-
-        // PageStream will be saved by addBlendImages_INTERNAL_API with the generated blend configurations
-        // No need to save here with empty array
         
-        console.log("✅ 2MJ blend settings saved with S3 URLs for frontend blending");
-        outputArr.push("Blend settings saved with S3 URLs for frontend CSS blending.");
+        // ✅ Only proceed with setting BlendSettings if we have valid image URLs
+        // For 2UnsplashPost without payload URLs, skip this and let addBlendImages_INTERNAL_API handle it
+        if ((!blendImage1 || !blendImage2) && postStreamType === "2UnsplashPost") {
+          console.log("⏭️ Skipping BlendSettings for 2UnsplashPost - will be set by addBlendImages_INTERNAL_API from database filter");
+          // Don't set BlendSettings here - addBlendImages_INTERNAL_API will handle it
+        } else if (blendImage1 && blendImage2) {
+          // ✅ Calculate hexcode once using the standard formula
+          const blendMode = (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
+            ? (req.body.blendMode || "overlay") 
+            : null;
+          let hexcode_blendedImage = null;
+          let hexcode = null;
+          
+          if (blendImage1 && blendImage2 && blendMode) {
+            const hexMeta = getHexcodeForBlendPair(blendImage1, blendImage2, blendMode);
+            hexcode_blendedImage = hexMeta.hexcodePath;
+            hexcode = hexMeta.hexcode;
+          }
 
-        // console.log("=== 2MJ POST PROCESSING COMPLETE ===");
-        outputArr.push(
-          "Blend settings created and saved for 2MJ post successfully."
-        );
+          const blendSettings = {
+            blendMode: blendMode,
+            image1Url: blendImage1 || "",
+            image2Url: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
+              ? (blendImage2 || "") 
+              : null,
+            lightness1: req.body.lightness1 || req.body.Lightness1 || 0.8,
+            lightness2: (postStreamType === "2MJPost" || postStreamType === "2UnsplashPost") 
+              ? (req.body.lightness2 || req.body.Lightness2 || 0.8) 
+              : null,
+            keywords: req.body.Keywords || [],
+            selectedKeywords: req.body.SelectedKeywords || [],
+            postTags: req.body.postTags || null, // ✅ Added: Include postTags in BlendSettings
+            PostStatement: postStatement || "",
+            PostStreamType: postStreamType,
+            UpdatedOn: Date.now(),
+            hexcode_blendedImage: hexcode_blendedImage, // ✅ Save calculated hexcode
+            hexcode: hexcode, // ✅ Save hexcode string
+            // No SelectedBlendImages or blend image generation needed for S3 URLs
+          };
+
+          // Save blend settings to Media collection
+          await Media.updateOne(
+            { _id: mediaId },
+            {
+              $set: {
+                BlendSettings: blendSettings,
+              },
+            }
+          );
+
+          // PageStream will be saved by addBlendImages_INTERNAL_API with the generated blend configurations
+          // No need to save here with empty array
+          
+          console.log("✅ 2MJ/2Unsplash blend settings saved with S3 URLs for frontend blending");
+          outputArr.push("Blend settings saved with S3 URLs for frontend CSS blending.");
+
+          // console.log("=== 2MJ POST PROCESSING COMPLETE ===");
+          outputArr.push(
+            "Blend settings created and saved for 2MJ/2Unsplash post successfully."
+          );
+        }
       } catch (error) {
         outputArr.push(
           "Error creating blend settings for 2MJ post: " + error.message
+        );
+      }
+    }
+
+    // For 1MJ/1Unsplash posts, create blend settings with single image (same image for both)
+    if (postStreamType === "1MJPost" || postStreamType === "1UnsplashPost") {
+      try {
+        // Get the current Media document to access image URL
+        const currentMedia = await Media.findById(mediaId);
+        
+        let blendImage1 = "";
+        let blendImage2 = "";
+        const blendMode = req.body.blendMode || null; // ✅ Single image posts may not have blendMode
+
+        // ✅ FIX: For 1UnsplashPost, images come from database filter, not from payload
+        // Only set BlendSettings if we have URLs from payload (for 1MJPost)
+        // For 1UnsplashPost without payload URLs, let addBlendImages_INTERNAL_API handle it
+        if (postStreamType === "1UnsplashPost") {
+          // For Unsplash posts, check if URLs are in payload
+          const hasPayloadUrls = req.body.postStreamObj && req.body.postStreamObj.fileArr && req.body.postStreamObj.fileArr.length > 0;
+          
+          if (!hasPayloadUrls) {
+            // No URLs in payload - skip setting BlendSettings here
+            // addBlendImages_INTERNAL_API will find images from database and update BlendSettings
+            console.log("✅ 1UnsplashPost: No URLs in payload - will use images from database filter");
+            // Skip the rest of this block - let addBlendImages_INTERNAL_API handle it
+          } else {
+            // Has URLs in payload - use them (shouldn't happen for Unsplash, but handle it)
+            const fileArr = req.body.postStreamObj.fileArr;
+            const imageData = fileArr[0];
+            
+            if (imageData && imageData.version === "aspectfit" && imageData.url) {
+              blendImage1 = imageData.url;
+              blendImage2 = imageData.url;
+              console.log("✅ Extracted aspectfit URL for 1UnsplashPost from payload:", blendImage1);
+            }
+          }
+        } else {
+          // For 1MJPost: Extract aspectfit URL from the payload structure or Media Location
+          if (req.body.postStreamObj && req.body.postStreamObj.fileArr && req.body.postStreamObj.fileArr.length > 0) {
+            const fileArr = req.body.postStreamObj.fileArr;
+            const imageData = fileArr[0];
+            
+            if (imageData && imageData.version === "aspectfit" && imageData.url) {
+              blendImage1 = imageData.url;
+              blendImage2 = imageData.url; // Same image for both
+              console.log("✅ Extracted aspectfit URL for 1MJPost:", blendImage1);
+            }
+          } else if (currentMedia && currentMedia.Location && currentMedia.Location.length > 0) {
+            // Fallback to Location array URL
+            const aspectfitLoc = currentMedia.Location.find(loc => loc.Size === "aspectfit");
+            blendImage1 = aspectfitLoc 
+              ? aspectfitLoc.URL 
+              : (currentMedia.Location[0].URL || "");
+            blendImage2 = blendImage1; // Same image for both
+          }
+          
+          // ✅ FIX: If URL is still empty, try to construct it from Locator field (only for 1MJPost)
+          if (!blendImage1 && currentMedia && currentMedia.Locator) {
+            // Construct URL from Locator (e.g., "mj_906_906" -> "/Media/img/600/mj_906_906.png")
+            const baseUrl = process.env.HOST_URL || "https://www.scrpt.com";
+            blendImage1 = `${baseUrl}/assets/Media/img/600/${currentMedia.Locator}.png`;
+            blendImage2 = blendImage1; // Same image for both
+            console.log("✅ Constructed URL from Locator for 1MJPost:", blendImage1);
+          }
+        }
+        
+        // ✅ Only proceed with setting BlendSettings if we have a valid image URL
+        // For 1UnsplashPost without payload URLs, skip this and let addBlendImages_INTERNAL_API handle it
+        if (!blendImage1 && postStreamType === "1UnsplashPost") {
+          console.log("⏭️ Skipping BlendSettings for 1UnsplashPost - will be set by addBlendImages_INTERNAL_API from database filter");
+          // Don't set BlendSettings here - addBlendImages_INTERNAL_API will handle it
+        } else if (blendImage1) {
+          // ✅ Calculate hexcode - consistent with addHexcode_blendedImage behavior
+          let hexcode_blendedImage = null;
+          let hexcode = null;
+          let finalBlendMode = blendMode;
+          
+          // If blendMode exists, calculate hexcode using formula (same as dual image posts)
+          if (blendImage1 && blendMode) {
+            const hexMeta = getHexcodeForBlendPair(blendImage1, blendImage1, blendMode);
+            hexcode_blendedImage = hexMeta.hexcodePath;
+            hexcode = hexMeta.hexcode;
+          } 
+          // ✅ If no blendMode (single image, no blending), use default blendMode to create nice visual blend
+          else if (blendImage1 && blendImage1 == blendImage2) {
+            // Use default blendMode "overlay" to create a nice visual effect when blending image with itself
+            finalBlendMode = "overlay";
+            const hexMeta = getHexcodeForBlendPair(blendImage1, blendImage1, finalBlendMode);
+            hexcode_blendedImage = hexMeta.hexcodePath;
+            hexcode = hexMeta.hexcode;
+            console.log("✅ Using default blendMode 'overlay' for single-image post to create visual blend");
+          }
+
+          const blendSettings = {
+            blendMode: finalBlendMode, // Use default "overlay" for single image posts without blendMode
+            image1Url: blendImage1 || "",
+            image2Url: null, // ✅ No second image for 1MJPost/1UnsplashPost
+            lightness1: req.body.lightness1 || req.body.Lightness1 || 0.8,
+            lightness2: null, // ✅ No second image lightness for 1MJPost/1UnsplashPost
+            keywords: req.body.Keywords || [],
+            selectedKeywords: req.body.SelectedKeywords || [],
+            postTags: req.body.postTags || null,
+            PostStatement: postStatement || "",
+            PostStreamType: postStreamType,
+            UpdatedOn: Date.now(),
+            hexcode_blendedImage: hexcode_blendedImage, // ✅ Save calculated hexcode or image URL
+            hexcode: hexcode, // ✅ Save hexcode string (null if no blendMode)
+          };
+
+          // Save blend settings to Media collection
+          await Media.updateOne(
+            { _id: mediaId },
+            {
+              $set: {
+                BlendSettings: blendSettings,
+              },
+            }
+          );
+
+          console.log("✅ 1MJ/1Unsplash blend settings saved with hexcode");
+          outputArr.push("Blend settings created and saved for 1MJ/1Unsplash post successfully.");
+        }
+      } catch (error) {
+        outputArr.push(
+          "Error creating blend settings for 1MJ/1Unsplash post: " + error.message
         );
       }
     }
@@ -26116,6 +26638,8 @@ let downloadStreamPostMetaData_INTERNAL_API = async function (req, res) {
         blendImage1: selectedPostBlendObject.blendImage1 || "",
         blendImage2: selectedPostBlendObject.blendImage2 || "",
         blendMode: selectedPostBlendObject.blendMode || "",
+        hexcode_blendedImage: selectedPostBlendObject.hexcode_blendedImage || "",
+        hexcode: selectedPostBlendObject.hexcode || "",
         UploadedFileName_1:
           selectedPostBlendObject.MetaData_1.GoogleDriveFilename,
         UploadedFileName_2:
@@ -26151,6 +26675,13 @@ var addComments_INTERNAL_API = async function (req, res) {
   let blendImage2 = req.body.blendImage2 || null;
   let blendMode = req.body.blendMode || null;
   let PostCommentsArr = req.body.postCommentsArr || [];
+  let hexcode_blendedImage = req.body.hexcode_blendedImage || null;
+
+  // ✅ FIX: If hexcode_blendedImage is not provided in body, calculate it using the same function
+  if (!hexcode_blendedImage && blendImage1 && blendImage2 && blendMode) {
+    const hexMeta = getHexcodeForBlendPair(blendImage1, blendImage2, blendMode);
+    hexcode_blendedImage = hexMeta.hexcodePath;
+  }
 
   if (PostCommentsArr.length) {
     await __addCommentsToStreamPost_StreamTool2(
@@ -26159,7 +26690,8 @@ var addComments_INTERNAL_API = async function (req, res) {
       blendImage1,
       blendImage2,
       blendMode,
-      PostCommentsArr
+      PostCommentsArr,
+      hexcode_blendedImage
     );
     return res.json({
       code: 200,

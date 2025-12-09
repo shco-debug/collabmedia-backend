@@ -45,11 +45,7 @@ module.exports = function(router){
 		user.fsgArrUpdate(req,res);
 	});
 	router.get('/logout', function(req, res){
-		if (req.session.user) {
-			req.session.user = null; // Deletes the cookie.
-			res.clearCookie('connect.sid', { path: '/capsule' });
-			res.json({"logout":"200","msg":"Success"});
-		}        
+		user.logout(req, res);
 	});
 	//file upload route parul
 	router.post('/fileUpload',function(req,res){

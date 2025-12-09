@@ -63,10 +63,7 @@ module.exports = function(router){
 	
 	
 	router.get('/user/logout', function(req, res){
-		if (req.session.user) {
-			req.session.user = null; // Deletes the cookie.
-			res.json({"logout":"200","msg":"Success"});
-		}        
+		user.logout(req, res);
 	});
 	router.get('/admin/logout', function(req, res){
 		if (req.session.admin) {

@@ -1,5 +1,6 @@
 const admin = require('../../../controllers/adminController.js');
 const adminMassApis = require('../../../controllers/adminMassApis.js');
+const Capsule = require('../../../controllers/capsulesController.js');
 
 module.exports = function(router) {
     
@@ -272,6 +273,31 @@ module.exports = function(router) {
 
     router.get('/getGTsFile', function(req, res) {
         adminMassApis.getGTsFile(req, res);
+    });
+
+    // Admin route to get capsule posts (with admin role verification)
+    router.post('/getCapsulePosts', function(req, res) {
+        // Check if user is authenticated as admin
+        if (!req.session || !req.session.admin) {
+            return res.status(401).json({
+                code: "401",
+                msg: "Unauthorized",
+                message: "Admin authentication required. Please login as admin."
+            });
+        }
+
+        // Verify admin role
+        const adminData = req.session.admin;
+        if (!adminData._id || !adminData.email) {
+            return res.status(403).json({
+                code: "403",
+                msg: "Forbidden",
+                message: "Invalid admin session. Please login again."
+            });
+        }
+
+        // Call the getCapsulePosts function
+        Capsule.getCapsulePosts(req, res);
     });
 };
 

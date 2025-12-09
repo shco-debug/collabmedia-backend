@@ -28,6 +28,9 @@ var sharp = require("sharp");
 var path = require("path");
 var shortid = require("shortid");
 var os = require("os");
+var { addMediaTimestamps } = require("../utilities/mediaTimestampUtils.js");
+// Import static GroupTags loader for Prompt-based tag assignment
+const { loadTagIndex, isLoaded, lookupTag } = require("../utilities/staticGroupTagsLoader");
 // Import capsulesController for shared helper functions (lazy load to avoid circular dependency)
 var capsulesController = null;
 var getCapsulesController = function() {
@@ -2799,33 +2802,6 @@ const addMjImageToMedia__INTERNAL_API = async function (req, res) {
   const FgGreen = "\x1b[32m";
 
   try {
-    // Check if media with same filename already exists
-    const existingMediaRecord = await media.findOne(
-      { IsDeleted: 0, "MetaData.GoogleDriveFilename": realFileName },
-      { _id: 1 }
-    );
-
-    if (existingMediaRecord) {
-      console.log(`✅ EXISTING MEDIA FOUND`);
-      console.log(`🆔 Media ID: ${existingMediaRecord._id}`);
-
-      // Process tags for existing media if MetaData is provided
-      if (inputObj.MetaData && inputObj.MetaData.Subjects) {
-        console.log(`🏷️ Processing tags...`);
-        const tags = inputObj.Prompt || "";
-        if (tags) {
-          await addGTAsyncAwait(tags, existingMediaRecord._id, inputObj.MetaData);
-        }
-      }
-
-      console.log("==========================================\n");
-      return res.json({
-        code: 200,
-        message: "Media with the provided filename already exists.",
-        mediaId: existingMediaRecord._id,
-      });
-    }
-
     console.log(`📦 Processing new media...`);
 
     // Generate auto-increment ID
@@ -2848,7 +2824,18 @@ const addMjImageToMedia__INTERNAL_API = async function (req, res) {
     var photographer = inputObj.Photographer || "";
     var postStatement = inputObj.Content || "";
 
+    // Generate string _id (same as createSinglePost)
+    const mediaIdString = new ObjectId().toString();
+
+    // Get thumbnail URL from first media URL if not provided
+    const thumbnailUrl = inputObj.Thumbnail || (mediaUrls.length > 0 ? mediaUrls[0].URL : "");
+    // Get WebThumbnail (same as thumbnail for MJ images)
+    const webThumbnail = thumbnailUrl;
+    // Get aspectfit URL for WebThumbnail if available
+    const aspectfitUrl = mediaUrls.find(url => url.Size === "aspectfit")?.URL || thumbnailUrl;
+
     var dataToUpload = {
+      _id: mediaIdString, // Set string _id explicitly
       Title: title || "",
       Photographer: photographer || "",
       Location: mediaUrls, // Directly use the provided URLs array
@@ -2872,48 +2859,62 @@ const addMjImageToMedia__INTERNAL_API = async function (req, res) {
       AddedWhere: "board",
       IsDeleted: 0,
       TagType: "",
-      Content: postStatement,
+      Content: postStatement || "",
       ContentType: contentType,
       MediaType: mediaType,
       AddedHow: "uploadImageTool",
-      thumbnail: inputObj.Thumbnail || "",
+      thumbnail: thumbnailUrl,
+      WebThumbnail: webThumbnail, // Added to match old-scrpt structure
       Locator: realFileName.replace(/\.(png|jpg|jpeg|webp|mp4|mp3)$/gi, "") + "_" + incNum,
-      Lightness: inputObj.Lightness || 0,
+      Lightness: inputObj.Lightness ? String(inputObj.Lightness) : "0", // Ensure string type
       DominantColors: inputObj.DominantColors || "",
       MetaData: inputObj.MetaData || {},
+      // Add default fields that might be expected
+      ViewsCount: 0,
+      Views: {},
+      Selects: {},
+      Posts: {},
+      Marks: {},
+      Stamps: {},
+      UserScore: 0,
+      OwnerFSGs: {},
+      IsPrivate: 0,
+      IsUnsplashImage: false, // MJ images are not Unsplash
+      IsSpeechToTextDone: false,
+      InAppropFlagCount: 0,
+      RandomSortId: shortid.generate(), // Generate random sort ID
+      RandomSortId_UpdatedOn: new Date().toString(), // Set as string to match schema
     };
 
-    // Save media record to database
-    var mediaData = await media(dataToUpload).save();
+    // Add timestamps before saving
+    const dataWithTimestamps = addMediaTimestamps(dataToUpload, true); // true = isNew document
+
+    // Save media record to database using native collection to preserve string _id
+    const savedMedia = await Media.collection.insertOne(dataWithTimestamps);
+    
+    // Fetch the saved document to return complete data
+    var mediaData = await Media.collection.findOne({ _id: mediaIdString });
     
     console.log("\n✅ ========== MEDIA SAVED SUCCESSFULLY ==========");
-    console.log("🆔 Media ID:", mediaData._id);
+    console.log("🆔 Media ID (string):", mediaIdString);
     console.log("📄 Filename:", realFileName);
-    console.log("🔢 AutoId:", mediaData.AutoId);
-    console.log("📍 Locator:", mediaData.Locator);
+    console.log("🔢 AutoId:", mediaData?.AutoId);
+    console.log("📍 Locator:", mediaData?.Locator);
     console.log("🔗 URLs saved:", mediaUrls.length);
-    console.log("📊 Source:", mediaData.Source);
-    console.log("💾 MetaData.GoogleDriveFilename:", mediaData.MetaData?.GoogleDriveFilename);
-
-    // Process tags if provided
-    mediaData = mediaData ? mediaData : {};
-    var tags = typeof mediaData.Prompt === "string" ? mediaData.Prompt : "";
-    if (tags && mediaData._id) {
-      await addGTAsyncAwait(tags, mediaData._id, inputObj.MetaData);
-      console.log("🏷️ Tags processed");
-    }
+    console.log("📊 Source:", mediaData?.Source);
+    console.log("💾 MetaData.GoogleDriveFilename:", mediaData?.MetaData?.GoogleDriveFilename);
     
     console.log("\n📝 MongoDB Query to find this record:");
-    console.log(`db.media.findOne({ _id: ObjectId("${mediaData._id}") })`);
+    console.log(`db.media.findOne({ _id: "${mediaIdString}" })`);
     console.log("==========================================\n");
 
     return res.status(200).json({ 
       code: 200, 
       message: "Media URLs saved successfully (no upload performed).",
-      mediaId: mediaData._id,
+      mediaId: mediaIdString,
       urlCount: mediaUrls.length,
-      locator: mediaData.Locator,
-      autoId: mediaData.AutoId
+      locator: mediaData?.Locator,
+      autoId: mediaData?.AutoId
     });
   } catch (err) {
     console.error("\n❌ ========== ERROR ==========");
@@ -3446,6 +3447,10 @@ const createSinglePost = async (req, res) => {
     // Generate unique locator
     const locator = `post_${Date.now()}_${incNum}`;
 
+    // Generate string _id for the media document (to match old format)
+    // Create a valid ObjectId string format for consistency
+    const mediaIdString = new ObjectId().toString();
+
     // Extract keywords for group tags and transform to embedded document format
     const groupTagIds = keywords
       .map((k) => ({
@@ -3517,6 +3522,7 @@ const createSinglePost = async (req, res) => {
 
     // Prepare media data
     const mediaData = {
+      _id: mediaIdString, // Set string _id explicitly
       Title: title || "Untitled Post",
       Prompt: promptText,
       Locator: locator,
@@ -3586,9 +3592,16 @@ const createSinglePost = async (req, res) => {
       PostPrivacySetting: finalPrivacySetting,
     };
 
-    // Save media record
-    const savedMedia = await Media(mediaData).save();
-    console.log("Media record saved:", savedMedia._id);
+    // Add timestamps before saving
+    const mediaDataWithTimestamps = addMediaTimestamps(mediaData, true); // true = isNew document
+
+    // Save media record with string _id
+    // Use insertOne directly to preserve string _id (Mongoose save() converts it to ObjectId)
+    const savedMedia = await Media.collection.insertOne(mediaDataWithTimestamps);
+    console.log("Media record saved with string _id:", savedMedia.insertedId);
+    
+    // Fetch the saved document to return it
+    const savedMediaDoc = await Media.collection.findOne({ _id: mediaIdString });
 
     let pageUpdateResult = null;
 
@@ -3597,7 +3610,7 @@ const createSinglePost = async (req, res) => {
       const pageConditions = { _id: new ObjectId(pageId) };
 
       pageUpdateResult = await Page.updateOne(pageConditions, {
-        $push: { Medias: savedMedia._id },
+        $push: { Medias: mediaIdString }, // Use string _id
       });
 
       if ((pageUpdateResult.modifiedCount ?? pageUpdateResult.nModified ?? 0) === 0) {
@@ -3609,9 +3622,9 @@ const createSinglePost = async (req, res) => {
     }
 
     // Add group tags if keywords exist
-    if (groupTagIds.length > 0 && savedMedia._id) {
+    if (groupTagIds.length > 0 && mediaIdString) {
       try {
-        await addGTAsyncAwait(promptText, savedMedia._id, metadata);
+        await addGTAsyncAwait(promptText, mediaIdString, metadata);
       } catch (tagError) {
         console.log("Tag addition failed:", tagError);
       }
@@ -3623,8 +3636,8 @@ const createSinglePost = async (req, res) => {
         ? "Post created and added to page successfully"
         : "Independent post created successfully",
       data: {
-        mediaId: savedMedia._id,
-        postId: savedMedia._id,
+        mediaId: mediaIdString, // Return string _id
+        postId: mediaIdString,  // Return string _id
         pageId: pageId || null,
         locator: locator,
         autoId: incNum,
@@ -3638,8 +3651,8 @@ const createSinglePost = async (req, res) => {
           allImages: locationArray,
         },
       },
-      postData: pageId ? savedMedia._id : null,
-      mediaData: savedMedia,
+      postData: pageId ? mediaIdString : null,
+      mediaData: savedMediaDoc || { _id: mediaIdString, ...mediaData },
       blendResult: blendResult,
     });
   } catch (error) {
@@ -4525,9 +4538,9 @@ const updatePostPrivacy = async (req, res) => {
     }
 
     // Check if post exists and belongs to the user
-    const post = await media.findOne({
-      _id: postId,
-      PostedBy: userId,
+    // Use collection methods to handle string _id correctly
+    const post = await media.collection.findOne({
+      _id: postId, // String _id support
       IsDeleted: { $ne: true },
     });
 
@@ -4539,13 +4552,29 @@ const updatePostPrivacy = async (req, res) => {
       });
     }
 
-    // Update the post privacy setting
-    const updateResult = await media.updateOne(
-      { _id: postId, PostedBy: userId },
+    // Check if user owns the post (handle both ObjectId and string PostedBy)
+    const postPostedBy = post.PostedBy ? String(post.PostedBy) : null;
+    const userIdString = String(userId);
+    
+    // Also check UploaderID as fallback (for posts that might not have PostedBy set)
+    const postUploaderID = post.UploaderID ? String(post.UploaderID) : null;
+    
+    if (postPostedBy !== userIdString && postUploaderID !== userIdString) {
+      return res.status(404).json({
+        code: 404,
+        message: "Post not found or you don't have permission to modify it",
+        data: null,
+      });
+    }
+
+    // Update the post privacy setting using collection method to handle string _id
+    const updateResult = await media.collection.updateOne(
+      { _id: postId }, // String _id support
       {
         $set: {
           PostPrivacySetting: privacySetting,
           UpdatedOn: new Date(),
+          updatedAt: new Date(), // Update timestamp when privacy changes
         },
       }
     );
@@ -4558,11 +4587,11 @@ const updatePostPrivacy = async (req, res) => {
       });
     }
 
-    // Get updated post data
-    const updatedPost = await media
-      .findOne(
-        { _id: postId },
-        {
+    // Get updated post data using collection method to handle string _id
+    const updatedPost = await media.collection.findOne(
+      { _id: postId }, // String _id support
+      {
+        projection: {
           _id: 1,
           Title: 1,
           PostPrivacySetting: 1,
@@ -4571,8 +4600,32 @@ const updatePostPrivacy = async (req, res) => {
           UpdatedOn: 1,
           Locator: 1,
         }
-      )
-      .populate("PostedBy", "Name NickName Email ProfilePic");
+      }
+    );
+
+    // Manually populate PostedBy user data if needed (since collection methods don't support populate)
+    let postedByUser = null;
+    if (updatedPost && updatedPost.PostedBy) {
+      try {
+        // Use user model (already imported) to fetch user data
+        const userDoc = await user.findOne(
+          { _id: updatedPost.PostedBy },
+          { Name: 1, NickName: 1, Email: 1, ProfilePic: 1 }
+        ).lean();
+        if (userDoc) {
+          postedByUser = {
+            _id: userDoc._id,
+            Name: userDoc.Name,
+            NickName: userDoc.NickName,
+            Email: userDoc.Email,
+            ProfilePic: userDoc.ProfilePic,
+          };
+        }
+      } catch (userError) {
+        console.log("Error fetching PostedBy user:", userError);
+        // Continue without user data
+      }
+    }
 
     res.status(200).json({
       code: 200,
@@ -4581,9 +4634,9 @@ const updatePostPrivacy = async (req, res) => {
         postId: updatedPost._id,
         title: updatedPost.Title,
         locator: updatedPost.Locator,
-        oldPrivacySetting: post.PostPrivacySetting,
+        oldPrivacySetting: post.PostPrivacySetting || null,
         newPrivacySetting: privacySetting,
-        postedBy: updatedPost.PostedBy,
+        postedBy: postedByUser || updatedPost.PostedBy, // Return populated user or just the ID
         postedOn: updatedPost.PostedOn,
         updatedOn: updatedPost.UpdatedOn,
         updateResult: {
@@ -5333,14 +5386,22 @@ const findAllStatus = async function (req, res) {
 
     console.log(fields);
 
-    // Execute query with modern async/await
-    const result = await media
-      .find(fields)
-      .sort({ UploadedOn: 'desc' })
-      .skip(req.body.offset)
-      .limit(req.body.limit)
-      .exec();
+    // Use aggregation pipeline to support allowDiskUse for large sorts
+    // This prevents "Sort exceeded memory limit" errors on large collections
+    const offset = req.body.offset || 0;
+    const limit = req.body.limit || 20;
+    
+    const pipeline = [
+      { $match: fields },
+      { $sort: { UploadedOn: -1 } },
+      { $skip: offset },
+      { $limit: limit }
+    ];
+    
+    // Execute aggregation with allowDiskUse to handle large sorts
+    const result = await media.aggregate(pipeline).allowDiskUse(true);
 
+    // Get total count for pagination
     const resultlength = await media
       .find(fields, { _id: 1 })
       .countDocuments()
@@ -5533,14 +5594,6 @@ const convertXlsxToJson = (inputPath, outputPath) =>
 		});
 	});
 
-const normalizeDescriptor = (rawValue) => {
-	if (typeof rawValue !== "string") return null;
-	const cleaned = rawValue.trim().toLowerCase().replace(/[^a-z0-9 \-\\]/gi, "");
-	return cleaned || null;
-};
-
-const escapeRegExp = (value) => value.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-
 const chunkArray = (array, size) => {
 	const chunks = [];
 	for (let i = 0; i < array.length; i += size) {
@@ -5549,28 +5602,24 @@ const chunkArray = (array, size) => {
 	return chunks;
 };
 
-const buildGroupTagRecord = (title) => ({
-	_id: new ObjectId(),
-	GroupTagTitle: title,
-	MetaMetaTagID: "54c98aab4fde7f30079fdd5a",
-	MetaTagID: "54c98aba4fde7f30079fdd5b",
-	status: 3,
-	LastModified: Date.now(),
-	DateAdded: Date.now(),
-	Tags: [{ _id: new ObjectId(), TagTitle: title, status: 1 }],
-	Think: [],
-	Less: [],
-	More: [],
-});
-
 const buildMediaDocument = ({
 	record,
 	seq,
 	uploaderId,
-	groupTagMap,
-	normalizedDescriptors,
+	unsplashPhotoId: providedPhotoId, // Accept Photo ID as parameter
 }) => {
-	const unsplashPhotoId = record["Photo ID"] ? record["Photo ID"].trim() : null;
+	// Use provided Photo ID if available, otherwise try to extract from record
+	let unsplashPhotoId = providedPhotoId || (record["Photo ID"] ? record["Photo ID"].trim() : null);
+	
+	// If still no Photo ID, try to extract from Image Source URL
+	if (!unsplashPhotoId && record["Image Source"]) {
+		const unsplashImageURL = String(record["Image Source"]).trim();
+		// Try to extract photo ID from Unsplash URL pattern: https://images.unsplash.com/photo-{photoId}?...
+		const photoIdMatch = unsplashImageURL.match(/photo-([a-zA-Z0-9_-]+)/);
+		if (photoIdMatch) {
+			unsplashPhotoId = photoIdMatch[1];
+		}
+	}
 	const unsplashImageURL = record["Image Source"] ? record["Image Source"].trim() : null;
 	const unsplashImageTags =
 		record["Descriptors/Concepts/Related tags"] || record["Combined tags (all 4)"] || "";
@@ -5581,19 +5630,120 @@ const buildMediaDocument = ({
 	const dominantColors = record["Dominant colors"] ? record["Dominant colors"] : "";
 	const recordLocator = unsplashImageURL ? unsplashImageURL.split("?")[0].split("/").pop() : "";
 	const locator = `${recordLocator || "unsplash"}_${seq}`;
-	const groupTagsPayload = [];
 
-	normalizedDescriptors.forEach((descriptor) => {
-		const tagId = groupTagMap.get(descriptor);
-		if (tagId) {
-			groupTagsPayload.push({
-				_id: new ObjectId(),
-				GroupTagID: tagId,
-			});
+	// Build MetaData object from Excel columns
+	const buildMetaData = () => {
+		const metaData = {};
+		
+		// Array fields - split by comma if string, keep as array if already array
+		const arrayFields = ['Subjects', 'Metaphors', 'Concepts', 'Attributes', 'Feelings', 'Verbs'];
+		arrayFields.forEach(field => {
+			const value = record[field];
+			if (value) {
+				if (Array.isArray(value)) {
+					metaData[field] = value.filter(v => v && String(v).trim() !== '');
+				} else if (typeof value === 'string') {
+					metaData[field] = value.split(',').map(v => v.trim()).filter(v => v !== '');
+				}
+			}
+		});
+
+		// String fields
+		const stringFields = [
+			'Brief Description',
+			'Detailed Description',
+			'Aesthetic Description',
+			'Primary Brand Archetype',
+			'Secondary Brand Archetype',
+			'Tertiary Brand Archetype',
+			'Subject Type'
+		];
+		stringFields.forEach(field => {
+			const value = record[field];
+			if (value && String(value).trim() !== '') {
+				metaData[field.replace(/\s+/g, '')] = String(value).trim();
+			}
+		});
+
+		// Array fields that might be comma-separated strings
+		const commaSeparatedArrayFields = [
+			'MBTI',
+			'Business Sectors',
+			'Religions',
+			'Countries',
+			'Ethnicities',
+			'Satire',
+			'Color Palette'
+		];
+		commaSeparatedArrayFields.forEach(field => {
+			const value = record[field];
+			if (value) {
+				if (Array.isArray(value)) {
+					metaData[field.replace(/\s+/g, '')] = value.filter(v => v && String(v).trim() !== '');
+				} else if (typeof value === 'string') {
+					metaData[field.replace(/\s+/g, '')] = value.split(',').map(v => v.trim()).filter(v => v !== '');
+				}
+			}
+		});
+
+		// Boolean fields
+		const booleanFields = [
+			'Ethnic Diversity',
+			'Senior',
+			'Luxury',
+			'Body',
+			'Children',
+			'LGBTQ',
+			'Sports',
+			'Fantasy',
+			'Gaming',
+			'Family-friendly',
+			'Business-related',
+			'Suggestive'
+		];
+		booleanFields.forEach(field => {
+			const value = record[field];
+			if (value !== undefined && value !== null && value !== '') {
+				metaData[field.replace(/\s+/g, '').replace(/-/g, '')] = Boolean(value);
+			}
+		});
+
+		// Other fields
+		if (record['Gender']) {
+			metaData.Gender = String(record['Gender']).trim();
 		}
-	});
+		if (record['Age']) {
+			metaData.Age = String(record['Age']).trim();
+		}
+		if (record['Modern vs. Traditional']) {
+			metaData.ModernVsTraditional = String(record['Modern vs. Traditional']).trim();
+		}
+		if (record['New Age']) {
+			metaData.NewAge = String(record['New Age']).trim();
+		}
+		if (record['Narrative clarity']) {
+			metaData.NarrativeClarity = Number(record['Narrative clarity']) || 0;
+		}
+		if (record['Dominant Score']) {
+			metaData.DominantScore = Number(record['Dominant Score']) || 0;
+		}
+		if (record['filename']) {
+			metaData.filename = String(record['filename']).trim();
+		}
+		if (record['description']) {
+			metaData.description = String(record['description']).trim();
+		}
+
+		return Object.keys(metaData).length > 0 ? metaData : {};
+	};
+
+	const metaData = buildMetaData();
+
+	// Generate string _id (same as createSinglePost and addMjImageToMedia__INTERNAL_API)
+	const mediaIdString = new ObjectId().toString();
 
 	return {
+		_id: mediaIdString, // Set string _id explicitly
 		Prompt: unsplashImageTags,
 		Title: unsplashImageTitle,
 		Photographer: unsplashImagePhotographer,
@@ -5610,7 +5760,7 @@ const buildMediaDocument = ({
 		SourceUniqueID: null,
 		Domains: null,
 		AutoId: seq,
-		GroupTags: groupTagsPayload,
+		GroupTags: [], // Empty array - no tag processing
 		Collection: null,
 		Status: 1,
 		MetaMetaTags: "5464931fde9f6868484be3d7",
@@ -5630,6 +5780,7 @@ const buildMediaDocument = ({
 		StyleKeyword: unsplashStyleKeyword,
 		Lightness: lightness ? lightness : 0,
 		DominantColors: dominantColors ? dominantColors : "",
+		MetaData: metaData, // Add MetaData object
 	};
 };
 
@@ -5638,6 +5789,32 @@ const importUnsplashImagesV2 = async function (req, res) {
 	let savedFilePath = null;
 	try {
 		console.log("[massmediaupload] Incoming request");
+		
+		// Check admin privileges FIRST before processing any file
+		const normalizedJwtRole = typeof req.user?.role === "string"
+			? req.user.role.toLowerCase()
+			: typeof req.user?.Role === "string"
+			? req.user.Role.toLowerCase()
+			: null;
+
+		const hasSessionAdmin = !!req.session?.admin;
+		const hasAdminPrivilegesFromSession = hasSessionAdmin;
+		const hasAdminPrivilegesFromJwt = normalizedJwtRole === "admin";
+
+		if (!hasAdminPrivilegesFromSession && !hasAdminPrivilegesFromJwt) {
+			console.warn("[massmediaupload] Missing admin privileges (session or JWT) - rejecting request before file processing");
+			return res.status(401).json({ 
+				code: 401, 
+				message: "Access denied. Admin privileges required.",
+				error: "You do not have admin permissions to perform this action. Please use an admin account or provide a valid admin JWT token.",
+				hasSession: !!req.session,
+				hasAdminSession: hasSessionAdmin,
+				hasJwtToken: !!req.user,
+				jwtRole: normalizedJwtRole || null
+			});
+		}
+
+		// Only parse and process file if admin check passes
 		const { files = {}, fields = {} } = await parseFormAsync(req);
 		console.log("[massmediaupload] Parsed form fields:", Object.keys(fields || {}));
 		console.log("[massmediaupload] Parsed files keys:", Object.keys(files || {}));
@@ -5658,20 +5835,22 @@ const importUnsplashImagesV2 = async function (req, res) {
 
 		if (!file.name) {
 			console.warn("[massmediaupload] myFile0 missing or has no name");
-			return res.json({ code: 501, msg: "Wrong Input!" });
+			return res.status(400).json({ 
+				code: 400, 
+				message: "Invalid file upload.",
+				error: "No file was provided or the file name is missing. Please ensure you upload a valid Excel file (.xlsx) with the field name 'myFile0'."
+			});
 		}
 
 		// Handle keyword import - if this function doesn't exist, return error
 		if (file.name.indexOf("KEYWORDS_IMPORT") > -1) {
 			console.warn("[massmediaupload] Keyword import requested but not implemented in new controller");
-			return res.json({ code: 501, msg: "Keyword import not yet implemented in new controller. Please use mediaControllerOld for keyword imports." });
+			return res.status(501).json({ 
+				code: 501, 
+				message: "Feature not implemented.",
+				error: "Keyword import functionality is not yet implemented in this controller. Please use the legacy controller for keyword imports."
+			});
 		}
-
-		const normalizedJwtRole = typeof req.user?.role === "string"
-			? req.user.role.toLowerCase()
-			: typeof req.user?.Role === "string"
-			? req.user.Role.toLowerCase()
-			: null;
 
 		const sessionSummary = {
 			hasSession: !!req.session,
@@ -5681,15 +5860,6 @@ const importUnsplashImagesV2 = async function (req, res) {
 			jwtRole: normalizedJwtRole,
 		};
 		console.log("[massmediaupload] Session summary:", sessionSummary);
-
-		const hasSessionAdmin = !!req.session?.admin;
-		const hasAdminPrivilegesFromSession = hasSessionAdmin;
-		const hasAdminPrivilegesFromJwt = normalizedJwtRole === "admin";
-
-		if (!hasAdminPrivilegesFromSession && !hasAdminPrivilegesFromJwt) {
-			console.warn("[massmediaupload] Missing admin privileges (session or JWT)");
-			return res.json({ code: 401, msg: "Admin session or token not found." });
-		}
 
 		tempUploadDir = fs.mkdtempSync(path.join(os.tmpdir(), "unsplashimport-"));
 		
@@ -5708,11 +5878,29 @@ const importUnsplashImagesV2 = async function (req, res) {
 		const rows = await convertXlsxToJson(savedFilePath, outputJsonPath);
 		console.log("[massmediaupload] Parsed rows count:", Array.isArray(rows) ? rows.length : 0);
 
-		const descriptorSet = new Set();
+		// Log column names from first row to debug
+		if (rows && rows.length > 0) {
+			const firstRow = rows[0];
+			const columnNames = Object.keys(firstRow);
+			console.log("[massmediaupload] Available columns in Excel:", columnNames);
+			console.log("[massmediaupload] Sample first row keys:", columnNames.slice(0, 10));
+		}
+
 		const recordsToUpload = [];
 		const recordsToReportError = [];
+		let skippedEmptyRows = 0;
 
-		rows.forEach((row) => {
+		rows.forEach((row, index) => {
+			// Check for Image Source with flexible matching
+			const imageSource = row["Image Source"] || row["image source"] || row["Image source"] || row["IMAGE SOURCE"];
+			
+			// Skip rows with empty Image Source (don't count as errors, just skip them)
+			if (!imageSource || String(imageSource).trim() === '') {
+				skippedEmptyRows++;
+				return; // Simply skip this row, don't add to errors
+			}
+
+			// Row has Image Source, process it
 			if (!row["Descriptors/Concepts/Related tags"] && row["Combined tags (all 4)"]) {
 				row["Descriptors/Concepts/Related tags"] =
 					typeof row["Combined tags (all 4)"] === "string" ? row["Combined tags (all 4)"] : "";
@@ -5722,65 +5910,80 @@ const importUnsplashImagesV2 = async function (req, res) {
 				row.StyleKeyword = typeof row["Styled images"] === "string" ? row["Styled images"].trim() : "";
 			}
 
-			const descriptorString = row["Descriptors/Concepts/Related tags"] || "";
-			const normalizedDescriptors = descriptorString
-				.toString()
-				.split(",")
-				.map(normalizeDescriptor)
-				.filter(Boolean);
+			recordsToUpload.push(row);
+		});
 
-			row.__normalizedDescriptors = normalizedDescriptors;
-			normalizedDescriptors.forEach((descriptor) => descriptorSet.add(descriptor));
+		console.log(`[massmediaupload] Records to upload: ${recordsToUpload.length}, Skipped empty rows: ${skippedEmptyRows}`);
 
-			if (row["Image Source"]) {
-				recordsToUpload.push(row);
-			} else {
-				recordsToReportError.push(row);
+		// Extract Photo IDs from records (including extracting from URLs if needed)
+		const unsplashIds = [];
+		recordsToUpload.forEach((record) => {
+			let photoId = record["Photo ID"] ? record["Photo ID"].trim() : null;
+			if (!photoId && record["Image Source"]) {
+				const url = String(record["Image Source"]).trim();
+				const photoIdMatch = url.match(/photo-([a-zA-Z0-9_-]+)/);
+				if (photoIdMatch) {
+					photoId = photoIdMatch[1];
+				}
+			}
+			if (photoId) {
+				unsplashIds.push(photoId);
 			}
 		});
 
-		const descriptorRegexes = Array.from(descriptorSet).map(
-			(descriptor) => new RegExp(`^${escapeRegExp(descriptor)}$`, "i")
-		);
-
-		const existingGroupTags = descriptorRegexes.length
-			? await groupTags
-					.find({ $or: [{ status: 1 }, { status: 3 }], GroupTagTitle: { $in: descriptorRegexes } }, { GroupTagTitle: 1 })
-					.lean()
-			: [];
-
-		const groupTagMap = new Map();
-		existingGroupTags.forEach((tag) => {
-			const normalized = normalizeDescriptor(tag.GroupTagTitle);
-			if (normalized) {
-				groupTagMap.set(normalized, String(tag._id));
-			}
-		});
-
-		const descriptorsToCreate = Array.from(descriptorSet).filter((descriptor) => !groupTagMap.has(descriptor));
-		if (descriptorsToCreate.length) {
-			const newRecords = descriptorsToCreate.map((descriptor) => buildGroupTagRecord(descriptor));
-			const chunks = chunkArray(newRecords, 200);
-			for (const chunk of chunks) {
-				const inserted = await groupTags.insertMany(chunk);
-				inserted.forEach((doc) => {
-					const normalized = normalizeDescriptor(doc.GroupTagTitle);
-					if (normalized) {
-						groupTagMap.set(normalized, String(doc._id));
-					}
-				});
-			}
-		}
-
-		const unsplashIds = recordsToUpload
-			.map((record) => (record["Photo ID"] ? record["Photo ID"].trim() : null))
-			.filter(Boolean);
-
+		// Check for duplicates using UnsplashPhotoId
 		const existingMediaRecords = unsplashIds.length
-			? await media.find({ UnsplashPhotoId: { $in: unsplashIds }, IsDeleted: false }, { UnsplashPhotoId: 1 }).lean()
+			? await media.find({ UnsplashPhotoId: { $in: unsplashIds }, IsDeleted: false }, { UnsplashPhotoId: 1, Location: 1, Locator: 1 }).lean()
 			: [];
+		
+		// Also query for records with null UnsplashPhotoId but matching URLs (to catch previously saved records)
+		const imageUrls = recordsToUpload
+			.map((record) => {
+				const url = record["Image Source"] || record["image source"] || record["Image source"] || record["IMAGE SOURCE"];
+				return url ? String(url).trim().split('?')[0] : null;
+			})
+			.filter(Boolean);
+		
+		// Build regex pattern for URL matching (escape special characters)
+		const urlPatterns = imageUrls.map(url => {
+			// Escape special regex characters
+			return url.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+		});
+		
+		const existingRecordsByUrl = urlPatterns.length
+			? await media.find(
+				{ 
+					IsDeleted: false,
+					"Location.URL": { $regex: urlPatterns.join('|') }
+				}, 
+				{ UnsplashPhotoId: 1, Location: 1, Locator: 1 }
+			).lean()
+			: [];
+		
+		// Combine both result sets and deduplicate by _id
+		const allExistingRecordsMap = new Map();
+		[...existingMediaRecords, ...existingRecordsByUrl].forEach((doc) => {
+			if (doc._id && !allExistingRecordsMap.has(String(doc._id))) {
+				allExistingRecordsMap.set(String(doc._id), doc);
+			}
+		});
+		const allExistingRecords = Array.from(allExistingRecordsMap.values());
 
-		const existingUnsplashIds = new Set(existingMediaRecords.map((doc) => doc.UnsplashPhotoId));
+		const existingUnsplashIds = new Set(allExistingRecords.map((doc) => doc.UnsplashPhotoId).filter(Boolean));
+		
+		// Also check for duplicates using URL pattern (for records where UnsplashPhotoId might be null)
+		// Extract base URLs from existing records to check against
+		const existingUrls = new Set();
+		allExistingRecords.forEach((doc) => {
+			if (doc.Location && Array.isArray(doc.Location) && doc.Location.length > 0) {
+				const url = doc.Location[0].URL;
+				if (url) {
+					// Normalize URL by removing query parameters for comparison
+					const baseUrl = url.split('?')[0];
+					existingUrls.add(baseUrl);
+				}
+			}
+		});
 		const newMediaRecords = [];
 		const uploaderId =
 			req.session?.admin?._id ||
@@ -5788,17 +5991,56 @@ const importUnsplashImagesV2 = async function (req, res) {
 			req.user?._id ||
 			req.user?.id ||
 			null;
+		
+		// Track duplicates found during processing
+		let duplicatesSkipped = 0;
 
 		for (const record of recordsToUpload) {
-			const unsplashPhotoId = record["Photo ID"] ? record["Photo ID"].trim() : null;
-			const unsplashImageURL = record["Image Source"] ? record["Image Source"].trim() : null;
+			// Flexible column name matching
+			const unsplashImageURL = (record["Image Source"] || record["image source"] || record["Image source"] || record["IMAGE SOURCE"]) 
+				? String(record["Image Source"] || record["image source"] || record["Image source"] || record["IMAGE SOURCE"]).trim() 
+				: null;
 
-			if (!unsplashPhotoId || !unsplashImageURL) {
+			// Image Source is required
+			if (!unsplashImageURL || unsplashImageURL === '') {
+				if (recordsToReportError.length < 3) {
+					console.log(`[massmediaupload] Record missing Image Source. Available columns:`, Object.keys(record));
+				}
 				recordsToReportError.push(record);
 				continue;
 			}
 
-			if (existingUnsplashIds.has(unsplashPhotoId)) {
+			// Photo ID is optional - extract from URL if not provided
+			let unsplashPhotoId = (record["Photo ID"] || record["photo id"] || record["Photo id"] || record["PHOTO ID"]) 
+				? String(record["Photo ID"] || record["photo id"] || record["Photo id"] || record["PHOTO ID"]).trim() 
+				: null;
+
+			// If Photo ID is missing, try to extract it from the Image Source URL
+			if (!unsplashPhotoId && unsplashImageURL) {
+				// Try to extract photo ID from Unsplash URL pattern: https://images.unsplash.com/photo-{photoId}?...
+				const photoIdMatch = unsplashImageURL.match(/photo-([a-zA-Z0-9_-]+)/);
+				if (photoIdMatch) {
+					unsplashPhotoId = photoIdMatch[1];
+					console.log(`[massmediaupload] Extracted Photo ID from URL: ${unsplashPhotoId}`);
+				} else {
+					// If we can't extract it, generate a unique ID from the URL
+					unsplashPhotoId = unsplashImageURL.split('/').pop().split('?')[0] || `extracted_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+					console.log(`[massmediaupload] Generated Photo ID from URL: ${unsplashPhotoId}`);
+				}
+			}
+
+			// Check for duplicate using UnsplashPhotoId
+			if (unsplashPhotoId && existingUnsplashIds.has(unsplashPhotoId)) {
+				console.log(`[massmediaupload] Skipping duplicate - Photo ID already exists: ${unsplashPhotoId}`);
+				duplicatesSkipped++;
+				continue;
+			}
+			
+			// Also check for duplicate using URL (normalize by removing query params)
+			const normalizedUrl = unsplashImageURL ? unsplashImageURL.split('?')[0] : null;
+			if (normalizedUrl && existingUrls.has(normalizedUrl)) {
+				console.log(`[massmediaupload] Skipping duplicate - URL already exists: ${normalizedUrl}`);
+				duplicatesSkipped++;
 				continue;
 			}
 
@@ -5808,12 +6050,12 @@ const importUnsplashImagesV2 = async function (req, res) {
 				continue;
 			}
 
+			// Pass the extracted/generated Photo ID to buildMediaDocument
 			const mediaDocument = buildMediaDocument({
 				record,
 				seq: counter.seq,
 				uploaderId,
-				groupTagMap,
-				normalizedDescriptors: record.__normalizedDescriptors || [],
+				unsplashPhotoId: unsplashPhotoId, // Pass the extracted Photo ID
 			});
 
 			newMediaRecords.push(mediaDocument);
@@ -5823,20 +6065,52 @@ const importUnsplashImagesV2 = async function (req, res) {
 		if (newMediaRecords.length) {
 			const chunks = chunkArray(newMediaRecords, 200);
 			for (const chunk of chunks) {
-				const inserted = await media.insertMany(chunk);
-				insertedCount += inserted.length;
+				// Add timestamps to all records in chunk before saving
+				const chunkWithTimestamps = addMediaTimestamps(chunk, true); // true = isNew documents
+				
+				// Use collection.insertMany to preserve string _id (Mongoose insertMany converts string _id to ObjectId)
+				const inserted = await Media.collection.insertMany(chunkWithTimestamps);
+				insertedCount += inserted.insertedCount || inserted.length || 0;
 			}
 		}
 
+		// Provide detailed summary information
+		const summary = {
+			totalRows: rows.length,
+			recordsWithImageSource: recordsToUpload.length,
+			skippedEmptyRows: skippedEmptyRows,
+			recordsWithErrors: recordsToReportError.length,
+			recordsUploaded: insertedCount,
+			alreadyExists: duplicatesSkipped, // Use actual count of skipped records, not unique Photo IDs
+			uniquePhotoIdsInDatabase: existingUnsplashIds.size, // For reference: unique Photo IDs that exist
+			uniqueUrlsInDatabase: existingUrls.size, // For reference: unique URLs that exist
+		};
+
+		console.log("[massmediaupload] Final summary:", summary);
+
 		return res.json({
 			code: 200,
+			message: insertedCount > 0 
+				? `Successfully uploaded ${insertedCount} records. ${skippedEmptyRows} empty rows were skipped. ${recordsToReportError.length} records had validation errors.`
+				: skippedEmptyRows === rows.length
+				? `No records were uploaded. All ${rows.length} rows were empty (missing Image Source).`
+				: `No records were uploaded. ${recordsToReportError.length} records had validation errors. ${skippedEmptyRows} empty rows were skipped.`,
 			recordsUploaded: insertedCount,
 			recordsToReportError: recordsToReportError.length,
-			UnsplashPhotoId__AlreadyExists: existingUnsplashIds.size,
+			skippedEmptyRows: skippedEmptyRows,
+			UnsplashPhotoId__AlreadyExists: duplicatesSkipped, // Use actual duplicates skipped
+			duplicatesSkipped: duplicatesSkipped,
+			totalRows: rows.length,
+			summary: summary
 		});
 	} catch (error) {
 		console.error("importUnsplashImagesV2 error:", error);
-		return res.json({ code: 500, msg: "Something went wrong while processing the import." });
+		return res.status(500).json({ 
+			code: 500, 
+			message: "Internal server error.",
+			error: "An error occurred while processing the Excel file import. Please check the file format and try again.",
+			details: process.env.NODE_ENV === 'development' ? error.message : undefined
+		});
 	} finally {
 		if (savedFilePath) {
 			try {
@@ -6072,6 +6346,326 @@ const backfillMediaTagsForGroup = async (req, res) => {
   }
 };
 
+// API endpoint to assign GroupTags to Media based on Prompt field (comma-separated keywords)
+// Uses static file lookup to find TagID, GroupTagID, and TagTitle
+const assignGroupTagsFromPrompt = async (req, res) => {
+  try {
+    console.log("🚀 Starting GroupTag assignment from Prompt field");
+
+    // Load static tag index if not already loaded
+    if (!isLoaded()) {
+      console.log("   - ⚠️ Static index not loaded, loading now...");
+      await loadTagIndex();
+      console.log("   - ✅ Static index loaded successfully");
+    } else {
+      console.log("   - ✅ Static index already loaded");
+    }
+
+    // Build query from request body
+    let query = {};
+    
+    // Optional filters
+    let mediaDoc = null;
+    if (req.body.mediaId) {
+      // If specific mediaId is provided, find it using string _id lookup only
+      // All documents have string _id, use native MongoDB collection to avoid Mongoose type conversion
+      console.log(`   🔍 Looking for specific media: ${req.body.mediaId}`);
+      console.log(`   🔍 mediaId type: ${typeof req.body.mediaId}, length: ${req.body.mediaId?.length}`);
+      
+      // Try using media.collection (lowercase) first, then Media.collection
+      try {
+        // Use native MongoDB collection to preserve string _id
+        mediaDoc = await media.collection.findOne({ _id: req.body.mediaId });
+        if (!mediaDoc) {
+          // Try with Media.collection as fallback
+          mediaDoc = await Media.collection.findOne({ _id: req.body.mediaId });
+        }
+        
+        if (mediaDoc) {
+          console.log(`   ✅ Media found using string _id!`);
+          console.log(`      _id: ${mediaDoc._id} (type: ${typeof mediaDoc._id})`);
+          console.log(`      _id value: "${mediaDoc._id}"`);
+          query._id = req.body.mediaId;
+        } else {
+          // Debug: Try to find any document to verify collection access
+          const testDoc = await media.collection.findOne({});
+          console.log(`   ⚠️ Test query result: ${testDoc ? 'Collection accessible' : 'Collection empty or inaccessible'}`);
+          if (testDoc) {
+            console.log(`   ⚠️ Sample _id from collection: "${testDoc._id}" (type: ${typeof testDoc._id})`);
+          }
+          
+          console.log(`   ❌ Media not found with _id: ${req.body.mediaId}`);
+          return res.json({
+            code: 404,
+            message: `Media with ID ${req.body.mediaId} not found in database`,
+            totalCount: 0,
+            processed: 0,
+            updated: 0,
+            skipped: 0
+          });
+        }
+      } catch (error) {
+        console.error(`   ❌ Error querying media collection: ${error.message}`);
+        return res.json({
+          code: 500,
+          message: `Error querying database: ${error.message}`,
+          totalCount: 0,
+          processed: 0,
+          updated: 0,
+          skipped: 0
+        });
+      }
+    } else {
+      // For bulk processing, require Prompt field
+      query['Prompt'] = { $exists: true, $ne: '', $ne: null };
+      query.IsDeleted = { $ne: 1 };
+      
+      // Default: Only process UnsplashImage_Tool and ChatGPT_MJ sources if no source filter provided
+      if (!req.body.source) {
+        query.Source = { $in: ['UnsplashImage_Tool', 'ChatGPT_MJ'] };
+      }
+    }
+    
+    if (req.body.uploadedBy) {
+      query.UploadedBy = req.body.uploadedBy;
+    }
+    
+    if (req.body.source) {
+      query.Source = req.body.source;
+    }
+
+    // Get count - use native collection if we have string _id (to avoid Mongoose conversion)
+    let totalCount;
+    if (req.body.mediaId && mediaDoc) {
+      // If we already found the document, count is 1
+      totalCount = 1;
+    } else if (query._id && typeof query._id === 'string') {
+      // Use native collection for string _id to avoid Mongoose conversion
+      totalCount = await media.collection.countDocuments(query);
+    } else {
+      // Use Mongoose for other queries
+      totalCount = await media.countDocuments(query);
+    }
+    console.log(`   📊 Found ${totalCount} media documents`);
+    
+    // Debug: Show query structure
+    const queryForLog = JSON.parse(JSON.stringify(query));
+    console.log(`   📋 Query:`, JSON.stringify(queryForLog, null, 2));
+
+    if (totalCount === 0) {
+      return res.json({
+        code: 200,
+        message: "No media documents found matching criteria",
+        totalCount: 0,
+        processed: 0,
+        updated: 0,
+        skipped: 0
+      });
+    }
+
+    // Limit processing (optional)
+    // Test mode: process only 1 document for testing
+    const isTestMode = req.body.testMode === true || req.body.test === true;
+    const limit = isTestMode ? 1 : (req.body.limit || (req.body.processAll ? 0 : 100));
+    
+    if (isTestMode) {
+      console.log("   🧪 TEST MODE: Processing only 1 document for testing");
+    }
+    
+    let processed = 0;
+    let updated = 0;
+    let skipped = 0;
+    let noPrompt = 0;
+    let totalTagsAssigned = 0;
+
+    // If we already found the document by mediaId, process it directly
+    let documentsToProcess = [];
+    if (req.body.mediaId && mediaDoc) {
+      documentsToProcess = [mediaDoc];
+    } else {
+      // Otherwise, use native MongoDB collection cursor for bulk processing
+      // This preserves string _id values (Mongoose converts them to ObjectId)
+      const cursor = media.collection.find(query);
+      if (limit > 0) {
+        cursor.limit(limit);
+      }
+      for await (const doc of cursor) {
+        documentsToProcess.push(doc);
+      }
+    }
+    
+    console.log(`   📦 Found ${documentsToProcess.length} document(s) to process`);
+
+    // Process each document
+    for (const mediaDoc of documentsToProcess) {
+      processed++;
+      
+      // Ensure mediaId is always a string (native collection returns string, but safeguard for consistency)
+      const mediaId = String(mediaDoc._id);
+      const prompt = mediaDoc.Prompt || '';
+      
+      console.log(`\n   ─────────────────────────────────────────`);
+      console.log(`   📸 Processing Media: ${mediaId}`);
+      console.log(`   🔍 _id type: ${typeof mediaId}, value: "${mediaId}"`);
+      console.log(`   📝 Prompt: "${prompt}"`);
+      
+      if (!prompt || prompt.trim() === '') {
+        console.log(`   ⚠️ No Prompt field found, skipping...`);
+        noPrompt++;
+        continue;
+      }
+      
+      // Split prompt by comma and clean up
+      const promptWords = prompt.split(',')
+        .map(w => w.trim().toLowerCase())
+        .filter(w => w.length > 0);
+      
+      if (promptWords.length === 0) {
+        noPrompt++;
+        continue;
+      }
+      
+      // Build GroupTags array - only EXACT GroupTagTitle matches (case-insensitive)
+      const groupTagsMap = new Map(); // Use map to avoid duplicates
+      let matchedCount = 0;
+      
+      console.log(`   🔍 Processing Media ${mediaId}:`);
+      console.log(`      Prompt: "${prompt}"`);
+      console.log(`      Prompt words: [${promptWords.join(', ')}]`);
+      
+      for (const word of promptWords) {
+        if (!word) continue;
+        
+        // Look up the word in static index
+        const matches = lookupTag(word);
+        console.log(`      Looking up "${word}": ${matches ? matches.length : 0} matches found`);
+        
+        if (matches && matches.length > 0) {
+          // Filter for ONLY EXACT GroupTagTitle matches (case-insensitive)
+          // tagType === "gt" means it's a GroupTagTitle match
+          const gtMatches = matches.filter(m => 
+            m.tagType === 'gt' && 
+            m.groupTagTitle.toLowerCase().trim() === word.toLowerCase().trim()
+          );
+          
+          console.log(`      GT matches for "${word}": ${gtMatches.length}`);
+          
+          if (gtMatches.length > 0) {
+            matchedCount++;
+            
+            for (const match of gtMatches) {
+              // Use TagID:GroupTagID as key to avoid duplicates
+              const tagKey = `${match.tagId}:${match.groupTagId}`;
+              if (!groupTagsMap.has(tagKey)) {
+                groupTagsMap.set(tagKey, {
+                  TagID: match.tagId,
+                  GroupTagID: match.groupTagId,
+                  TagTitle: match.tagTitle
+                });
+                console.log(`      ✅ Added: TagID=${match.tagId}, GroupTagID=${match.groupTagId}, TagTitle="${match.tagTitle}"`);
+              } else {
+                console.log(`      ⏭️ Skipped duplicate: ${tagKey}`);
+              }
+            }
+          }
+        }
+      }
+      
+      const newGroupTagsArray = Array.from(groupTagsMap.values());
+      console.log(`      Total new GroupTags found: ${newGroupTagsArray.length}`);
+      
+      // Get existing GroupTags to check for duplicates (only check tags with TagID format)
+      const existingGroupTags = Array.isArray(mediaDoc.GroupTags) ? mediaDoc.GroupTags : [];
+      const existingTagSet = new Set();
+      
+      // Build set of existing tag combinations for O(1) lookup (only for new format tags)
+      existingGroupTags.forEach(gt => {
+        if (gt.TagID && gt.GroupTagID) {
+          existingTagSet.add(`${String(gt.TagID)}:${String(gt.GroupTagID)}`);
+        }
+      });
+
+      // Filter out duplicates from new tags
+      const uniqueNewTags = newGroupTagsArray.filter(newTag => {
+        const tagKey = `${String(newTag.TagID)}:${String(newTag.GroupTagID)}`;
+        return !existingTagSet.has(tagKey);
+      });
+
+      // If we have new format tags, replace the entire array with new format only
+      // This ensures we don't mix old format (GroupTagID only) with new format (TagID + GroupTagID + TagTitle)
+      if (newGroupTagsArray.length > 0) {
+        // Keep existing new-format tags and add unique new ones
+        const existingNewFormatTags = existingGroupTags.filter(gt => gt.TagID && gt.GroupTagID);
+        const updatedGroupTags = [...existingNewFormatTags, ...uniqueNewTags];
+        
+        console.log(`      Existing new-format tags: ${existingNewFormatTags.length}`);
+        console.log(`      New unique tags to add: ${uniqueNewTags.length}`);
+        console.log(`      Total after merge: ${updatedGroupTags.length}`);
+        
+        // Use native MongoDB collection to preserve string _id (Mongoose updateOne converts string _id to ObjectId)
+        console.log(`      🔍 Updating with _id: "${mediaId}" (type: ${typeof mediaId})`);
+        const updateResult = await media.collection.updateOne(
+          { _id: mediaId },
+          { $set: { GroupTags: updatedGroupTags } }
+        );
+        
+        console.log(`      Update result: matched=${updateResult.matchedCount}, modified=${updateResult.modifiedCount}`);
+        
+        // Verify the document still has string _id after update
+        if (updateResult.modifiedCount > 0) {
+          const verifyDoc = await media.collection.findOne({ _id: mediaId });
+          if (verifyDoc) {
+            console.log(`      ✅ Verified: Document _id after update: "${verifyDoc._id}" (type: ${typeof verifyDoc._id})`);
+          }
+        }
+        
+        if (updateResult.modifiedCount > 0) {
+          updated++;
+          totalTagsAssigned += uniqueNewTags.length;
+          console.log(`   ✅ Media ${mediaId}: Successfully updated with ${updatedGroupTags.length} GroupTags (${uniqueNewTags.length} new, ${matchedCount}/${promptWords.length} words matched)`);
+        } else if (updateResult.matchedCount > 0 && uniqueNewTags.length === 0) {
+          console.log(`   ⚠️ Media ${mediaId}: Already has all tags (no new tags to add)`);
+          skipped++;
+        } else {
+          console.log(`   ⚠️ Media ${mediaId}: Update matched but didn't modify`);
+          skipped++;
+        }
+      } else {
+        skipped++;
+        console.log(`   ⏭️ Media ${mediaId}: No GroupTagTitle matches found in static file`);
+      }
+    }
+
+    console.log(`\n🎉 Processing complete!`);
+    console.log(`   Total processed: ${processed}`);
+    console.log(`   Updated: ${updated}`);
+    console.log(`   Skipped: ${skipped} (no new tags)`);
+    console.log(`   No prompt: ${noPrompt}`);
+    console.log(`   Total tags assigned: ${totalTagsAssigned}`);
+
+    return res.json({
+      code: 200,
+      message: "GroupTags assigned from Prompt successfully",
+      summary: {
+        totalCount: totalCount,
+        processed: processed,
+        updated: updated,
+        skipped: skipped,
+        noPrompt: noPrompt,
+        totalTagsAssigned: totalTagsAssigned
+      }
+    });
+
+  } catch (error) {
+    console.error("Error in assignGroupTagsFromPrompt:", error);
+    return res.status(500).json({
+      code: 500,
+      message: "Failed to assign GroupTags from Prompt",
+      error: error?.message || "Unknown error",
+    });
+  }
+};
+
 module.exports = {
   crop_image,
   findAll,
@@ -6095,4 +6689,5 @@ module.exports = {
   deleteMedia,
   uploadMassImport,
   backfillMediaTagsForGroup,
+  assignGroupTagsFromPrompt,
 };

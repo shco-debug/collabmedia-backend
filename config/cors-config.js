@@ -11,13 +11,7 @@ const corsOptions = {
       return callback(null, true);
     }
     
-    // For development/local, allow ALL origins (wildcard behavior)
-    if (process.env.NODE_ENV === 'development' || process.env.NODE_ENV === 'local') {
-      console.log('CORS: Development/Local mode - allowing ALL origins:', origin);
-      return callback(null, true);
-    }
-    
-    // Allow localhost for development (all ports)
+    // Allow localhost for development (all ports) - check this first
     if (origin.startsWith('http://localhost:') || origin.startsWith('https://localhost:')) {
       console.log('CORS: Allowing localhost origin:', origin);
       return callback(null, true);
@@ -26,6 +20,13 @@ const corsOptions = {
     // Allow 127.0.0.1 for development
     if (origin.startsWith('http://127.0.0.1:') || origin.startsWith('https://127.0.0.1:')) {
       console.log('CORS: Allowing 127.0.0.1 origin:', origin);
+      return callback(null, true);
+    }
+    
+    // For development/local, allow ALL origins (wildcard behavior)
+    // If NODE_ENV is not explicitly set to 'production', allow all origins
+    if (process.env.NODE_ENV !== 'production') {
+      console.log('CORS: Non-production mode - allowing origin:', origin);
       return callback(null, true);
     }
     
@@ -39,7 +40,8 @@ const corsOptions = {
       'https://collabmedia.com',
       'https://www.collabmedia.com',
       'https://ahaday.com',
-      'https://www.ahaday.com'
+      'https://www.ahaday.com',
+      'https://admin.ahaday.com'
     ];
 
     

@@ -505,6 +505,51 @@ const login = async (req, res) => {
         // Get complete user data from database (excluding password)
         const completeUserData = userData.toObject();
         delete completeUserData.Password; // Remove password from response for security
+        
+        // Remove unused fields that are not needed in frontend
+        // Security: Remove sensitive tokens
+        delete completeUserData.resetPasswordToken;
+        
+        // Remove unused fields
+        delete completeUserData.AssignedCategories;
+        delete completeUserData.AssignedDomains;
+        delete completeUserData.Goal;
+        delete completeUserData.Keyshifts;
+        delete completeUserData.Metrics;
+        delete completeUserData.Milestone;
+        delete completeUserData.Supervisor;
+        delete completeUserData.Permissions;
+        delete completeUserData.IsCredit; // Only CreditAmount is used
+        delete completeUserData.IsDeleted; // Not needed in frontend
+        delete completeUserData.LastActiveTime; // Not used in frontend
+        
+        // Remove subscription fields not used in frontend
+        delete completeUserData.SubscriptionCancelledOn;
+        delete completeUserData.SubscriptionCurrency; // Not used in frontend
+        delete completeUserData.SubscriptionGracePeriodEndsOn; // Backend only
+        
+        // Remove policy/acceptance fields (stored but never checked)
+        delete completeUserData.ApplicationPolicyAccepted;
+        delete completeUserData.BrowserPolicyAccepted;
+        
+        // Remove theme field (stored but never used)
+        delete completeUserData.SelectedTheme;
+        
+        // Remove "seen" flags (stored but never used)
+        delete completeUserData.AutoPlayerSeenStreams; // Not required - not used in frontend
+        delete completeUserData.PostActionAnnouncementSeenStreams; // Not required - not used in frontend
+        delete completeUserData.IsAddDetailsSeen;
+        delete completeUserData.IsWelcomeSeen;
+        delete completeUserData.IsHowItWorksSeen;
+        delete completeUserData.IsPostLaunchVideoSeen;
+        
+        // Ensure Birthdate is included (required by frontend AccountSettings)
+        // Birthdate is already in completeUserData from database, no need to delete it
+        
+        // Remove other unused fields
+        delete completeUserData.SpeechToTextMediaId;
+        delete completeUserData.StripeStatus; // Not used in frontend
+        delete completeUserData.IsAutoRenewalEnabled; // Only used in settings subscription section (optional)
 
         const subscriberSinceISO = completeUserData.SubscriberSince
             ? new Date(completeUserData.SubscriberSince).toISOString()
@@ -898,6 +943,73 @@ const oauthLogin = async (req, res) => {
     }
 };
 exports.oauthLogin = oauthLogin;
+
+/**
+ * User logout
+ * Handles logout for JWT-based authentication
+ * Note: JWT tokens are stateless, so the frontend must clear the token from localStorage
+ * This function clears any session data (for backward compatibility) and returns success
+ * @param {Object} req - Express request object
+ * @param {Object} res - Express response object
+ */
+const logout = async (req, res) => {
+    try {
+        // Get user ID from JWT (req.user) or session (req.session.user) for logging
+        const userId = req.user?.userId || req.session?.user?._id || 'unknown';
+        const userEmail = req.user?.email || req.session?.user?.Email || 'unknown';
+        
+        // Clear session data if it exists (for backward compatibility with session-based auth)
+        if (req.session) {
+            if (req.session.user) {
+                req.session.user = null;
+            }
+            
+            // Destroy session if it exists (for session-based auth compatibility)
+            if (req.session.destroy) {
+                req.session.destroy((err) => {
+                    if (err) {
+                        console.error('❌ Session destruction error:', err);
+                        // Continue with logout even if session destruction fails
+                    }
+                });
+            }
+        }
+        
+        // Clear session cookies if they exist (for backward compatibility)
+        res.clearCookie('connect.sid', { 
+            path: '/',
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax'
+        });
+        
+        res.clearCookie('scrpt_session', { 
+            path: '/',
+            httpOnly: true,
+            secure: process.env.NODE_ENV === 'production',
+            sameSite: 'lax'
+        });
+        
+        console.log('✅ User logged out successfully:', { userId, userEmail });
+        
+        // Return success response
+        // Note: Frontend must clear JWT token from localStorage/sessionStorage
+        res.json({
+            code: "200",
+            msg: "Logout successful",
+            message: "User logged out successfully. Please clear the token from client storage."
+        });
+        
+    } catch (error) {
+        console.error('❌ User logout error:', error);
+        res.status(500).json({
+            code: "500",
+            msg: "Internal server error during logout",
+            message: error.message || "Logout failed"
+        });
+    }
+};
+exports.logout = logout;
 
 //file upload profile page parul ==> starts
 var fileUpload = function (req, res) {
@@ -2925,10 +3037,59 @@ var getUserData = async function (req, res) {
 
         userData = await normalizeSubscriptionState(userData, req.session);
         
+        // Convert to object and remove unused fields
+        const userDataObj = userData.toObject();
+        delete userDataObj.Password; // Remove password (already excluded but ensure it's gone)
+        
+        // Remove unused fields that are not needed in frontend
+        // Security: Remove sensitive tokens
+        delete userDataObj.resetPasswordToken;
+        
+        // Remove unused fields
+        delete userDataObj.AssignedCategories;
+        delete userDataObj.AssignedDomains;
+        delete userDataObj.Goal;
+        delete userDataObj.Keyshifts;
+        delete userDataObj.Metrics;
+        delete userDataObj.Milestone;
+        delete userDataObj.Supervisor;
+        delete userDataObj.Permissions;
+        delete userDataObj.IsCredit; // Only CreditAmount is used
+        delete userDataObj.IsDeleted; // Not needed in frontend
+        delete userDataObj.LastActiveTime; // Not used in frontend
+        
+        // Remove subscription fields not used in frontend
+        delete userDataObj.SubscriptionCancelledOn;
+        delete userDataObj.SubscriptionCurrency; // Not used in frontend
+        delete userDataObj.SubscriptionGracePeriodEndsOn; // Backend only
+        
+        // Remove policy/acceptance fields (stored but never checked)
+        delete userDataObj.ApplicationPolicyAccepted;
+        delete userDataObj.BrowserPolicyAccepted;
+        
+        // Remove theme field (stored but never used)
+        delete userDataObj.SelectedTheme;
+        
+        // Remove "seen" flags (stored but never used)
+        delete userDataObj.AutoPlayerSeenStreams; // Not required - not used in frontend
+        delete userDataObj.PostActionAnnouncementSeenStreams; // Not required - not used in frontend
+        delete userDataObj.IsAddDetailsSeen;
+        delete userDataObj.IsWelcomeSeen;
+        delete userDataObj.IsHowItWorksSeen;
+        delete userDataObj.IsPostLaunchVideoSeen;
+        
+        // Remove other unused fields
+        delete userDataObj.SpeechToTextMediaId;
+        delete userDataObj.StripeStatus; // Not used in frontend
+        delete userDataObj.IsAutoRenewalEnabled; // Only used in settings subscription section (optional)
+        
+        // Ensure Birthdate is included (required by frontend AccountSettings)
+        // Birthdate is already in userDataObj from database, no need to delete it
+        
         var response = {
             status: 200,
             message: "User Data retrieved successfully",
-            user: userData
+            user: userDataObj
         };
         res.json(response);
     } catch (error) {
@@ -3131,6 +3292,17 @@ var subscribeToPlatform = async function (req, res) {
 		const isExpired = normalizedStatus === "expired";
 		const isCancelled = normalizedStatus === "cancelled";
 		
+		// Determine if this is a trial request or a payment request
+		// If cardId is provided, it's a payment request (not a trial)
+		// If providedToken is "trial" or empty/null, it's a trial request
+		// If providedToken is a valid payment token, it's a payment request
+		// NOTE: This must be declared BEFORE useOldPrice calculation (line 3301) to avoid TDZ error
+		const isTrialRequest =
+			!cardId && // No cardId means it might be a trial
+			(!providedToken ||
+				(typeof providedToken === "string" &&
+					providedToken.toLowerCase() === "trial"));
+		
 		// Check if this is the first payment after trial (whether cancelled or expired)
 		// If user had a trial and is now paying, use locked price
 		// After this first payment, locked price will be cleared
@@ -3139,22 +3311,20 @@ var subscribeToPlatform = async function (req, res) {
 			(isExpired || isCancelled || isTrialExpired);
 		const useOldPrice = hadTrialAndIsPaying && oldLockedPrice && oldLockedPrice > 0 && !isTrialRequest;
 
-		if (isTrialActive || (currentUser.IsSubscriber && currentUser.SubscriptionStatus !== "trial")) {
+		// Check if user has an ACTIVE subscription (not expired or cancelled)
+		// Allow payment if subscription is expired, cancelled, or trial expired
+		const hasActiveSubscription = 
+			isTrialActive || // Active trial
+			(normalizedStatus === "active" && 
+			 currentUser.SubscriptionExpiresOn && 
+			 new Date(currentUser.SubscriptionExpiresOn).getTime() > now.getTime()); // Active paid subscription that hasn't expired
+
+		if (hasActiveSubscription) {
 			return res.status(409).json({
 				status: 409,
 				message: "You already have an active platform subscription.",
 			});
 		}
-
-		// Determine if this is a trial request or a payment request
-		// If cardId is provided, it's a payment request (not a trial)
-		// If providedToken is "trial" or empty/null, it's a trial request
-		// If providedToken is a valid payment token, it's a payment request
-		const isTrialRequest =
-			!cardId && // No cardId means it might be a trial
-			(!providedToken ||
-				(typeof providedToken === "string" &&
-					providedToken.toLowerCase() === "trial"));
 
 		// Prevent expired users or users who already had a trial from getting a new trial
 		// But allow them to pay to activate subscription

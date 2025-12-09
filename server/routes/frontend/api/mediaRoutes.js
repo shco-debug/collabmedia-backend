@@ -135,6 +135,10 @@ module.exports = function (router) {
     media.backfillMediaTagsForGroup(req, res);
   });
 
+  router.post("/assignGroupTagsFromPrompt", function (req, res) {
+    media.assignGroupTagsFromPrompt(req, res);
+  });
+
   router.post("/addViews", function (req, res) {
     media.viewMedia(req, res);
   });

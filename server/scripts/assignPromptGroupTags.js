@@ -6,7 +6,7 @@
  * 2. Gets Prompt field (comma-separated keywords)
  * 3. For each word in Prompt:
  *    - Find GroupTags where GroupTagTitle DIRECTLY matches (not Tags array)
- * 4. Store GroupTags array with only { GroupTagID, GroupTagTitle }
+ * 4. Store GroupTags array with only { TagID, GroupTagID, TagTitle }
  * 
  * Usage:
  *   node server/scripts/assignPromptGroupTags.js --limit=1          # First 1 media
@@ -217,11 +217,13 @@ async function main() {
             matchedCount++;
             
             for (const match of gtMatches) {
-              // Use GroupTagID as key to avoid duplicates
-              if (!groupTagsMap.has(match.groupTagId)) {
-                groupTagsMap.set(match.groupTagId, {
+              // Use TagID as key to avoid duplicates (TagID + GroupTagID combination)
+              const tagKey = `${match.tagId}:${match.groupTagId}`;
+              if (!groupTagsMap.has(tagKey)) {
+                groupTagsMap.set(tagKey, {
+                  TagID: match.tagId,
                   GroupTagID: match.groupTagId,
-                  GroupTagTitle: match.groupTagTitle
+                  TagTitle: match.tagTitle
                 });
               }
             }
@@ -247,7 +249,7 @@ async function main() {
         console.log(`   📋 Sample GroupTags:`);
         const sample = groupTagsArray.slice(0, 5);
         for (const entry of sample) {
-          console.log(`      - "${entry.GroupTagTitle}" (${entry.GroupTagID})`);
+          console.log(`      - TagTitle: "${entry.TagTitle}", TagID: ${entry.TagID}, GroupTagID: ${entry.GroupTagID}`);
         }
         if (groupTagsArray.length > 5) {
           console.log(`      ... and ${groupTagsArray.length - 5} more`);
